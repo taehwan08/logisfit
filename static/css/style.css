@@ -256,7 +256,7 @@ body {
 }
 
 .auth-logo img {
-    filter: ivnert(1);
+    filter: invert(1);
 }
 
 .auth-title {
