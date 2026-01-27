@@ -8,11 +8,21 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
+from django.http import JsonResponse
 
 # 대시보드 뷰 (임시로 TemplateView 사용, 추후 별도 뷰로 분리)
 from apps.accounts.views import DashboardView
 
+
+def health_check(request):
+    """Railway healthcheck 엔드포인트"""
+    return JsonResponse({'status': 'ok'})
+
+
 urlpatterns = [
+    # Healthcheck (Railway용)
+    path('health/', health_check, name='health_check'),
+
     # Django 관리자
     path('admin/', admin.site.urls),
 
