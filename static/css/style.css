@@ -249,19 +249,15 @@ body {
 }
 
 .auth-logo {
-    width: 80px;
     height: 80px;
-    background: linear-gradient(135deg, var(--primary-color), #2980b9);
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 1rem;
 }
 
-.auth-logo i {
-    font-size: 2.5rem;
-    color: #fff;
+.auth-logo img {
+    filter: ivnert(1);
 }
 
 .auth-title {
@@ -441,12 +437,7 @@ body {
     }
 
     .auth-logo {
-        width: 60px;
         height: 60px;
-    }
-
-    .auth-logo i {
-        font-size: 2rem;
     }
 }
 
