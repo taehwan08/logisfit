@@ -17,11 +17,13 @@ env = environ.Env(
 # 프로젝트 루트 디렉토리
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# .env 파일 로드
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# .env 파일 로드 (파일이 있을 경우만)
+env_file = os.path.join(BASE_DIR, '.env')
+if os.path.exists(env_file):
+    environ.Env.read_env(env_file)
 
-# 보안 키
-SECRET_KEY = env('SECRET_KEY')
+# 보안 키 (Railway에서는 환경변수로 설정 필요)
+SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-this-in-production')
 
 # 디버그 모드
 DEBUG = env('DEBUG')
