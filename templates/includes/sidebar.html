@@ -25,7 +25,7 @@
                 <li class="sidebar-header-text">관리자</li>
 
                 <li class="sidebar-item">
-                    <a href="{% url 'accounts:user_list' %}" class="sidebar-link {% if 'accounts' in request.resolver_match.app_name %}active{% endif %}">
+                    <a href="{% url 'accounts:user_list' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'accounts' %}active{% endif %}">
                         <i class="bi bi-people"></i>
                         <span>사용자 관리</span>
                         {% if pending_users_count %}
