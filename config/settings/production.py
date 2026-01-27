@@ -35,7 +35,7 @@ if DATABASE_URL:
         'default': dj_database_url.config(
             default=DATABASE_URL,
             conn_max_age=600,
-            conn_health_checks=True,
+            ssl_require=False,  # Railway 내부 네트워크는 SSL 불필요
         )
     }
 else:
@@ -49,7 +49,16 @@ else:
 
 # WhiteNoise 정적 파일 설정
 MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Django 4.2+ STORAGES 설정
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # 정적 파일 경로
 STATIC_ROOT = BASE_DIR / 'staticfiles'

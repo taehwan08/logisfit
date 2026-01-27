@@ -39,5 +39,5 @@ RUN mkdir -p staticfiles
 # 포트 노출
 EXPOSE ${PORT}
 
-# 시작 스크립트 (단계별 로그 출력)
-CMD ["sh", "-c", "echo '=== Starting migrations ===' && python manage.py migrate && echo '=== Migrations done ===' && echo '=== Starting collectstatic ===' && python manage.py collectstatic --noinput && echo '=== Collectstatic done ===' && echo '=== Starting gunicorn on port $PORT ===' && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug"]
+# 시작 스크립트
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - --error-logfile - --capture-output"]
