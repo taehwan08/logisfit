@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}대시보드{% endblock %}
+
+{% block page_title %}대시보드{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-1">
+            <i class="bi bi-speedometer2 me-2"></i>대시보드
+        </h4>
+        <p class="text-muted mb-0">안녕하세요, {{ user.name }}님!</p>
+    </div>
+</div>
+
+{% if user.is_admin or user.is_superuser %}
+    <!-- 관리자 대시보드 -->
+    <div class="row">
+        <!-- 승인 대기 사용자 -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card border-warning h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">승인 대기</h6>
+                            <h2 class="mb-0">{{ pending_users_count|default:0 }}</h2>
+                        </div>
+                        <div class="text-warning">
+                            <i class="bi bi-hourglass-split fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{% url 'accounts:user_list' %}?status=pending" class="text-decoration-none">
+                        <small>상세보기 <i class="bi bi-arrow-right"></i></small>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 전체 사용자 -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card border-primary h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">전체 사용자</h6>
+                            <h2 class="mb-0">{{ total_users_count|default:0 }}</h2>
+                        </div>
+                        <div class="text-primary">
+                            <i class="bi bi-people fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{% url 'accounts:user_list' %}" class="text-decoration-none">
+                        <small>상세보기 <i class="bi bi-arrow-right"></i></small>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 거래처 수 (Phase 2 이후) -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card border-info h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">거래처</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-info">
+                            <i class="bi bi-building fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <small class="text-muted">준비 중</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- 이번 달 청구서 (Phase 5 이후) -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card border-success h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">이번 달 청구서</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-success">
+                            <i class="bi bi-receipt fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <small class="text-muted">준비 중</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 빠른 링크 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <h5 class="mb-3">
+                <i class="bi bi-lightning me-2"></i>빠른 링크
+            </h5>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-3">
+            <a href="{% url 'accounts:user_list' %}?status=pending" class="text-decoration-none">
+                <div class="card quick-link-card">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-person-check fs-3 text-warning me-3"></i>
+                        <div>
+                            <h6 class="mb-0">사용자 승인</h6>
+                            <small class="text-muted">대기 중인 사용자 승인</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card quick-link-card opacity-50">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-clipboard-check fs-3 text-primary me-3"></i>
+                    <div>
+                        <h6 class="mb-0">작업 입력</h6>
+                        <small class="text-muted">준비 중 (Phase 3)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card quick-link-card opacity-50">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-receipt fs-3 text-success me-3"></i>
+                    <div>
+                        <h6 class="mb-0">청구서 발행</h6>
+                        <small class="text-muted">준비 중 (Phase 5)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% elif user.is_client %}
+    <!-- 거래처 대시보드 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                거래처 전용 대시보드는 Phase 3 이후에 제공됩니다.
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">이번 달 작업</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-primary">
+                            <i class="bi bi-clipboard-data fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">미결제 청구서</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-warning">
+                            <i class="bi bi-receipt-cutoff fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">현재 보관량</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-info">
+                            <i class="bi bi-boxes fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% elif user.is_worker %}
+    <!-- 작업자 대시보드 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                작업자 전용 대시보드는 Phase 3 이후에 제공됩니다.
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">오늘 작업</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-primary">
+                            <i class="bi bi-clipboard-check fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">이번 주 작업</h6>
+                            <h2 class="mb-0 text-muted">-</h2>
+                        </div>
+                        <div class="text-success">
+                            <i class="bi bi-calendar-check fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

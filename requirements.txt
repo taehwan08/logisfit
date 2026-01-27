@@ -1,0 +1,36 @@
+# Django 핵심
+Django>=4.2,<5.0
+djangorestframework>=3.14
+
+# 데이터베이스
+psycopg2-binary>=2.9
+dj-database-url>=2.1
+
+# 비동기 작업 (Celery)
+redis>=4.5
+celery>=5.3
+
+# 환경 변수 관리
+django-environ>=0.10
+
+# 이미지 처리
+Pillow>=9.5
+
+# PDF 생성
+WeasyPrint>=59
+
+# 이메일 템플릿
+django-templated-email>=3.0
+
+# 개발 도구
+django-debug-toolbar>=4.1
+
+# CORS (프론트엔드 분리 시 사용)
+django-cors-headers>=4.2
+
+# 폼 스타일링
+django-widget-tweaks>=1.4
+
+# Production 서버
+gunicorn>=21.2
+whitenoise>=6.6

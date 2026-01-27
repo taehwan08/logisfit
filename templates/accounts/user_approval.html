@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}사용자 승인{% endblock %}
+
+{% block page_title %}사용자 승인{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-check me-2"></i>사용자 승인
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- 사용자 정보 -->
+                <div class="mb-4">
+                    <h6 class="text-muted mb-3">신청자 정보</h6>
+                    <table class="table table-borderless">
+                        <tr>
+                            <th class="text-muted" style="width: 30%;">이름</th>
+                            <td>{{ target_user.name }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">이메일</th>
+                            <td>{{ target_user.email }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">연락처</th>
+                            <td>{{ target_user.phone|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">신청 역할</th>
+                            <td>
+                                {% if target_user.role == 'client' %}
+                                    <span class="badge bg-info">거래처</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">작업자</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">가입일</th>
+                            <td>{{ target_user.created_at|date:"Y년 m월 d일 H:i" }}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <hr>
+
+                <!-- 승인 폼 -->
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-4">
+                        <h6 class="text-muted mb-3">승인 여부</h6>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="action" id="approve" value="approve" checked>
+                                <label class="form-check-label text-success" for="approve">
+                                    <i class="bi bi-check-circle me-1"></i>승인
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="action" id="reject" value="reject">
+                                <label class="form-check-label text-danger" for="reject">
+                                    <i class="bi bi-x-circle me-1"></i>거절
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4" id="reason-field" style="display: none;">
+                        <label for="reason" class="form-label">거절 사유</label>
+                        <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="거절 사유를 입력해주세요. (선택)"></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>확인
+                        </button>
+                        <a href="{% url 'accounts:user_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>취소
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 거절 선택 시 사유 입력 필드 표시
+    document.querySelectorAll('input[name="action"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            const reasonField = document.getElementById('reason-field');
+            if (this.value === 'reject') {
+                reasonField.style.display = 'block';
+            } else {
+                reasonField.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %}

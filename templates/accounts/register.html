@@ -1,0 +1,139 @@
+{% extends 'base_auth.html' %}
+{% load static %}
+
+{% block title %}회원가입{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="auth-logo">
+                <i class="bi bi-box-seam"></i>
+            </div>
+            <h1 class="auth-title">회원가입</h1>
+            <p class="auth-subtitle">LogisFit 계정 만들기</p>
+        </div>
+
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {% for error in form.non_field_errors %}
+                        <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="mb-3">
+                <label for="id_email" class="form-label">이메일 <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-envelope"></i>
+                    </span>
+                    {{ form.email }}
+                </div>
+                {% if form.email.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.email.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label for="id_name" class="form-label">이름 <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-person"></i>
+                    </span>
+                    {{ form.name }}
+                </div>
+                {% if form.name.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.name.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label for="id_phone" class="form-label">연락처</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-telephone"></i>
+                    </span>
+                    {{ form.phone }}
+                </div>
+                {% if form.phone.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.phone.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label for="id_role" class="form-label">역할 <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-shield-check"></i>
+                    </span>
+                    {{ form.role }}
+                </div>
+                {% if form.role.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.role.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label for="id_password1" class="form-label">비밀번호 <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-lock"></i>
+                    </span>
+                    {{ form.password1 }}
+                </div>
+                {% if form.password1.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.password1.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+                <div class="form-text">8자 이상, 숫자와 문자 조합</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="id_password2" class="form-label">비밀번호 확인 <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-lock-fill"></i>
+                    </span>
+                    {{ form.password2 }}
+                </div>
+                {% if form.password2.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.password2.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle me-2"></i>
+                회원가입 후 <strong>관리자 승인</strong>이 필요합니다. 승인 완료 시 로그인이 가능합니다.
+            </div>
+
+            <div class="d-grid gap-2 mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-person-plus me-2"></i>회원가입
+                </button>
+            </div>
+        </form>
+
+        <div class="auth-footer">
+            <p class="mb-0">
+                이미 계정이 있으신가요?
+                <a href="{% url 'accounts:login' %}">로그인</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

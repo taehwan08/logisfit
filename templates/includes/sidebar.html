@@ -1,0 +1,133 @@
+<!-- 사이드바 -->
+<nav id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+        <a href="{% url 'dashboard' %}" class="sidebar-brand">
+            <i class="bi bi-box-seam"></i>
+            <span>LogisFit</span>
+        </a>
+        <button class="sidebar-toggle d-lg-none" type="button">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+
+    <div class="sidebar-body">
+        <ul class="sidebar-nav">
+            <!-- 대시보드 -->
+            <li class="sidebar-item">
+                <a href="{% url 'dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>대시보드</span>
+                </a>
+            </li>
+
+            {% if user.is_admin or user.is_superuser %}
+                <!-- 관리자 메뉴 -->
+                <li class="sidebar-header-text">관리자</li>
+
+                <li class="sidebar-item">
+                    <a href="{% url 'accounts:user_list' %}" class="sidebar-link {% if 'accounts' in request.resolver_match.app_name %}active{% endif %}">
+                        <i class="bi bi-people"></i>
+                        <span>사용자 관리</span>
+                        {% if pending_users_count %}
+                            <span class="badge bg-danger ms-auto">{{ pending_users_count }}</span>
+                        {% endif %}
+                    </a>
+                </li>
+
+                <!-- Phase 2 이후 활성화 -->
+                <!--
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-building"></i>
+                        <span>거래처 관리</span>
+                    </a>
+                </li>
+                -->
+            {% endif %}
+
+            {% if user.is_admin or user.is_superuser or user.is_worker %}
+                <!-- 작업 관리 메뉴 -->
+                <li class="sidebar-header-text">작업 관리</li>
+
+                <!-- Phase 3 이후 활성화 -->
+                <!--
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-clipboard-check"></i>
+                        <span>작업 입력</span>
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-list-check"></i>
+                        <span>작업 내역</span>
+                    </a>
+                </li>
+                -->
+            {% endif %}
+
+            {% if user.is_admin or user.is_superuser %}
+                <!-- 보관 관리 메뉴 -->
+                <li class="sidebar-header-text">보관 관리</li>
+
+                <!-- Phase 4 이후 활성화 -->
+                <!--
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-boxes"></i>
+                        <span>파레트 관리</span>
+                    </a>
+                </li>
+                -->
+            {% endif %}
+
+            {% if user.is_admin or user.is_superuser %}
+                <!-- 청구 관리 메뉴 -->
+                <li class="sidebar-header-text">청구 관리</li>
+
+                <!-- Phase 5 이후 활성화 -->
+                <!--
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-receipt"></i>
+                        <span>청구서 관리</span>
+                    </a>
+                </li>
+                -->
+            {% endif %}
+
+            {% if user.is_client %}
+                <!-- 거래처 메뉴 -->
+                <li class="sidebar-header-text">내 거래처</li>
+
+                <!-- Phase 3 이후 활성화 -->
+                <!--
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-list-check"></i>
+                        <span>작업 내역</span>
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="#" class="sidebar-link">
+                        <i class="bi bi-receipt"></i>
+                        <span>청구서 조회</span>
+                    </a>
+                </li>
+                -->
+            {% endif %}
+        </ul>
+    </div>
+
+    <div class="sidebar-footer">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                <i class="bi bi-person-circle"></i>
+            </div>
+            <div class="sidebar-user-info">
+                <span class="sidebar-user-name">{{ user.name }}</span>
+                <span class="sidebar-user-role">{{ user.role_display }}</span>
+            </div>
+        </div>
+    </div>
+</nav>

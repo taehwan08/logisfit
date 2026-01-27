@@ -1,0 +1,67 @@
+<!-- 상단 네비게이션 바 -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+    <div class="container-fluid">
+        <!-- 모바일 사이드바 토글 -->
+        <button class="btn btn-link sidebar-toggle-btn d-lg-none" type="button">
+            <i class="bi bi-list fs-4"></i>
+        </button>
+
+        <!-- 페이지 제목 -->
+        <span class="navbar-brand mb-0 h5 d-none d-lg-block">
+            {% block page_title %}{% endblock %}
+        </span>
+
+        <!-- 우측 메뉴 -->
+        <ul class="navbar-nav ms-auto">
+            <!-- 알림 (Phase 5 이후 활성화) -->
+            <!--
+            <li class="nav-item dropdown">
+                <a class="nav-link" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-bell"></i>
+                    <span class="badge bg-danger notification-badge">3</span>
+                </a>
+                <div class="dropdown-menu dropdown-menu-end notification-dropdown">
+                    <h6 class="dropdown-header">알림</h6>
+                    <a class="dropdown-item" href="#">알림 내용...</a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item text-center" href="#">모든 알림 보기</a>
+                </div>
+            </li>
+            -->
+
+            <!-- 사용자 메뉴 -->
+            <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-person-circle me-1"></i>
+                    <span class="d-none d-md-inline">{{ user.name }}</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <span class="dropdown-item-text text-muted">
+                            {{ user.email }}
+                        </span>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'accounts:profile' %}">
+                            <i class="bi bi-person me-2"></i>프로필 설정
+                        </a>
+                    </li>
+                    {% if user.is_superuser %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank">
+                                <i class="bi bi-gear me-2"></i>관리자 사이트
+                            </a>
+                        </li>
+                    {% endif %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="{% url 'accounts:logout' %}">
+                            <i class="bi bi-box-arrow-right me-2"></i>로그아웃
+                        </a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+</nav>

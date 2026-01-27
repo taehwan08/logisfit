@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}프로필 설정{% endblock %}
+
+{% block page_title %}프로필 설정{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-gear me-2"></i>프로필 설정
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <!-- 이메일 (읽기 전용) -->
+                    <div class="mb-3">
+                        <label class="form-label">이메일</label>
+                        <input type="email" class="form-control" value="{{ user.email }}" readonly disabled>
+                        <div class="form-text">이메일은 변경할 수 없습니다.</div>
+                    </div>
+
+                    <!-- 역할 (읽기 전용) -->
+                    <div class="mb-3">
+                        <label class="form-label">역할</label>
+                        <input type="text" class="form-control" value="{{ user.role_display }}" readonly disabled>
+                    </div>
+
+                    <!-- 이름 -->
+                    <div class="mb-3">
+                        <label for="id_name" class="form-label">이름</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.name.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- 연락처 -->
+                    <div class="mb-3">
+                        <label for="id_phone" class="form-label">연락처</label>
+                        {{ form.phone }}
+                        {% if form.phone.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.phone.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>저장
+                        </button>
+                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>취소
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 계정 정보 카드 -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-info-circle me-2"></i>계정 정보
+                </h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th class="text-muted" style="width: 40%;">가입일</th>
+                        <td>{{ user.created_at|date:"Y년 m월 d일 H:i" }}</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">마지막 로그인</th>
+                        <td>{{ user.last_login|date:"Y년 m월 d일 H:i"|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">계정 상태</th>
+                        <td>
+                            {% if user.is_approved %}
+                                <span class="badge bg-success">승인됨</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">승인 대기</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
