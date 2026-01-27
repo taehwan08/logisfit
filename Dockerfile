@@ -5,6 +5,7 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PORT=8000
 
 # 작업 디렉토리 설정
 WORKDIR /app
@@ -32,8 +33,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 소스 코드 복사
 COPY . .
 
-# 포트 노출
-EXPOSE 8000
+# 정적 파일 디렉토리 생성
+RUN mkdir -p staticfiles
 
-# 기본 명령어
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# 포트 노출
+EXPOSE ${PORT}
+
+# 기본 명령어 - Railway의 startCommand가 이를 오버라이드함
+CMD python manage.py migrate && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT}

@@ -7,7 +7,7 @@ Django 프로덕션 환경 설정 (Railway 배포용)
 import dj_database_url
 from .base import *
 
-# 디버그 모드 비활성화
+# 디버그 모드
 DEBUG = env.bool('DEBUG', default=False)
 
 # 프로덕션 호스트 (Railway 도메인 포함)
@@ -23,9 +23,10 @@ X_FRAME_OPTIONS = 'DENY'
 
 # HTTPS 관련 설정 (Railway는 자동으로 HTTPS 제공)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=True)
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+# SSL 리다이렉트는 Railway에서 처리하므로 비활성화
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=True)
+CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=True)
 
 # 데이터베이스 설정 (Railway PostgreSQL)
 DATABASE_URL = env('DATABASE_URL', default=None)
@@ -36,6 +37,14 @@ if DATABASE_URL:
             conn_max_age=600,
             conn_health_checks=True,
         )
+    }
+else:
+    # DATABASE_URL이 없으면 SQLite 사용 (테스트용)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
 
 # WhiteNoise 정적 파일 설정
