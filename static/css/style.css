@@ -8,7 +8,7 @@
    ============================================ */
 
 :root {
-    --sidebar-width: 260px;
+    --sidebar-width: 200px;
     --sidebar-bg: #2c3e50;
     --sidebar-active-bg: #34495e;
     --primary-color: #3498db;
@@ -78,7 +78,7 @@ body {
 }
 
 .sidebar-header {
-    padding: 1.5rem;
+    padding: 1rem 1.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
@@ -88,15 +88,12 @@ body {
 .sidebar-brand {
     color: #fff;
     text-decoration: none;
-    font-size: 1.5rem;
-    font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
 }
 
-.sidebar-brand:hover {
-    color: #fff;
+.sidebar-brand img {
+    max-width: 100%;
 }
 
 .sidebar-brand i {
@@ -139,7 +136,7 @@ body {
 .sidebar-link {
     display: flex;
     align-items: center;
-    padding: 0.75rem 1rem;
+    padding: 0.25rem 1rem;
     color: rgba(255, 255, 255, 0.8);
     text-decoration: none;
     border-radius: 0.5rem;
@@ -161,43 +158,6 @@ body {
     margin-right: 0.75rem;
     font-size: 1.1rem;
 }
-
-.sidebar-footer {
-    padding: 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-user {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.sidebar-user-avatar {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.sidebar-user-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.sidebar-user-name {
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-.sidebar-user-role {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.6);
-}
-
 /* ============================================
    상단 네비게이션
    ============================================ */
