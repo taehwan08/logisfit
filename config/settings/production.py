@@ -71,19 +71,30 @@ CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
 REDIS_URL = env('REDIS_URL', default=None)
 
 if REDIS_URL:
-    # Celery 설정 (worker/beat에서 사용)
+    # 캐시 설정
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
+    }
+
+    # 세션 설정
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+
+    # Celery 설정
     CELERY_BROKER_URL = REDIS_URL
     CELERY_RESULT_BACKEND = REDIS_URL
-
-# 세션은 데이터베이스 기반으로 사용 (Redis 인증 문제 방지)
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-
-# 캐시는 로컬 메모리 사용 (단순 배포용)
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+else:
+    # Redis 없을 경우 기본 캐시/세션
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
     }
-}
+    # 세션은 데이터베이스 사용
+    SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 # 로깅 설정 (콘솔 출력)
 LOGGING = {
