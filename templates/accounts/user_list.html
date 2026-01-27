@@ -146,11 +146,11 @@
                                 {% if target_user != request.user %}
                                     <form method="post" action="{% url 'accounts:user_toggle_active' target_user.pk %}" class="d-inline">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-secondary" title="{% if target_user.is_active %}비활성화{% else %}활성화{% endif %}">
+                                        <button type="submit" class="btn {% if target_user.is_active %}btn-outline-secondary{% else %}btn-outline-success{% endif %}" title="{% if target_user.is_active %}비활성화{% else %}활성화{% endif %}">
                                             {% if target_user.is_active %}
-                                                <i class="bi bi-person-x"></i>
+                                                비활성화
                                             {% else %}
-                                                <i class="bi bi-person-check"></i>
+                                                활성화
                                             {% endif %}
                                         </button>
                                     </form>

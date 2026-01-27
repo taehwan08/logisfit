@@ -1,9 +1,10 @@
+{% load static %}
 <!-- 사이드바 -->
 <nav id="sidebar" class="sidebar">
     <div class="sidebar-header">
         <a href="{% url 'dashboard' %}" class="sidebar-brand">
             <i class="bi bi-box-seam"></i>
-            <span>LogisFit</span>
+            <span><img src="{% static 'images/logo.png'%}"></span>
         </a>
         <button class="sidebar-toggle d-lg-none" type="button">
             <i class="bi bi-x-lg"></i>
