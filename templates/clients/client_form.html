@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block title %}{{ page_title }}{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-0">
+            <i class="bi bi-building me-2"></i>{{ page_title }}
+        </h4>
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        입력 내용을 확인해주세요.
+        <ul class="mb-0 mt-2">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- 기본 정보 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>기본 정보</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.company_name.id_for_label }}" class="form-label">회사명 <span class="text-danger">*</span></label>
+                    {{ form.company_name }}
+                    {% if form.company_name.errors %}<div class="text-danger small">{{ form.company_name.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.business_number.id_for_label }}" class="form-label">사업자등록번호 <span class="text-danger">*</span></label>
+                    {{ form.business_number }}
+                    {% if form.business_number.errors %}<div class="text-danger small">{{ form.business_number.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+            {% if not is_create %}
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="form-check">
+                        {{ form.is_active }}
+                        <label class="form-check-label" for="{{ form.is_active.id_for_label }}">활성 상태</label>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 담당자 정보 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-person me-2"></i>담당자 정보</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.contact_person.id_for_label }}" class="form-label">담당자명 <span class="text-danger">*</span></label>
+                    {{ form.contact_person }}
+                    {% if form.contact_person.errors %}<div class="text-danger small">{{ form.contact_person.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.contact_phone.id_for_label }}" class="form-label">연락처 <span class="text-danger">*</span></label>
+                    {{ form.contact_phone }}
+                    {% if form.contact_phone.errors %}<div class="text-danger small">{{ form.contact_phone.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.contact_email.id_for_label }}" class="form-label">이메일 <span class="text-danger">*</span></label>
+                    {{ form.contact_email }}
+                    {% if form.contact_email.errors %}<div class="text-danger small">{{ form.contact_email.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 계약 정보 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>계약 정보</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.contract_start_date.id_for_label }}" class="form-label">계약 시작일 <span class="text-danger">*</span></label>
+                    {{ form.contract_start_date }}
+                    {% if form.contract_start_date.errors %}<div class="text-danger small">{{ form.contract_start_date.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.contract_end_date.id_for_label }}" class="form-label">계약 종료일</label>
+                    {{ form.contract_end_date }}
+                    <small class="text-muted">미입력 시 무기한 계약</small>
+                    {% if form.contract_end_date.errors %}<div class="text-danger small">{{ form.contract_end_date.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 청구서 정보 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>청구서 정보</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.invoice_email.id_for_label }}" class="form-label">청구서 수신 이메일 <span class="text-danger">*</span></label>
+                    {{ form.invoice_email }}
+                    {% if form.invoice_email.errors %}<div class="text-danger small">{{ form.invoice_email.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.invoice_day.id_for_label }}" class="form-label">청구서 발송일 <span class="text-danger">*</span></label>
+                    {{ form.invoice_day }}
+                    <small class="text-muted">매월 발송일 (1~28일)</small>
+                    {% if form.invoice_day.errors %}<div class="text-danger small">{{ form.invoice_day.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 주소 정보 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-geo-alt me-2"></i>주소 정보</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.address.id_for_label }}" class="form-label">주소</label>
+                    {{ form.address }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.address_detail.id_for_label }}" class="form-label">상세 주소</label>
+                    {{ form.address_detail }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메모 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>메모</h6>
+        </div>
+        <div class="card-body">
+            {{ form.memo }}
+        </div>
+    </div>
+
+    <!-- 버튼 -->
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>{% if is_create %}등록{% else %}수정{% endif %}
+        </button>
+        <a href="{% url 'clients:client_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-lg me-1"></i>취소
+        </a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/clients.js' %}"></script>
+{% endblock %}

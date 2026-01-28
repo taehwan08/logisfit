@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}거래처 관리{% endblock %}
+{% block page_title %}거래처 관리{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">
+            <i class="bi bi-building me-2"></i>거래처 관리
+        </h4>
+        {% if user.is_admin or user.is_superuser %}
+        <a href="{% url 'clients:client_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>거래처 등록
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 통계 카드 -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <h5 class="text-muted mb-1">전체</h5>
+                <h3 class="mb-0">{{ total_count }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <h5 class="text-muted mb-1">활성</h5>
+                <h3 class="mb-0 text-success">{{ active_count }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <h5 class="text-muted mb-1">비활성</h5>
+                <h3 class="mb-0 text-danger">{{ inactive_count }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 검색 및 필터 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-6">
+                <label class="form-label">검색</label>
+                <input type="text" name="search" class="form-control"
+                       placeholder="회사명, 사업자번호, 담당자명 검색"
+                       value="{{ search_query }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">상태</label>
+                <select name="status" class="form-select">
+                    <option value="all" {% if current_status == 'all' %}selected{% endif %}>전체</option>
+                    <option value="active" {% if current_status == 'active' %}selected{% endif %}>활성</option>
+                    <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>비활성</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search me-1"></i>검색
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 거래처 목록 테이블 -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>회사명</th>
+                        <th>사업자번호</th>
+                        <th>담당자</th>
+                        <th>연락처</th>
+                        <th>계약상태</th>
+                        <th>활성상태</th>
+                        <th>동작</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in clients %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'clients:client_detail' client.pk %}" class="text-decoration-none fw-bold">
+                                {{ client.company_name }}
+                            </a>
+                        </td>
+                        <td>{{ client.business_number }}</td>
+                        <td>{{ client.contact_person }}</td>
+                        <td>{{ client.contact_phone }}</td>
+                        <td>
+                            {% if client.is_contract_active %}
+                                <span class="badge bg-success">유효</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">만료</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if client.is_active %}
+                                <span class="badge bg-success">활성</span>
+                            {% else %}
+                                <span class="badge bg-danger">비활성</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'clients:client_detail' client.pk %}" class="btn btn-sm btn-outline-info" title="상세보기">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            {% if user.is_admin or user.is_superuser %}
+                            <a href="{% url 'clients:client_update' client.pk %}" class="btn btn-sm btn-outline-warning" title="수정">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            {% if client.is_active %}
+                            <form method="post" action="{% url 'clients:client_delete' client.pk %}" class="d-inline"
+                                  onsubmit="return confirm('{{ client.company_name }} 거래처를 비활성화하시겠습니까?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="비활성화">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            등록된 거래처가 없습니다.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 페이지네이션 -->
+{% if is_paginated %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ search_query }}&status={{ current_status }}">이전</a>
+        </li>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}&search={{ search_query }}&status={{ current_status }}">{{ num }}</a>
+            </li>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}&search={{ search_query }}&status={{ current_status }}">다음</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

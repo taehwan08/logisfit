@@ -34,15 +34,12 @@
                     </a>
                 </li>
 
-                <!-- Phase 2 이후 활성화 -->
-                <!--
                 <li class="sidebar-item">
-                    <a href="#" class="sidebar-link">
+                    <a href="{% url 'clients:client_list' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'clients' %}active{% endif %}">
                         <i class="bi bi-building"></i>
                         <span>거래처 관리</span>
                     </a>
                 </li>
-                -->
             {% endif %}
 
             {% if user.is_admin or user.is_superuser or user.is_worker %}

@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-1">
+            <i class="bi bi-currency-dollar me-2"></i>{{ page_title }}
+        </h4>
+        <p class="text-muted mb-0">거래처: {{ client.company_name }}</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>입력 내용을 확인해주세요.
+                <ul class="mb-0 mt-2">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.work_type.id_for_label }}" class="form-label">작업 유형 <span class="text-danger">*</span></label>
+                    {{ form.work_type }}
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.unit_price.id_for_label }}" class="form-label">단가 <span class="text-danger">*</span></label>
+                    {{ form.unit_price }}
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.unit.id_for_label }}" class="form-label">단위 <span class="text-danger">*</span></label>
+                    {{ form.unit }}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.valid_from.id_for_label }}" class="form-label">적용 시작일 <span class="text-danger">*</span></label>
+                    {{ form.valid_from }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.valid_to.id_for_label }}" class="form-label">적용 종료일 <span class="text-danger">*</span></label>
+                    {{ form.valid_to }}
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.memo.id_for_label }}" class="form-label">메모</label>
+                {{ form.memo }}
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>저장
+                </button>
+                <a href="{% url 'clients:client_detail' client.pk %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-lg me-1"></i>취소
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

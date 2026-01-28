@@ -34,9 +34,12 @@ urlpatterns = [
 
     # API v1
     path('api/v1/', include('apps.accounts.api_urls')),
+    path('api/v1/', include('apps.clients.api_urls')),
 
-    # Phase 2 이후 추가될 URL들
-    # path('clients/', include('apps.clients.urls')),
+    # 거래처 관리
+    path('clients/', include('apps.clients.urls')),
+
+    # Phase 3 이후 추가될 URL들
     # path('works/', include('apps.works.urls')),
     # path('storage/', include('apps.storage.urls')),
     # path('invoices/', include('apps.invoices.urls')),
