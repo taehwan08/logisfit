@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}단가 일괄 등록{% endblock %}
+{% block page_title %}단가 일괄 등록{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-1">
+            <i class="bi bi-table me-2"></i>단가 일괄 등록
+        </h4>
+        <p class="text-muted mb-0">거래처: {{ client.company_name }}</p>
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>입력 내용을 확인해주세요.
+        <ul class="mb-0 mt-2">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- 적용 기간 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-calendar-range me-2"></i>적용 기간</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.valid_from.id_for_label }}" class="form-label">적용 시작일 <span class="text-danger">*</span></label>
+                    {{ form.valid_from }}
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="{{ form.valid_to.id_for_label }}" class="form-label">적용 종료일 <span class="text-danger">*</span></label>
+                    {{ form.valid_to }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 단가 테이블 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-currency-dollar me-2"></i>작업유형별 단가</h6>
+            <small class="text-muted">단가를 입력한 항목만 저장됩니다. 비워두면 해당 유형은 등록되지 않습니다.</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 40%;">작업 유형</th>
+                            <th style="width: 35%;">단가 (원)</th>
+                            <th style="width: 25%;">단위</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for group_name, items in work_type_groups %}
+                        <tr class="table-secondary">
+                            <td colspan="3"><strong>{{ group_name }}</strong></td>
+                        </tr>
+                        {% for item in items %}
+                        <tr>
+                            <td class="align-middle ps-4">{{ item.label }}</td>
+                            <td>{{ item.price_field }}</td>
+                            <td>{{ item.unit_field }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메모 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-chat-text me-2"></i>메모</h6>
+        </div>
+        <div class="card-body">
+            {{ form.memo }}
+        </div>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>일괄 저장
+        </button>
+        <a href="{% url 'clients:client_detail' client.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-lg me-1"></i>취소
+        </a>
+    </div>
+</form>
+{% endblock %}

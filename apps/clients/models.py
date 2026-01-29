@@ -227,14 +227,14 @@ class Client(models.Model):
             valid_to__gte=today,
         )
 
-    def get_current_storage_prices(self):
-        """현재 유효한 보관 단가 조회 (PriceContract에서 STORAGE_* 타입)"""
+    def get_current_storage_price(self):
+        """현재 유효한 보관 단가 조회"""
         today = timezone.now().date()
         return self.price_contracts.filter(
-            work_type__startswith='STORAGE_',
+            work_type='STORAGE',
             valid_from__lte=today,
             valid_to__gte=today,
-        )
+        ).first()
 
 
 class PriceContract(models.Model):

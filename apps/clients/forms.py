@@ -11,6 +11,16 @@ from django.core.exceptions import ValidationError
 from .models import Client, PriceContract, WorkType, WORK_TYPE_GROUPS
 
 
+# 작업유형별 기본 단위
+DEFAULT_UNITS = {
+    'STORAGE': '팔레트/일',
+}
+
+
+def _get_default_unit(work_type_value):
+    return DEFAULT_UNITS.get(work_type_value, '건')
+
+
 class ClientForm(forms.ModelForm):
     """거래처 등록/수정 폼"""
 
@@ -181,13 +191,13 @@ class PriceContractBulkForm(forms.Form):
                 widget=forms.NumberInput(attrs={
                     'class': 'form-control form-control-sm',
                     'placeholder': '0',
-                    'step': '0.01',
+                    'step': '1',
                 }),
             )
             self.fields[f'unit_{value}'] = forms.CharField(
                 required=False,
                 max_length=20,
-                initial=get_default_unit(value),
+                initial=_get_default_unit(value),
                 widget=forms.TextInput(attrs={
                     'class': 'form-control form-control-sm',
                     'style': 'width: 100px;',
@@ -229,7 +239,7 @@ class PriceContractBulkForm(forms.Form):
         contracts = []
         for value, label in WorkType.choices:
             price = cleaned.get(f'price_{value}')
-            unit = cleaned.get(f'unit_{value}') or get_default_unit(value)
+            unit = cleaned.get(f'unit_{value}') or _get_default_unit(value)
             if price is not None and price > 0:
                 contracts.append(PriceContract(
                     client=self.client,
