@@ -31,7 +31,7 @@ class WorkType(models.TextChoices):
     DELIVERY_BIG2 = 'DELIVERY_BIG2', '택배비 - 대2(~160CM/20Kg)'
     DELIVERY_VARIANT = 'DELIVERY_VARIANT', '택배비 - 이형(~190CM/25Kg)'
     DELIVERY_JEJU = 'DELIVERY_JEJU', '택배비 - 제주'
-    DELIVERY_REGION = 'DELIVERY_VARIANT', '택배비 - 도서산간'
+    DELIVERY_REGION = 'DELIVERY_REGION', '택배비 - 도서산간'
 
     # 반품비
     RETURN_TINY = 'RETURN_TINY', '반품 - 극소(~80CM/2Kg)'
@@ -41,7 +41,7 @@ class WorkType(models.TextChoices):
     RETURN_BIG2 = 'RETURN_BIG2', '반품 - 대2(~160CM/20Kg)'
     RETURN_VARIANT = 'RETURN_VARIANT', '반품 - 이형(~190CM/25Kg)'
     RETURN_JEJU = 'RETURN_JEJU', '반품 - 제주'
-    RETURN_REGION = 'RETURN_VARIANT', '반품 - 도서산간'
+    RETURN_REGION = 'RETURN_REGION', '반품 - 도서산간'
 
     # 작업비
     VAS_DEFAULT = 'VAS_DEFAULT', '작업비 - 기본(내품 1~3개)'
@@ -112,16 +112,6 @@ WORK_TYPE_GROUPS = [
         WorkType.OTHER,
     ]),
 ]
-
-
-def get_default_unit(work_type_value):
-    """작업유형에 따른 기본 단위 반환"""
-    if work_type_value == 'STORAGE_DAILY':
-        return '팔레트/일'
-    elif work_type_value == 'STORAGE_MONTHLY':
-        return '팔레트/월'
-    return '건'
-
 
 class Client(models.Model):
     """

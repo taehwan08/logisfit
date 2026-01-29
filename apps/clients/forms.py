@@ -8,7 +8,7 @@ import re
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import Client, PriceContract, WorkType, WORK_TYPE_GROUPS, get_default_unit
+from .models import Client, PriceContract, WorkType, WORK_TYPE_GROUPS
 
 
 class ClientForm(forms.ModelForm):

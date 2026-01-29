@@ -8,10 +8,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 
-from .models import Client, PriceContract, PalletStoragePrice
+from .models import Client, PriceContract
 from .serializers import (
-    ClientSerializer, ClientListSerializer,
-    PriceContractSerializer, PalletStoragePriceSerializer,
+    ClientSerializer, ClientListSerializer, PriceContractSerializer
 )
 
 
@@ -57,17 +56,6 @@ class PriceContractViewSet(viewsets.ModelViewSet):
     """단가 계약 API ViewSet"""
     queryset = PriceContract.objects.select_related('client', 'created_by')
     serializer_class = PriceContractSerializer
-    filter_backends = [filters.OrderingFilter]
-    ordering = ['-valid_from']
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-
-
-class PalletStoragePriceViewSet(viewsets.ModelViewSet):
-    """파레트 보관료 API ViewSet"""
-    queryset = PalletStoragePrice.objects.select_related('client', 'created_by')
-    serializer_class = PalletStoragePriceSerializer
     filter_backends = [filters.OrderingFilter]
     ordering = ['-valid_from']
 
