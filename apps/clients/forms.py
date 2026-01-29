@@ -117,13 +117,13 @@ class PriceContractForm(forms.ModelForm):
             'work_type': forms.Select(attrs={'class': 'form-select'}),
             'unit_price': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'step': '0.01',
+                'step': '1',
                 'min': '0',
                 'placeholder': '단가',
             }),
             'unit': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': '건',
+                'placeholder': '건/pt',
             }),
             'valid_from': forms.DateInput(attrs={
                 'class': 'form-control',

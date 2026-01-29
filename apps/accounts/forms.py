@@ -45,8 +45,8 @@ class UserRegistrationForm(UserCreationForm):
     role = forms.ChoiceField(
         label='역할',
         choices=[
-            (User.Role.CLIENT, '거래처'),
             (User.Role.WORKER, '작업자'),
+            (User.Role.CLIENT, '거래처'),
         ],
         widget=forms.Select(attrs={
             'class': 'form-select',
