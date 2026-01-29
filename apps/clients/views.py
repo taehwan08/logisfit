@@ -3,6 +3,8 @@
 
 거래처 CRUD, 단가 계약 관리 뷰를 정의합니다.
 """
+import json
+
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy, reverse
 from django.views.generic import (
@@ -181,7 +183,10 @@ class PriceContractBulkCreateView(AdminRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['client'] = get_object_or_404(Client, pk=self.kwargs['client_id'])
-        context['work_type_groups'] = context['form'].get_work_type_groups()
+        context['work_type_groups_json'] = json.dumps(
+            PriceContractBulkForm.get_work_type_groups_data(),
+            ensure_ascii=False,
+        )
         return context
 
     def form_valid(self, form):

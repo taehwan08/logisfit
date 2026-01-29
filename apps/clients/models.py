@@ -259,6 +259,18 @@ class PriceContract(models.Model):
         max_length=30,
         choices=WorkType.choices,
     )
+    sub_category = models.CharField(
+        '소분류',
+        max_length=100,
+        blank=True,
+        help_text='예: 화물용차, 반품검수 등',
+    )
+    item_name = models.CharField(
+        '품목',
+        max_length=100,
+        blank=True,
+        help_text='예: 박스, 팔레트, 20FT, 극소형 등',
+    )
     unit_price = models.DecimalField(
         '단가',
         max_digits=10,
@@ -266,6 +278,12 @@ class PriceContract(models.Model):
         validators=[MinValueValidator(0)],
     )
     unit = models.CharField('단위', max_length=20, default='건')
+    quantity = models.IntegerField(
+        '수량',
+        default=1,
+        validators=[MinValueValidator(0)],
+    )
+    remarks = models.CharField('비고', max_length=200, blank=True)
 
     # 유효 기간
     valid_from = models.DateField('적용 시작일', default=timezone.now)
@@ -296,8 +314,8 @@ class PriceContract(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=['client', 'work_type', 'valid_from'],
-                name='uq_price_contract_client_type_from',
+                fields=['client', 'work_type', 'item_name', 'valid_from'],
+                name='uq_price_contract_client_type_item_from',
             ),
         ]
 

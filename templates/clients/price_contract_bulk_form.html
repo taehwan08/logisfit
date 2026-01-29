@@ -14,7 +14,7 @@
     </div>
 </div>
 
-<form method="post" novalidate>
+<form method="post" novalidate id="bulkForm">
     {% csrf_token %}
 
     {% if form.errors %}
@@ -51,35 +51,37 @@
 
     <!-- 단가 테이블 -->
     <div class="card mb-4">
-        <div class="card-header">
-            <h6 class="mb-0"><i class="bi bi-currency-dollar me-2"></i>작업유형별 단가</h6>
-            <small class="text-muted">단가를 입력한 항목만 저장됩니다. 비워두면 해당 유형은 등록되지 않습니다.</small>
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0"><i class="bi bi-currency-dollar me-2"></i>단가 항목</h6>
+                <small class="text-muted">행을 추가하여 작업유형별 단가를 입력하세요.</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" id="addRowBtn">
+                <i class="bi bi-plus-lg me-1"></i>행 추가
+            </button>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm table-bordered mb-0">
+                <table class="table table-sm table-bordered mb-0" id="priceTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 40%;">작업 유형</th>
-                            <th style="width: 35%;">단가 (원)</th>
-                            <th style="width: 25%;">단위</th>
+                            <th style="width: 18%;">작업 유형</th>
+                            <th style="width: 12%;">소분류</th>
+                            <th style="width: 12%;">품목</th>
+                            <th style="width: 12%;">단가 (원)</th>
+                            <th style="width: 8%;">단위</th>
+                            <th style="width: 8%;">수량</th>
+                            <th style="width: 18%;">비고</th>
+                            <th style="width: 5%;"></th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for group_name, items in work_type_groups %}
-                        <tr class="table-secondary">
-                            <td colspan="3"><strong>{{ group_name }}</strong></td>
-                        </tr>
-                        {% for item in items %}
-                        <tr>
-                            <td class="align-middle ps-4">{{ item.label }}</td>
-                            <td>{{ item.price_field }}</td>
-                            <td>{{ item.unit_field }}</td>
-                        </tr>
-                        {% endfor %}
-                        {% endfor %}
+                    <tbody id="priceTableBody">
+                        <!-- 동적으로 행이 추가됩니다 -->
                     </tbody>
                 </table>
+            </div>
+            <div class="text-center py-3" id="emptyMessage">
+                <span class="text-muted"><i class="bi bi-info-circle me-1"></i>위의 "행 추가" 버튼을 클릭하여 단가 항목을 추가하세요.</span>
             </div>
         </div>
     </div>
@@ -94,6 +96,8 @@
         </div>
     </div>
 
+    <input type="hidden" name="row_count" id="rowCount" value="0">
+
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">
             <i class="bi bi-check-lg me-1"></i>일괄 저장
@@ -103,4 +107,106 @@
         </a>
     </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const workTypeGroups = {{ work_type_groups_json|safe }};
+    let rowIndex = 0;
+    const tbody = document.getElementById('priceTableBody');
+    const rowCountInput = document.getElementById('rowCount');
+    const emptyMsg = document.getElementById('emptyMessage');
+
+    // 작업유형 select의 optgroup HTML 생성
+    function buildWorkTypeOptions() {
+        let html = '<option value="">---</option>';
+        workTypeGroups.forEach(group => {
+            html += `<optgroup label="${group.name}">`;
+            group.items.forEach(item => {
+                html += `<option value="${item.value}">${item.label}</option>`;
+            });
+            html += '</optgroup>';
+        });
+        return html;
+    }
+
+    const workTypeOptionsHTML = buildWorkTypeOptions();
+
+    function addRow(data) {
+        const idx = rowIndex++;
+        const tr = document.createElement('tr');
+        tr.dataset.rowIndex = idx;
+        tr.innerHTML = `
+            <td>
+                <select name="row_${idx}_work_type" class="form-select form-select-sm">
+                    ${workTypeOptionsHTML}
+                </select>
+            </td>
+            <td><input type="text" name="row_${idx}_sub_category" class="form-control form-control-sm" placeholder="소분류" value="${data?.sub_category || ''}"></td>
+            <td><input type="text" name="row_${idx}_item_name" class="form-control form-control-sm" placeholder="품목" value="${data?.item_name || ''}"></td>
+            <td><input type="number" name="row_${idx}_unit_price" class="form-control form-control-sm" placeholder="0" step="1" min="0" value="${data?.unit_price || ''}"></td>
+            <td><input type="text" name="row_${idx}_unit" class="form-control form-control-sm" placeholder="건" style="width:80px;" value="${data?.unit || ''}"></td>
+            <td><input type="number" name="row_${idx}_quantity" class="form-control form-control-sm" placeholder="1" min="0" style="width:70px;" value="${data?.quantity || ''}"></td>
+            <td><input type="text" name="row_${idx}_remarks" class="form-control form-control-sm" placeholder="비고" value="${data?.remarks || ''}"></td>
+            <td class="text-center align-middle">
+                <button type="button" class="btn btn-sm btn-outline-danger remove-row-btn" title="삭제">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+
+        // 작업유형 값 설정
+        if (data?.work_type) {
+            tr.querySelector('select').value = data.work_type;
+        }
+
+        tbody.appendChild(tr);
+        updateRowCount();
+        emptyMsg.style.display = 'none';
+    }
+
+    function updateRowCount() {
+        rowCountInput.value = rowIndex;
+    }
+
+    // 행 추가 버튼
+    document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+
+    // 행 삭제 (이벤트 위임)
+    tbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.remove-row-btn');
+        if (btn) {
+            btn.closest('tr').remove();
+            if (tbody.children.length === 0) {
+                emptyMsg.style.display = 'block';
+            }
+        }
+    });
+
+    // 폼 제출 시 행 인덱스 재정렬
+    document.getElementById('bulkForm').addEventListener('submit', (e) => {
+        const rows = tbody.querySelectorAll('tr');
+        rowCountInput.value = rows.length;
+
+        rows.forEach((tr, newIdx) => {
+            const oldIdx = tr.dataset.rowIndex;
+            if (String(oldIdx) !== String(newIdx)) {
+                // 모든 input/select의 name을 재정렬
+                tr.querySelectorAll('input, select').forEach(el => {
+                    if (el.name) {
+                        el.name = el.name.replace(`row_${oldIdx}_`, `row_${newIdx}_`);
+                    }
+                });
+                tr.dataset.rowIndex = newIdx;
+            }
+        });
+    });
+
+    // 초기 행 5개 추가
+    for (let i = 0; i < 5; i++) {
+        addRow();
+    }
+})();
+</script>
 {% endblock %}

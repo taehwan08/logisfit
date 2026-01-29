@@ -122,9 +122,21 @@ class PriceContractForm(forms.ModelForm):
 
     class Meta:
         model = PriceContract
-        fields = ['work_type', 'unit_price', 'unit', 'valid_from', 'valid_to', 'memo']
+        fields = [
+            'work_type', 'sub_category', 'item_name',
+            'unit_price', 'unit', 'quantity', 'remarks',
+            'valid_from', 'valid_to', 'memo',
+        ]
         widgets = {
             'work_type': forms.Select(attrs={'class': 'form-select'}),
+            'sub_category': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '소분류 (선택)',
+            }),
+            'item_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '품목 (예: 박스, 팔레트)',
+            }),
             'unit_price': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'step': '1',
@@ -134,6 +146,15 @@ class PriceContractForm(forms.ModelForm):
             'unit': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': '건/pt',
+            }),
+            'quantity': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '0',
+                'placeholder': '수량',
+            }),
+            'remarks': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '비고',
             }),
             'valid_from': forms.DateInput(attrs={
                 'class': 'form-control',
@@ -163,7 +184,7 @@ class PriceContractForm(forms.ModelForm):
 
 
 class PriceContractBulkForm(forms.Form):
-    """단가 계약 일괄 등록 폼 - 모든 작업유형을 테이블로 한번에 입력"""
+    """단가 계약 일괄 등록 폼 - 동적 행 추가/삭제로 여러 항목을 한번에 입력"""
 
     valid_from = forms.DateField(
         label='적용 시작일',
@@ -178,31 +199,75 @@ class PriceContractBulkForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': '메모'}),
     )
+    row_count = forms.IntegerField(widget=forms.HiddenInput(), initial=0)
 
     def __init__(self, *args, **kwargs):
         self.client = kwargs.pop('client', None)
         super().__init__(*args, **kwargs)
-        for value, label in WorkType.choices:
-            self.fields[f'price_{value}'] = forms.DecimalField(
-                required=False,
-                min_value=0,
-                max_digits=10,
-                decimal_places=2,
-                widget=forms.NumberInput(attrs={
-                    'class': 'form-control form-control-sm',
-                    'placeholder': '0',
-                    'step': '1',
-                }),
-            )
-            self.fields[f'unit_{value}'] = forms.CharField(
-                required=False,
-                max_length=20,
-                initial=_get_default_unit(value),
-                widget=forms.TextInput(attrs={
-                    'class': 'form-control form-control-sm',
-                    'style': 'width: 100px;',
-                }),
-            )
+
+        # POST 데이터에서 동적 행 필드를 생성
+        if self.data:
+            try:
+                row_count = int(self.data.get('row_count', 0))
+            except (ValueError, TypeError):
+                row_count = 0
+
+            for i in range(row_count):
+                self._add_row_fields(i)
+
+    def _add_row_fields(self, index):
+        """동적 행에 대한 필드 추가"""
+        prefix = f'row_{index}'
+        self.fields[f'{prefix}_work_type'] = forms.ChoiceField(
+            choices=[('', '---')] + list(WorkType.choices),
+            required=False,
+            widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+        )
+        self.fields[f'{prefix}_sub_category'] = forms.CharField(
+            required=False, max_length=100,
+            widget=forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': '소분류',
+            }),
+        )
+        self.fields[f'{prefix}_item_name'] = forms.CharField(
+            required=False, max_length=100,
+            widget=forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': '품목',
+            }),
+        )
+        self.fields[f'{prefix}_unit_price'] = forms.DecimalField(
+            required=False, min_value=0, max_digits=10, decimal_places=2,
+            widget=forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': '0',
+                'step': '1',
+            }),
+        )
+        self.fields[f'{prefix}_unit'] = forms.CharField(
+            required=False, max_length=20,
+            widget=forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': '건',
+                'style': 'width: 80px;',
+            }),
+        )
+        self.fields[f'{prefix}_quantity'] = forms.IntegerField(
+            required=False, min_value=0,
+            widget=forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': '1',
+                'style': 'width: 70px;',
+            }),
+        )
+        self.fields[f'{prefix}_remarks'] = forms.CharField(
+            required=False, max_length=200,
+            widget=forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': '비고',
+            }),
+        )
 
     def clean(self):
         cleaned_data = super().clean()
@@ -212,45 +277,67 @@ class PriceContractBulkForm(forms.Form):
         if valid_from and valid_to and valid_from > valid_to:
             self.add_error('valid_to', '종료일은 시작일 이후여야 합니다.')
 
+        # 최소 1개 행이 유효한지 확인
+        row_count = int(cleaned_data.get('row_count', 0))
+        has_valid_row = False
+        for i in range(row_count):
+            prefix = f'row_{i}'
+            work_type = cleaned_data.get(f'{prefix}_work_type')
+            unit_price = cleaned_data.get(f'{prefix}_unit_price')
+            if work_type and unit_price is not None and unit_price > 0:
+                has_valid_row = True
+                break
+
+        if not has_valid_row and not self.errors:
+            raise ValidationError('최소 1개 이상의 단가 항목을 입력해주세요.')
+
         return cleaned_data
 
-    def get_work_type_groups(self):
-        """템플릿에서 카테고리별로 그룹핑해서 렌더링하기 위한 데이터"""
+    @staticmethod
+    def get_work_type_groups_data():
+        """작업유형 그룹 데이터 (JavaScript에서 사용)"""
         groups = []
         for group_name, types in WORK_TYPE_GROUPS:
-            items = []
-            for wt in types:
-                items.append({
-                    'value': wt.value,
-                    'label': wt.label,
-                    'price_field': self[f'price_{wt.value}'],
-                    'unit_field': self[f'unit_{wt.value}'],
-                })
-            groups.append((group_name, items))
+            items = [{'value': wt.value, 'label': wt.label} for wt in types]
+            groups.append({'name': group_name, 'items': items})
         return groups
 
     def save(self, user=None):
-        """입력된 단가가 있는 항목만 PriceContract로 생성"""
+        """입력된 행을 PriceContract로 생성"""
         cleaned = self.cleaned_data
         valid_from = cleaned['valid_from']
         valid_to = cleaned['valid_to']
         memo = cleaned.get('memo', '')
+        row_count = int(cleaned.get('row_count', 0))
 
         contracts = []
-        for value, label in WorkType.choices:
-            price = cleaned.get(f'price_{value}')
-            unit = cleaned.get(f'unit_{value}') or _get_default_unit(value)
-            if price is not None and price > 0:
-                contracts.append(PriceContract(
-                    client=self.client,
-                    work_type=value,
-                    unit_price=price,
-                    unit=unit,
-                    valid_from=valid_from,
-                    valid_to=valid_to,
-                    memo=memo,
-                    created_by=user,
-                ))
+        for i in range(row_count):
+            prefix = f'row_{i}'
+            work_type = cleaned.get(f'{prefix}_work_type')
+            unit_price = cleaned.get(f'{prefix}_unit_price')
+            if not work_type or unit_price is None or unit_price <= 0:
+                continue
+
+            sub_category = cleaned.get(f'{prefix}_sub_category', '')
+            item_name = cleaned.get(f'{prefix}_item_name', '')
+            unit = cleaned.get(f'{prefix}_unit') or _get_default_unit(work_type)
+            quantity = cleaned.get(f'{prefix}_quantity') or 1
+            remarks = cleaned.get(f'{prefix}_remarks', '')
+
+            contracts.append(PriceContract(
+                client=self.client,
+                work_type=work_type,
+                sub_category=sub_category,
+                item_name=item_name,
+                unit_price=unit_price,
+                unit=unit,
+                quantity=quantity,
+                remarks=remarks,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                memo=memo,
+                created_by=user,
+            ))
 
         if contracts:
             PriceContract.objects.bulk_create(contracts)

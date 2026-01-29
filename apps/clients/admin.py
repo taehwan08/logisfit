@@ -14,7 +14,7 @@ class PriceContractInline(admin.TabularInline):
     model = PriceContract
     extra = 0
     readonly_fields = ('created_at', 'created_by')
-    fields = ('work_type', 'unit_price', 'unit', 'valid_from', 'valid_to', 'memo', 'created_by', 'created_at')
+    fields = ('work_type', 'sub_category', 'item_name', 'unit_price', 'unit', 'quantity', 'remarks', 'valid_from', 'valid_to', 'memo', 'created_by', 'created_at')
 
 
 @admin.register(Client)
@@ -77,7 +77,8 @@ class ClientAdmin(admin.ModelAdmin):
 class PriceContractAdmin(admin.ModelAdmin):
     """단가 계약 Admin"""
     list_display = (
-        'client', 'work_type', 'unit_price', 'unit',
+        'client', 'work_type', 'sub_category', 'item_name',
+        'unit_price', 'unit', 'quantity',
         'valid_from', 'valid_to', 'is_active_display',
     )
     list_filter = ('work_type', 'valid_from')
