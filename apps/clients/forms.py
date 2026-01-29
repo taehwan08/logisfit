@@ -1,14 +1,14 @@
 """
 거래처 폼 모듈
 
-거래처 등록/수정, 단가 계약, 파레트 보관료 폼을 정의합니다.
+거래처 등록/수정, 단가 계약 (개별/일괄) 폼을 정의합니다.
 """
 import re
+
 from django import forms
 from django.core.exceptions import ValidationError
-from django.db.models import Q
 
-from .models import Client, PriceContract, PalletStoragePrice
+from .models import Client, PriceContract, WorkType, WORK_TYPE_GROUPS, get_default_unit
 
 
 class ClientForm(forms.ModelForm):
@@ -108,7 +108,7 @@ class ClientForm(forms.ModelForm):
 
 
 class PriceContractForm(forms.ModelForm):
-    """단가 계약 등록/수정 폼"""
+    """단가 계약 개별 등록/수정 폼"""
 
     class Meta:
         model = PriceContract
@@ -141,52 +141,6 @@ class PriceContractForm(forms.ModelForm):
         }
 
     def clean(self):
-        """유효기간 및 기간 겹침 검증"""
-        cleaned_data = super().clean()
-        valid_from = cleaned_data.get('valid_from')
-        valid_to = cleaned_data.get('valid_to')
-
-        if valid_from and valid_to and valid_from > valid_to:
-            self.add_error('valid_to', '종료일은 시작일 이후여야 합니다.')
-
-        return cleaned_data
-
-
-class PalletStoragePriceForm(forms.ModelForm):
-    """파레트 보관료 등록/수정 폼"""
-
-    class Meta:
-        model = PalletStoragePrice
-        fields = ['daily_price', 'monthly_price', 'valid_from', 'valid_to', 'memo']
-        widgets = {
-            'daily_price': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.01',
-                'min': '0',
-                'placeholder': '일 단가',
-            }),
-            'monthly_price': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.01',
-                'min': '0',
-                'placeholder': '월 단가 (선택)',
-            }),
-            'valid_from': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date',
-            }),
-            'valid_to': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date',
-            }),
-            'memo': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 2,
-                'placeholder': '메모',
-            }),
-        }
-
-    def clean(self):
         """유효기간 검증"""
         cleaned_data = super().clean()
         valid_from = cleaned_data.get('valid_from')
@@ -196,3 +150,98 @@ class PalletStoragePriceForm(forms.ModelForm):
             self.add_error('valid_to', '종료일은 시작일 이후여야 합니다.')
 
         return cleaned_data
+
+
+class PriceContractBulkForm(forms.Form):
+    """단가 계약 일괄 등록 폼 - 모든 작업유형을 테이블로 한번에 입력"""
+
+    valid_from = forms.DateField(
+        label='적용 시작일',
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+    )
+    valid_to = forms.DateField(
+        label='적용 종료일',
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+    )
+    memo = forms.CharField(
+        label='메모',
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': '메모'}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.client = kwargs.pop('client', None)
+        super().__init__(*args, **kwargs)
+        for value, label in WorkType.choices:
+            self.fields[f'price_{value}'] = forms.DecimalField(
+                required=False,
+                min_value=0,
+                max_digits=10,
+                decimal_places=2,
+                widget=forms.NumberInput(attrs={
+                    'class': 'form-control form-control-sm',
+                    'placeholder': '0',
+                    'step': '0.01',
+                }),
+            )
+            self.fields[f'unit_{value}'] = forms.CharField(
+                required=False,
+                max_length=20,
+                initial=get_default_unit(value),
+                widget=forms.TextInput(attrs={
+                    'class': 'form-control form-control-sm',
+                    'style': 'width: 100px;',
+                }),
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        valid_from = cleaned_data.get('valid_from')
+        valid_to = cleaned_data.get('valid_to')
+
+        if valid_from and valid_to and valid_from > valid_to:
+            self.add_error('valid_to', '종료일은 시작일 이후여야 합니다.')
+
+        return cleaned_data
+
+    def get_work_type_groups(self):
+        """템플릿에서 카테고리별로 그룹핑해서 렌더링하기 위한 데이터"""
+        groups = []
+        for group_name, types in WORK_TYPE_GROUPS:
+            items = []
+            for wt in types:
+                items.append({
+                    'value': wt.value,
+                    'label': wt.label,
+                    'price_field': self[f'price_{wt.value}'],
+                    'unit_field': self[f'unit_{wt.value}'],
+                })
+            groups.append((group_name, items))
+        return groups
+
+    def save(self, user=None):
+        """입력된 단가가 있는 항목만 PriceContract로 생성"""
+        cleaned = self.cleaned_data
+        valid_from = cleaned['valid_from']
+        valid_to = cleaned['valid_to']
+        memo = cleaned.get('memo', '')
+
+        contracts = []
+        for value, label in WorkType.choices:
+            price = cleaned.get(f'price_{value}')
+            unit = cleaned.get(f'unit_{value}') or get_default_unit(value)
+            if price is not None and price > 0:
+                contracts.append(PriceContract(
+                    client=self.client,
+                    work_type=value,
+                    unit_price=price,
+                    unit=unit,
+                    valid_from=valid_from,
+                    valid_to=valid_to,
+                    memo=memo,
+                    created_by=user,
+                ))
+
+        if contracts:
+            PriceContract.objects.bulk_create(contracts)
+        return contracts

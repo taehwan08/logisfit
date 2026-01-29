@@ -1,20 +1,20 @@
 """
 거래처 뷰 모듈
 
-거래처 CRUD, 단가 계약, 파레트 보관료 관리 뷰를 정의합니다.
+거래처 CRUD, 단가 계약 관리 뷰를 정의합니다.
 """
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy, reverse
 from django.views.generic import (
-    ListView, CreateView, UpdateView, DetailView, View
+    ListView, CreateView, UpdateView, DetailView, View, FormView
 )
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Client, PriceContract, PalletStoragePrice
-from .forms import ClientForm, PriceContractForm, PalletStoragePriceForm
+from .models import Client, PriceContract
+from .forms import ClientForm, PriceContractForm, PriceContractBulkForm
 
 
 class AdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -42,18 +42,15 @@ class ClientListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Client.objects.select_related('created_by')
 
-        # 비관리자는 활성 거래처만 조회
         if not (self.request.user.is_admin or self.request.user.is_superuser):
             queryset = queryset.filter(is_active=True)
 
-        # 상태 필터
         status = self.request.GET.get('status')
         if status == 'active':
             queryset = queryset.filter(is_active=True)
         elif status == 'inactive':
             queryset = queryset.filter(is_active=False)
 
-        # 검색
         search = self.request.GET.get('search', '').strip()
         if search:
             queryset = queryset.filter(
@@ -131,13 +128,6 @@ class ClientDetailView(LoginRequiredMixin, DetailView):
         # 전체 단가 계약 이력
         context['all_price_contracts'] = client.price_contracts.all()
 
-        # 현재 유효한 파레트 보관료
-        context['current_pallet_price'] = client.pallet_storage_prices.filter(
-            valid_from__lte=today, valid_to__gte=today
-        ).first()
-        # 전체 파레트 보관료 이력
-        context['all_pallet_prices'] = client.pallet_storage_prices.all()
-
         return context
 
 
@@ -157,7 +147,7 @@ class ClientDeleteView(AdminRequiredMixin, View):
 # ============================================================================
 
 class PriceContractCreateView(AdminRequiredMixin, CreateView):
-    """단가 계약 등록 뷰"""
+    """단가 계약 개별 등록 뷰"""
     model = PriceContract
     form_class = PriceContractForm
     template_name = 'clients/price_contract_form.html'
@@ -176,6 +166,31 @@ class PriceContractCreateView(AdminRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse('clients:client_detail', kwargs={'pk': self.kwargs['client_id']})
+
+
+class PriceContractBulkCreateView(AdminRequiredMixin, FormView):
+    """단가 계약 일괄 등록 뷰 - 모든 작업유형을 테이블로 한번에 입력"""
+    template_name = 'clients/price_contract_bulk_form.html'
+    form_class = PriceContractBulkForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['client'] = get_object_or_404(Client, pk=self.kwargs['client_id'])
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['client'] = get_object_or_404(Client, pk=self.kwargs['client_id'])
+        context['work_type_groups'] = context['form'].get_work_type_groups()
+        return context
+
+    def form_valid(self, form):
+        contracts = form.save(user=self.request.user)
+        if contracts:
+            messages.success(self.request, f'{len(contracts)}건의 단가 계약이 등록되었습니다.')
+        else:
+            messages.warning(self.request, '입력된 단가가 없습니다.')
+        return redirect('clients:client_detail', pk=self.kwargs['client_id'])
 
 
 class PriceContractUpdateView(AdminRequiredMixin, UpdateView):
@@ -206,61 +221,4 @@ class PriceContractDeleteView(AdminRequiredMixin, View):
         client_pk = contract.client.pk
         contract.delete()
         messages.success(request, '단가 계약이 삭제되었습니다.')
-        return redirect('clients:client_detail', pk=client_pk)
-
-
-# ============================================================================
-# 파레트 보관료 Views
-# ============================================================================
-
-class PalletStoragePriceCreateView(AdminRequiredMixin, CreateView):
-    """파레트 보관료 등록 뷰"""
-    model = PalletStoragePrice
-    form_class = PalletStoragePriceForm
-    template_name = 'clients/pallet_price_form.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['client'] = get_object_or_404(Client, pk=self.kwargs['client_id'])
-        context['page_title'] = '파레트 보관료 등록'
-        return context
-
-    def form_valid(self, form):
-        form.instance.client = get_object_or_404(Client, pk=self.kwargs['client_id'])
-        form.instance.created_by = self.request.user
-        messages.success(self.request, '파레트 보관료가 등록되었습니다.')
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse('clients:client_detail', kwargs={'pk': self.kwargs['client_id']})
-
-
-class PalletStoragePriceUpdateView(AdminRequiredMixin, UpdateView):
-    """파레트 보관료 수정 뷰"""
-    model = PalletStoragePrice
-    form_class = PalletStoragePriceForm
-    template_name = 'clients/pallet_price_form.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['client'] = self.object.client
-        context['page_title'] = '파레트 보관료 수정'
-        return context
-
-    def form_valid(self, form):
-        messages.success(self.request, '파레트 보관료가 수정되었습니다.')
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse('clients:client_detail', kwargs={'pk': self.object.client.pk})
-
-
-class PalletStoragePriceDeleteView(AdminRequiredMixin, View):
-    """파레트 보관료 삭제 뷰"""
-
-    def post(self, request, pk):
-        price = get_object_or_404(PalletStoragePrice, pk=pk)
-        client_pk = price.client.pk
-        price.delete()
-        messages.success(request, '파레트 보관료가 삭제되었습니다.')
         return redirect('clients:client_detail', pk=client_pk)

@@ -1,7 +1,7 @@
 """
 거래처 모델 모듈
 
-거래처(Client), 단가 계약(PriceContract), 파레트 보관료(PalletStoragePrice) 모델을 정의합니다.
+거래처(Client), 단가 계약(PriceContract) 모델을 정의합니다.
 """
 from django.db import models
 from django.conf import settings
@@ -12,18 +12,115 @@ from django.utils import timezone
 
 
 class WorkType(models.TextChoices):
-    """작업 유형 선택지"""
-    INBOUND = 'INBOUND', '입고'
-    OUTBOUND = 'OUTBOUND', '출고'
-    PICKING = 'PICKING', '피킹'
-    PACKING = 'PACKING', '패킹'
-    LABELING = 'LABELING', '라벨링'
-    LOADING = 'LOADING', '상차'
-    UNLOADING = 'UNLOADING', '하차'
-    INVENTORY = 'INVENTORY', '재고조사'
-    SORTING = 'SORTING', '분류작업'
-    REPACK = 'REPACK', '재포장'
+    """작업 유형 선택지 (카테고리별 그룹)"""
+
+    # 입고
+    INBOUND = 'INBOUND', '입고비'
+    
+    # 출고
+    OUTBOUND = 'OUTBOUND', '출고비'
+
+    # 보관
+    STORAGE = 'STORAGE', '보관비'
+
+    # 택배비
+    DELIVERY_TINY = 'DELIVERY_TINY', '택배비 - 극소(~80CM/2Kg)'
+    DELIVERY_SMALL = 'DELIVERY_SMALL', '택배비 - 소(~100CM/5Kg)'
+    DELIVERY_MEDIUM = 'DELIVERY_MEDIUM', '택배비 - 중(~120CM/10Kg)'
+    DELIVERY_BIG1 = 'DELIVERY_BIG1', '택배비 - 대1(~140CM/15Kg)'
+    DELIVERY_BIG2 = 'DELIVERY_BIG2', '택배비 - 대2(~160CM/20Kg)'
+    DELIVERY_VARIANT = 'DELIVERY_VARIANT', '택배비 - 이형(~190CM/25Kg)'
+    DELIVERY_JEJU = 'DELIVERY_JEJU', '택배비 - 제주'
+    DELIVERY_REGION = 'DELIVERY_VARIANT', '택배비 - 도서산간'
+
+    # 반품비
+    RETURN_TINY = 'RETURN_TINY', '반품 - 극소(~80CM/2Kg)'
+    RETURN_SMALL = 'RETURN_SMALL', '반품 - 소(~100CM/5Kg)'
+    RETURN_MEDIUM = 'RETURN_MEDIUM', '반품 - 중(~120CM/10Kg)'
+    RETURN_BIG1 = 'RETURN_BIG1', '반품 - 대1(~140CM/15Kg)'
+    RETURN_BIG2 = 'RETURN_BIG2', '반품 - 대2(~160CM/20Kg)'
+    RETURN_VARIANT = 'RETURN_VARIANT', '반품 - 이형(~190CM/25Kg)'
+    RETURN_JEJU = 'RETURN_JEJU', '반품 - 제주'
+    RETURN_REGION = 'RETURN_VARIANT', '반품 - 도서산간'
+
+    # 작업비
+    VAS_DEFAULT = 'VAS_DEFAULT', '작업비 - 기본(내품 1~3개)'
+    VAS_ADD = 'VAS_ADD', '작업비 - 기본 외(4개 이상)'
+
+    # 부가작업
+    VAS_LABELING = 'VAS_LABELING', '부가 - 라벨링'
+    VAS_REPACK = 'VAS_REPACK', '부가 - 재포장'
+    VAS_SORTING = 'VAS_SORTING', '부가 - 분류작업'
+    VAS_KITTING = 'VAS_KITTING', '부가 - 키팅/세트구성'
+    VAS_RETURN = 'VAS_RETURN', '부가 - 반품처리'
+
+    # 재고관리
+    INV_STOCKTAKE = 'INV_STOCKTAKE', '재고 - 재고조사'
+    INV_CYCLE_COUNT = 'INV_CYCLE_COUNT', '재고 - 순환재고조사'
+
+    # 기타
     OTHER = 'OTHER', '기타'
+
+
+# 작업유형 카테고리 그룹 (UI 표시용)
+WORK_TYPE_GROUPS = [
+    ('입고', [
+        WorkType.INBOUND,
+    ]),
+    ('출고', [
+        WorkType.OUTBOUND,
+    ]),
+    ('보관', [
+        WorkType.STORAGE,
+    ]),
+    ('택배비', [
+        WorkType.DELIVERY_TINY,
+        WorkType.DELIVERY_SMALL,
+        WorkType.DELIVERY_MEDIUM,
+        WorkType.DELIVERY_BIG1,
+        WorkType.DELIVERY_BIG2,
+        WorkType.DELIVERY_VARIANT,
+        WorkType.DELIVERY_JEJU,
+        WorkType.DELIVERY_REGION,
+    ]),
+    ('반품', [
+        WorkType.RETURN_TINY,
+        WorkType.RETURN_SMALL,
+        WorkType.RETURN_MEDIUM,
+        WorkType.RETURN_BIG1,
+        WorkType.RETURN_BIG2,
+        WorkType.RETURN_VARIANT,
+        WorkType.RETURN_JEJU,
+        WorkType.RETURN_REGION,
+    ]),
+    ('작업비', [
+        WorkType.VAS_DEFAULT,
+        WorkType.VAS_ADD,
+    ]),
+    ('부가작업', [
+        WorkType.VAS_LABELING,
+        WorkType.VAS_REPACK,
+        WorkType.VAS_SORTING,
+        WorkType.VAS_KITTING,
+        WorkType.VAS_RETURN,
+    ]),
+    ('재고관리', [
+        WorkType.INV_STOCKTAKE,
+        WorkType.INV_CYCLE_COUNT,
+    ]),
+    ('기타', [
+        WorkType.OTHER,
+    ]),
+]
+
+
+def get_default_unit(work_type_value):
+    """작업유형에 따른 기본 단위 반환"""
+    if work_type_value == 'STORAGE_DAILY':
+        return '팔레트/일'
+    elif work_type_value == 'STORAGE_MONTHLY':
+        return '팔레트/월'
+    return '건'
 
 
 class Client(models.Model):
@@ -140,13 +237,14 @@ class Client(models.Model):
             valid_to__gte=today,
         )
 
-    def get_current_pallet_storage_price(self):
-        """현재 유효한 파레트 보관료 조회"""
+    def get_current_storage_prices(self):
+        """현재 유효한 보관 단가 조회 (PriceContract에서 STORAGE_* 타입)"""
         today = timezone.now().date()
-        return self.pallet_storage_prices.filter(
+        return self.price_contracts.filter(
+            work_type__startswith='STORAGE_',
             valid_from__lte=today,
             valid_to__gte=today,
-        ).first()
+        )
 
 
 class PriceContract(models.Model):
@@ -154,6 +252,7 @@ class PriceContract(models.Model):
     단가 계약 모델
 
     거래처별 작업 유형에 대한 단가 계약을 관리합니다.
+    보관료(일/월)도 이 모델에서 STORAGE_DAILY, STORAGE_MONTHLY 타입으로 관리합니다.
     """
 
     # 관계
@@ -167,7 +266,7 @@ class PriceContract(models.Model):
     # 작업 단가
     work_type = models.CharField(
         '작업 유형',
-        max_length=20,
+        max_length=30,
         choices=WorkType.choices,
     )
     unit_price = models.DecimalField(
@@ -218,68 +317,5 @@ class PriceContract(models.Model):
     @property
     def is_active(self):
         """현재 유효한 계약인지 확인"""
-        today = timezone.now().date()
-        return self.valid_from <= today <= self.valid_to
-
-
-class PalletStoragePrice(models.Model):
-    """
-    파레트 보관료 모델
-
-    거래처별 파레트 보관 단가를 관리합니다.
-    """
-
-    # 관계
-    client = models.ForeignKey(
-        Client,
-        on_delete=models.CASCADE,
-        verbose_name='거래처',
-        related_name='pallet_storage_prices',
-    )
-
-    # 보관료 단가
-    daily_price = models.DecimalField(
-        '일 단가',
-        max_digits=10,
-        decimal_places=2,
-        validators=[MinValueValidator(0)],
-    )
-    monthly_price = models.DecimalField(
-        '월 단가',
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-    )
-
-    # 유효 기간
-    valid_from = models.DateField('적용 시작일', default=timezone.now)
-    valid_to = models.DateField('적용 종료일')
-
-    # 메모 및 시스템 정보
-    memo = models.TextField('메모', blank=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='등록자',
-        related_name='created_pallet_prices',
-    )
-    created_at = models.DateTimeField('등록일시', auto_now_add=True)
-
-    class Meta:
-        db_table = 'pallet_storage_prices'
-        verbose_name = '파레트 보관료'
-        verbose_name_plural = '파레트 보관료 목록'
-        ordering = ['-valid_from']
-
-    def __str__(self):
-        return f"{self.client.company_name} - 일 {self.daily_price}원"
-
-    @property
-    def is_active(self):
-        """현재 유효한지 확인"""
         today = timezone.now().date()
         return self.valid_from <= today <= self.valid_to

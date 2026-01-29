@@ -15,7 +15,7 @@ urlpatterns = [
     path('<int:pk>/update/', views.ClientUpdateView.as_view(), name='client_update'),
     path('<int:pk>/delete/', views.ClientDeleteView.as_view(), name='client_delete'),
 
-    # 단가 계약
+    # 단가 계약 (개별)
     path('<int:client_id>/price-contract/create/',
          views.PriceContractCreateView.as_view(), name='price_contract_create'),
     path('price-contract/<int:pk>/update/',
@@ -23,11 +23,7 @@ urlpatterns = [
     path('price-contract/<int:pk>/delete/',
          views.PriceContractDeleteView.as_view(), name='price_contract_delete'),
 
-    # 파레트 보관료
-    path('<int:client_id>/pallet-price/create/',
-         views.PalletStoragePriceCreateView.as_view(), name='pallet_price_create'),
-    path('pallet-price/<int:pk>/update/',
-         views.PalletStoragePriceUpdateView.as_view(), name='pallet_price_update'),
-    path('pallet-price/<int:pk>/delete/',
-         views.PalletStoragePriceDeleteView.as_view(), name='pallet_price_delete'),
+    # 단가 계약 (일괄 등록)
+    path('<int:client_id>/price-contracts/bulk/',
+         views.PriceContractBulkCreateView.as_view(), name='price_contract_bulk'),
 ]
