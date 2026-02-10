@@ -11,8 +11,33 @@ from django.views.decorators.http import require_GET, require_POST
 from django.db import transaction
 from django.utils import timezone
 import openpyxl
+import xlrd
 
 from .models import Order, OrderProduct, InspectionLog
+
+
+def _parse_excel(excel_file):
+    """엑셀 파일을 파싱하여 헤더와 데이터 행을 반환한다. xlsx/xls 모두 지원."""
+    filename = excel_file.name.lower()
+
+    if filename.endswith('.xlsx'):
+        wb = openpyxl.load_workbook(excel_file, read_only=True)
+        ws = wb.active
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        wb.close()
+    elif filename.endswith('.xls'):
+        content = excel_file.read()
+        wb = xlrd.open_workbook(file_contents=content)
+        ws = wb.sheet_by_index(0)
+        headers = [ws.cell_value(0, col) for col in range(ws.ncols)]
+        rows = []
+        for row_idx in range(1, ws.nrows):
+            rows.append(tuple(ws.cell_value(row_idx, col) for col in range(ws.ncols)))
+    else:
+        raise ValueError('엑셀 파일만 업로드 가능합니다.')
+
+    return headers, rows
 
 
 def office_page(request):
@@ -50,12 +75,8 @@ def upload_excel(request):
         return JsonResponse({'success': False, 'message': '엑셀 파일만 업로드 가능합니다.'}, status=400)
 
     try:
-        wb = openpyxl.load_workbook(excel_file, read_only=True)
-        ws = wb.active
-
-        # 헤더 읽기
-        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-        headers = [h.strip() if h else '' for h in headers]
+        headers, rows = _parse_excel(excel_file)
+        headers = [str(h).strip() if h else '' for h in headers]
 
         required_columns = ['송장번호', '판매처', '수령인', '핸드폰', '주소', '상품바코드', '상품명', '수량']
         col_map = {}
@@ -72,7 +93,7 @@ def upload_excel(request):
         orders_data = defaultdict(lambda: {'info': None, 'products': []})
         row_count = 0
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row in rows:
             if not row or not row[col_map['송장번호']]:
                 continue
 
@@ -100,8 +121,6 @@ def upload_excel(request):
                     'product_name': product_name,
                     'quantity': quantity,
                 })
-
-        wb.close()
 
         if not orders_data:
             return JsonResponse({'success': False, 'message': '유효한 데이터가 없습니다.'}, status=400)
