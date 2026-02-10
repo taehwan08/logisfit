@@ -1,0 +1,618 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}바코드 검수{% endblock %}
+{% block page_title %}바코드 검수 시스템{% endblock %}
+
+{% block extra_css %}
+<style>
+    .scan-input-group {
+        position: relative;
+    }
+    .scan-input-group .form-control {
+        font-size: 1.15rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-family: 'Noto Sans KR', monospace;
+    }
+    .scan-input-group .form-control:focus {
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+    .scan-input-group .form-control:disabled {
+        background-color: #f0f0f0;
+    }
+
+    /* 알림 박스 */
+    .alert-box {
+        min-height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        font-weight: 700;
+        transition: all 0.3s ease;
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    .alert-box.show {
+        opacity: 1;
+        transform: scale(1);
+    }
+    .alert-box.alert-success-custom {
+        background: #d4edda;
+        color: #155724;
+        border: 2px solid #28a745;
+    }
+    .alert-box.alert-error-custom {
+        background: #f8d7da;
+        color: #721c24;
+        border: 2px solid #dc3545;
+    }
+    .alert-box.alert-warning-custom {
+        background: #fff3cd;
+        color: #856404;
+        border: 2px solid #ffc107;
+    }
+    .alert-box.alert-info-custom {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 2px solid #17a2b8;
+    }
+    .alert-box.alert-complete-custom {
+        background: #28a745;
+        color: #fff;
+        border: 2px solid #1e7e34;
+        font-size: 1.5rem;
+    }
+    .alert-box.alert-number-custom {
+        background: #007bff;
+        color: #fff;
+        border: 2px solid #0056b3;
+        font-size: 2rem;
+    }
+
+    /* 주문 정보 */
+    .order-info {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+    }
+    .order-info .label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-bottom: 0.15rem;
+    }
+    .order-info .value {
+        font-weight: 500;
+        font-size: 0.95rem;
+    }
+
+    /* 상품 테이블 */
+    .product-row {
+        transition: all 0.3s ease;
+    }
+    .product-row.completed {
+        background-color: #d4edda !important;
+    }
+    .product-row.scanning {
+        background-color: #fff3cd !important;
+    }
+    .product-row.error-blink {
+        animation: errorBlink 0.5s ease 3;
+    }
+    @keyframes errorBlink {
+        0%, 100% { background-color: #fff; }
+        50% { background-color: #f8d7da; }
+    }
+
+    .scan-badge {
+        font-size: 0.85rem;
+        padding: 0.3em 0.6em;
+        border-radius: 6px;
+    }
+
+    /* 완료 오버레이 */
+    .complete-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(40, 167, 69, 0.9);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        color: #fff;
+    }
+    .complete-overlay.show {
+        display: flex;
+    }
+    .complete-overlay i {
+        font-size: 5rem;
+        margin-bottom: 1rem;
+    }
+    .complete-overlay .complete-text {
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    .complete-overlay .complete-sub {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin-top: 0.5rem;
+    }
+
+    /* 상태 표시 */
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+    }
+    .status-indicator.waiting { background: #6c757d; }
+    .status-indicator.scanning { background: #ffc107; animation: pulse 1s infinite; }
+    .status-indicator.done { background: #28a745; }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 완료 오버레이 -->
+<div class="complete-overlay" id="completeOverlay">
+    <i class="bi bi-check-circle-fill"></i>
+    <div class="complete-text">검수 완료!</div>
+    <div class="complete-sub" id="completeTrackingNumber"></div>
+</div>
+
+<div class="row g-3">
+    <!-- 스캔 입력 영역 -->
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-upc-scan me-1"></i>송장번호
+                        </label>
+                        <div class="scan-input-group">
+                            <input type="text" class="form-control" id="trackingNumberInput"
+                                   placeholder="송장번호를 스캔하세요" autocomplete="off" autofocus>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-upc me-1"></i>상품바코드
+                        </label>
+                        <div class="scan-input-group">
+                            <input type="text" class="form-control" id="barcodeInput"
+                                   placeholder="상품바코드를 스캔하세요" autocomplete="off" disabled>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 알림 박스 -->
+    <div class="col-12">
+        <div class="alert-box" id="alertBox"></div>
+    </div>
+
+    <!-- 주문 정보 -->
+    <div class="col-12" id="orderInfoSection" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-2">
+                <h6 class="mb-0"><i class="bi bi-box-seam me-2"></i>주문 정보</h6>
+            </div>
+            <div class="card-body py-2">
+                <div class="order-info">
+                    <div class="row g-2">
+                        <div class="col-6 col-md-3">
+                            <div class="label">판매처</div>
+                            <div class="value" id="infoSeller">-</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="label">수령인</div>
+                            <div class="value" id="infoReceiver">-</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="label">연락처</div>
+                            <div class="value" id="infoPhone">-</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="label">상태</div>
+                            <div class="value" id="infoStatus">-</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="label">주소</div>
+                            <div class="value" id="infoAddress">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상품 목록 -->
+    <div class="col-12" id="productSection" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>상품 목록</h6>
+                <span class="badge bg-primary" id="progressBadge">0/0</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 40px;"></th>
+                                <th>상품명</th>
+                                <th>바코드</th>
+                                <th style="width: 100px;" class="text-center">진행</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const trackingInput = document.getElementById('trackingNumberInput');
+    const barcodeInput = document.getElementById('barcodeInput');
+    const alertBox = document.getElementById('alertBox');
+    const orderInfoSection = document.getElementById('orderInfoSection');
+    const productSection = document.getElementById('productSection');
+    const completeOverlay = document.getElementById('completeOverlay');
+
+    let currentTrackingNumber = null;
+    let currentProducts = [];
+    let alertTimeout = null;
+
+    // ===== TTS 음성 =====
+    function speak(text) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ko-KR';
+            utterance.rate = 1.2;
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    const numberWords = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구', '십'];
+
+    function playAlertSound(alertCode, remaining) {
+        switch (alertCode) {
+            case '정상':
+                speak('정상');
+                break;
+            case '숫자':
+                if (remaining > 0 && remaining <= 10) {
+                    speak(numberWords[remaining]);
+                } else if (remaining > 10) {
+                    speak(String(remaining));
+                }
+                break;
+            case '완료':
+                speak('검수 완료');
+                break;
+            case '스캔오류':
+                speak('스캔 오류');
+                break;
+            case '송장번호미등록':
+                speak('송장번호 미등록');
+                break;
+            case '기처리배송':
+                speak('기처리 배송');
+                break;
+            case '중복스캔':
+                speak('중복 스캔');
+                break;
+            case '상품오류':
+                speak('상품 오류');
+                break;
+        }
+    }
+
+    // ===== 알림 표시 =====
+    function showAlert(message, type, duration) {
+        if (alertTimeout) clearTimeout(alertTimeout);
+
+        alertBox.textContent = message;
+        alertBox.className = 'alert-box show';
+
+        switch (type) {
+            case 'success': alertBox.classList.add('alert-success-custom'); break;
+            case 'error': alertBox.classList.add('alert-error-custom'); break;
+            case 'warning': alertBox.classList.add('alert-warning-custom'); break;
+            case 'info': alertBox.classList.add('alert-info-custom'); break;
+            case 'complete': alertBox.classList.add('alert-complete-custom'); break;
+            case 'number': alertBox.classList.add('alert-number-custom'); break;
+        }
+
+        if (duration !== 0) {
+            alertTimeout = setTimeout(() => {
+                alertBox.className = 'alert-box';
+            }, duration || 3000);
+        }
+    }
+
+    // ===== 상품 테이블 렌더링 =====
+    function renderProducts(products) {
+        currentProducts = products;
+        const tbody = document.getElementById('productsBody');
+        let completedCount = 0;
+        let totalCount = 0;
+
+        tbody.innerHTML = products.map(p => {
+            const isDone = p.scanned_quantity >= p.quantity;
+            const isScanning = p.scanned_quantity > 0 && !isDone;
+            if (isDone) completedCount++;
+            totalCount++;
+
+            let statusIcon, rowClass;
+            if (isDone) {
+                statusIcon = '<i class="bi bi-check-circle-fill text-success"></i>';
+                rowClass = 'completed';
+            } else if (isScanning) {
+                statusIcon = '<span class="status-indicator scanning"></span>';
+                rowClass = 'scanning';
+            } else {
+                statusIcon = '<span class="status-indicator waiting"></span>';
+                rowClass = '';
+            }
+
+            return `<tr class="product-row ${rowClass}" data-id="${p.id}" data-barcode="${p.barcode}">
+                <td class="text-center">${statusIcon}</td>
+                <td>${p.product_name}</td>
+                <td><code>${p.barcode}</code></td>
+                <td class="text-center">
+                    <span class="scan-badge ${isDone ? 'bg-success text-white' : isScanning ? 'bg-warning text-dark' : 'bg-light text-muted'}">
+                        ${p.scanned_quantity}/${p.quantity}
+                    </span>
+                </td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('progressBadge').textContent = `${completedCount}/${totalCount}`;
+    }
+
+    // ===== 초기화 =====
+    function resetAll() {
+        currentTrackingNumber = null;
+        currentProducts = [];
+        trackingInput.value = '';
+        barcodeInput.value = '';
+        barcodeInput.disabled = true;
+        orderInfoSection.style.display = 'none';
+        productSection.style.display = 'none';
+        alertBox.className = 'alert-box';
+        trackingInput.focus();
+    }
+
+    // ===== 송장 조회 =====
+    async function fetchOrder(trackingNumber) {
+        try {
+            const response = await fetch(`{% url "inspection:get_order" tracking_number="__TN__" %}`.replace('__TN__', encodeURIComponent(trackingNumber)));
+            const result = await response.json();
+
+            if (result.alert_code === '정상') {
+                currentTrackingNumber = trackingNumber;
+                playAlertSound('정상');
+                showAlert('정상 - 상품을 스캔하세요', 'success');
+
+                // 주문 정보 표시
+                const order = result.order;
+                document.getElementById('infoSeller').textContent = order.seller;
+                document.getElementById('infoReceiver').textContent = order.receiver_name;
+                document.getElementById('infoPhone').textContent = order.receiver_phone;
+                document.getElementById('infoAddress').textContent = order.receiver_address;
+                document.getElementById('infoStatus').textContent = order.status;
+                orderInfoSection.style.display = '';
+
+                // 상품 목록
+                renderProducts(result.products);
+                productSection.style.display = '';
+
+                // 포커스 이동
+                barcodeInput.disabled = false;
+                barcodeInput.focus();
+
+            } else if (result.alert_code === '송장번호미등록') {
+                playAlertSound('송장번호미등록');
+                showAlert('송장번호 미등록', 'error');
+                trackingInput.value = '';
+                trackingInput.focus();
+
+            } else if (result.alert_code === '기처리배송') {
+                playAlertSound('기처리배송');
+                showAlert('기처리 배송', 'warning');
+
+                // 완료된 주문 정보 표시 (읽기 전용)
+                const order = result.order;
+                document.getElementById('infoSeller').textContent = order.seller;
+                document.getElementById('infoReceiver').textContent = order.receiver_name;
+                document.getElementById('infoPhone').textContent = order.receiver_phone;
+                document.getElementById('infoAddress').textContent = order.receiver_address;
+                document.getElementById('infoStatus').textContent = '완료';
+                orderInfoSection.style.display = '';
+
+                renderProducts(result.products);
+                productSection.style.display = '';
+
+                // 바코드 입력 비활성화 (이미 완료된 송장)
+                barcodeInput.disabled = true;
+                trackingInput.value = '';
+                trackingInput.focus();
+            }
+        } catch (error) {
+            playAlertSound('스캔오류');
+            showAlert('네트워크 오류', 'error');
+            trackingInput.value = '';
+            trackingInput.focus();
+        }
+    }
+
+    // ===== 상품 스캔 =====
+    async function scanProduct(trackingNumber, barcode) {
+        try {
+            const response = await fetch('{% url "inspection:scan_product" %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tracking_number: trackingNumber, barcode: barcode }),
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                if (result.alert_code === '완료') {
+                    // 전체 완료
+                    playAlertSound('완료');
+                    showAlert('검수 완료!', 'complete', 0);
+
+                    // 마지막 상품 업데이트
+                    if (result.product) {
+                        updateProductRow(result.product);
+                    }
+
+                    // 오버레이 표시
+                    document.getElementById('completeTrackingNumber').textContent = trackingNumber;
+                    completeOverlay.classList.add('show');
+
+                    setTimeout(() => {
+                        completeOverlay.classList.remove('show');
+                        resetAll();
+                    }, 3000);
+
+                } else if (result.alert_code === '숫자') {
+                    // 남은 수량 알림
+                    playAlertSound('숫자', result.remaining);
+                    showAlert(`남은 수량: ${result.remaining}`, 'number');
+
+                    // 상품 목록 갱신
+                    if (result.products) {
+                        renderProducts(result.products);
+                    } else if (result.product) {
+                        updateProductRow(result.product);
+                    }
+
+                    barcodeInput.value = '';
+                    barcodeInput.focus();
+
+                } else if (result.alert_code === '정상') {
+                    // 해당 상품 완료
+                    playAlertSound('정상');
+                    showAlert('정상', 'success');
+
+                    if (result.products) {
+                        renderProducts(result.products);
+                    } else if (result.product) {
+                        updateProductRow(result.product);
+                    }
+
+                    barcodeInput.value = '';
+                    barcodeInput.focus();
+                }
+
+            } else {
+                // 에러
+                if (result.alert_code === '상품오류') {
+                    playAlertSound('상품오류');
+                    showAlert('상품 오류 - 해당 송장에 없는 상품', 'error');
+                } else if (result.alert_code === '중복스캔') {
+                    playAlertSound('중복스캔');
+                    showAlert('중복 스캔', 'error');
+
+                    // 해당 상품 깜빡임
+                    const rows = document.querySelectorAll(`[data-barcode="${barcode}"]`);
+                    rows.forEach(row => {
+                        row.classList.add('error-blink');
+                        setTimeout(() => row.classList.remove('error-blink'), 1500);
+                    });
+                } else {
+                    playAlertSound('스캔오류');
+                    showAlert(result.message || '스캔 오류', 'error');
+                }
+
+                barcodeInput.value = '';
+                barcodeInput.focus();
+            }
+        } catch (error) {
+            playAlertSound('스캔오류');
+            showAlert('네트워크 오류', 'error');
+            barcodeInput.value = '';
+            barcodeInput.focus();
+        }
+    }
+
+    // 개별 상품 행 업데이트
+    function updateProductRow(product) {
+        const row = document.querySelector(`[data-id="${product.id}"]`);
+        if (!row) return;
+
+        const isDone = product.scanned_quantity >= product.quantity;
+        const isScanning = product.scanned_quantity > 0 && !isDone;
+
+        row.className = `product-row ${isDone ? 'completed' : isScanning ? 'scanning' : ''}`;
+
+        const statusCell = row.querySelector('td:first-child');
+        if (isDone) {
+            statusCell.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+        } else if (isScanning) {
+            statusCell.innerHTML = '<span class="status-indicator scanning"></span>';
+        }
+
+        const badgeCell = row.querySelector('.scan-badge');
+        if (badgeCell) {
+            badgeCell.textContent = `${product.scanned_quantity}/${product.quantity}`;
+            badgeCell.className = `scan-badge ${isDone ? 'bg-success text-white' : isScanning ? 'bg-warning text-dark' : 'bg-light text-muted'}`;
+        }
+
+        // 진행률 뱃지 업데이트
+        updateProgressBadge();
+    }
+
+    function updateProgressBadge() {
+        const rows = document.querySelectorAll('.product-row');
+        let completed = 0;
+        rows.forEach(row => {
+            if (row.classList.contains('completed')) completed++;
+        });
+        document.getElementById('progressBadge').textContent = `${completed}/${rows.length}`;
+    }
+
+    // ===== 키보드 이벤트 =====
+    trackingInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const value = e.target.value.trim();
+            if (value) {
+                fetchOrder(value);
+            }
+        }
+    });
+
+    barcodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const value = e.target.value.trim();
+            if (value && currentTrackingNumber) {
+                scanProduct(currentTrackingNumber, value);
+            }
+        }
+    });
+
+    // 페이지 로드 시 송장 입력란 포커스
+    trackingInput.focus();
+});
+</script>
+{% endblock %}

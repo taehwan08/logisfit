@@ -43,6 +43,22 @@
             {% endif %}
 
             {% if user.is_admin or user.is_superuser or user.is_worker %}
+                <!-- 검수 관리 메뉴 -->
+                <li class="sidebar-header-text">검수 관리</li>
+
+                <li class="sidebar-item">
+                    <a href="{% url 'inspection:office_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'office_page' %}active{% endif %}">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                        <span>송장 업로드</span>
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="{% url 'inspection:field_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'field_page' %}active{% endif %}">
+                        <i class="bi bi-upc-scan"></i>
+                        <span>바코드 검수</span>
+                    </a>
+                </li>
+
                 <!-- 작업 관리 메뉴 -->
                 <li class="sidebar-header-text">작업 관리</li>
 

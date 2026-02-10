@@ -39,6 +39,9 @@ urlpatterns = [
     # 거래처 관리
     path('clients/', include('apps.clients.urls')),
 
+    # 바코드 검수
+    path('inspection/', include('apps.inspection.urls')),
+
     # Phase 3 이후 추가될 URL들
     # path('works/', include('apps.works.urls')),
     # path('storage/', include('apps.storage.urls')),

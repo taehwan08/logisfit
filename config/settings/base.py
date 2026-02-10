@@ -55,6 +55,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     'apps.accounts',
     'apps.clients',
+    'apps.inspection',
     # Phase 3 이후 추가될 앱들
     # 'apps.works',
     # 'apps.storage',
