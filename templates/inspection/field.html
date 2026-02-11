@@ -22,56 +22,6 @@
         background-color: #f0f0f0;
     }
 
-    /* 알림 박스 */
-    .alert-box {
-        min-height: 60px;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-        font-weight: 700;
-        transition: all 0.3s ease;
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    .alert-box.show {
-        opacity: 1;
-        transform: scale(1);
-    }
-    .alert-box.alert-success-custom {
-        background: #d4edda;
-        color: #155724;
-        border: 2px solid #28a745;
-    }
-    .alert-box.alert-error-custom {
-        background: #f8d7da;
-        color: #721c24;
-        border: 2px solid #dc3545;
-    }
-    .alert-box.alert-warning-custom {
-        background: #fff3cd;
-        color: #856404;
-        border: 2px solid #ffc107;
-    }
-    .alert-box.alert-info-custom {
-        background: #d1ecf1;
-        color: #0c5460;
-        border: 2px solid #17a2b8;
-    }
-    .alert-box.alert-complete-custom {
-        background: #28a745;
-        color: #fff;
-        border: 2px solid #1e7e34;
-        font-size: 1.5rem;
-    }
-    .alert-box.alert-number-custom {
-        background: #007bff;
-        color: #fff;
-        border: 2px solid #0056b3;
-        font-size: 2rem;
-    }
-
     /* 주문 정보 */
     .order-info {
         background: #f8f9fa;
@@ -88,71 +38,137 @@
         font-size: 0.95rem;
     }
 
-    /* 상품 테이블 */
-    .product-row {
+    /* 상품 카드 */
+    .product-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
         transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
     }
-    .product-row.completed {
-        background-color: #d4edda !important;
+    .product-card.completed {
+        border-color: #28a745;
+        background: #d4edda;
     }
-    .product-row.scanning {
-        background-color: #fff3cd !important;
+    .product-card.scanning {
+        border-color: #ffc107;
+        background: #fff8e1;
     }
-    .product-row.error-blink {
-        animation: errorBlink 0.5s ease 3;
+    .product-card.error-blink {
+        animation: errorBlink 0.4s ease 3;
     }
     @keyframes errorBlink {
-        0%, 100% { background-color: #fff; }
-        50% { background-color: #f8d7da; }
+        0%, 100% { border-color: #e9ecef; background: #fff; }
+        50% { border-color: #dc3545; background: #f8d7da; }
     }
 
-    .scan-badge {
-        font-size: 0.85rem;
-        padding: 0.3em 0.6em;
-        border-radius: 6px;
+    .product-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1.1rem;
+    }
+    .product-icon.waiting {
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    .product-icon.scanning {
+        background: #fff3cd;
+        color: #856404;
+        animation: pulse 1s infinite;
+    }
+    .product-icon.done {
+        background: #28a745;
+        color: #fff;
     }
 
-    /* 완료 오버레이 */
-    .complete-overlay {
+    .product-detail {
+        flex: 1;
+        min-width: 0;
+    }
+    .product-detail .product-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .product-detail .product-barcode {
+        font-size: 0.78rem;
+        color: #6c757d;
+        font-family: monospace;
+    }
+
+    .product-progress {
+        flex-shrink: 0;
+        text-align: center;
+    }
+    .product-progress .qty-display {
+        font-size: 1.5rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+    .product-progress .qty-display.waiting { color: #adb5bd; }
+    .product-progress .qty-display.scanning { color: #e67e00; }
+    .product-progress .qty-display.done { color: #28a745; }
+    .product-progress .qty-label {
+        font-size: 0.65rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* ===== 풀스크린 오버레이 (공통) ===== */
+    .scan-overlay {
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(40, 167, 69, 0.9);
         z-index: 9999;
         justify-content: center;
         align-items: center;
         flex-direction: column;
         color: #fff;
+        animation: overlayIn 0.15s ease-out;
     }
-    .complete-overlay.show {
+    .scan-overlay.show {
         display: flex;
     }
-    .complete-overlay i {
+    @keyframes overlayIn {
+        from { opacity: 0; transform: scale(1.05); }
+        to   { opacity: 1; transform: scale(1); }
+    }
+    .scan-overlay i {
         font-size: 5rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.75rem;
     }
-    .complete-overlay .complete-text {
-        font-size: 2.5rem;
-        font-weight: 700;
+    .scan-overlay .overlay-text {
+        font-size: 2.8rem;
+        font-weight: 800;
     }
-    .complete-overlay .complete-sub {
+    .scan-overlay .overlay-sub {
         font-size: 1.1rem;
         opacity: 0.9;
-        margin-top: 0.5rem;
+        margin-top: 0.4rem;
     }
+
+    /* 완료 - 초록 */
+    .scan-overlay.overlay-complete { background: rgba(40, 167, 69, 0.92); }
+    /* 정상 - 파랑 */
+    .scan-overlay.overlay-ok { background: rgba(13, 110, 253, 0.88); }
+    /* 숫자(남은수량) - 파랑 */
+    .scan-overlay.overlay-number { background: rgba(13, 110, 253, 0.88); }
+    /* 에러 - 빨강 */
+    .scan-overlay.overlay-error { background: rgba(220, 53, 69, 0.90); }
+    /* 경고 - 주황 */
+    .scan-overlay.overlay-warning { background: rgba(255, 152, 0, 0.90); }
 
     /* 상태 표시 */
-    .status-indicator {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 6px;
-    }
-    .status-indicator.waiting { background: #6c757d; }
-    .status-indicator.scanning { background: #ffc107; animation: pulse 1s infinite; }
-    .status-indicator.done { background: #28a745; }
-
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.4; }
@@ -161,11 +177,11 @@
 {% endblock %}
 
 {% block content %}
-<!-- 완료 오버레이 -->
-<div class="complete-overlay" id="completeOverlay">
-    <i class="bi bi-check-circle-fill"></i>
-    <div class="complete-text">검수 완료!</div>
-    <div class="complete-sub" id="completeTrackingNumber"></div>
+<!-- 풀스크린 오버레이 (JS에서 재사용) -->
+<div class="scan-overlay" id="scanOverlay">
+    <i id="overlayIcon"></i>
+    <div class="overlay-text" id="overlayText"></div>
+    <div class="overlay-sub" id="overlaySub"></div>
 </div>
 
 <div class="row g-3">
@@ -197,12 +213,20 @@
         </div>
     </div>
 
-    <!-- 알림 박스 -->
-    <div class="col-12">
-        <div class="alert-box" id="alertBox"></div>
+    <!-- 상품 목록 (주문정보보다 위로) -->
+    <div class="col-12" id="productSection" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>상품 목록</h6>
+                <span class="badge bg-primary" id="progressBadge">0/0</span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-column gap-2" id="productsContainer"></div>
+            </div>
+        </div>
     </div>
 
-    <!-- 주문 정보 -->
+    <!-- 주문 정보 (상품 목록 아래로) -->
     <div class="col-12" id="orderInfoSection" style="display: none;">
         <div class="card shadow-sm">
             <div class="card-header bg-white py-2">
@@ -236,31 +260,6 @@
             </div>
         </div>
     </div>
-
-    <!-- 상품 목록 -->
-    <div class="col-12" id="productSection" style="display: none;">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>상품 목록</h6>
-                <span class="badge bg-primary" id="progressBadge">0/0</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 40px;"></th>
-                                <th>상품명</th>
-                                <th>바코드</th>
-                                <th style="width: 100px;" class="text-center">진행</th>
-                            </tr>
-                        </thead>
-                        <tbody id="productsBody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 {% endblock %}
 
@@ -269,14 +268,18 @@
 document.addEventListener('DOMContentLoaded', function() {
     const trackingInput = document.getElementById('trackingNumberInput');
     const barcodeInput = document.getElementById('barcodeInput');
-    const alertBox = document.getElementById('alertBox');
     const orderInfoSection = document.getElementById('orderInfoSection');
     const productSection = document.getElementById('productSection');
-    const completeOverlay = document.getElementById('completeOverlay');
+
+    // 오버레이 요소
+    const scanOverlay = document.getElementById('scanOverlay');
+    const overlayIcon = document.getElementById('overlayIcon');
+    const overlayText = document.getElementById('overlayText');
+    const overlaySub = document.getElementById('overlaySub');
 
     let currentTrackingNumber = null;
     let currentProducts = [];
-    let alertTimeout = null;
+    let overlayTimer = null;
 
     // ===== TTS 음성 =====
     function speak(text) {
@@ -293,95 +296,88 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function playAlertSound(alertCode, remaining) {
         switch (alertCode) {
-            case '정상':
-                speak('정상');
-                break;
+            case '정상':    speak('정상'); break;
             case '숫자':
-                if (remaining > 0 && remaining <= 10) {
-                    speak(numberWords[remaining]);
-                } else if (remaining > 10) {
-                    speak(String(remaining));
-                }
+                if (remaining > 0 && remaining <= 10) speak(numberWords[remaining]);
+                else if (remaining > 10) speak(String(remaining));
                 break;
-            case '완료':
-                speak('검수 완료');
-                break;
-            case '스캔오류':
-                speak('스캔 오류');
-                break;
-            case '송장번호미등록':
-                speak('송장번호 미등록');
-                break;
-            case '기처리배송':
-                speak('기처리 배송');
-                break;
-            case '중복스캔':
-                speak('중복 스캔');
-                break;
-            case '상품오류':
-                speak('상품 오류');
-                break;
+            case '완료':        speak('검수 완료'); break;
+            case '스캔오류':    speak('스캔 오류'); break;
+            case '송장번호미등록': speak('송장번호 미등록'); break;
+            case '기처리배송':  speak('기처리 배송'); break;
+            case '중복스캔':    speak('중복 스캔'); break;
+            case '상품오류':    speak('상품 오류'); break;
         }
     }
 
-    // ===== 알림 표시 =====
-    function showAlert(message, type, duration) {
-        if (alertTimeout) clearTimeout(alertTimeout);
+    // ===== 오버레이 표시 =====
+    function showOverlay(type, icon, text, sub, duration) {
+        if (overlayTimer) clearTimeout(overlayTimer);
 
-        alertBox.textContent = message;
-        alertBox.className = 'alert-box show';
+        // 클래스 초기화
+        scanOverlay.className = 'scan-overlay show';
+        scanOverlay.classList.add('overlay-' + type);
+        overlayIcon.className = 'bi ' + icon;
+        overlayText.textContent = text;
+        overlaySub.textContent = sub || '';
 
-        switch (type) {
-            case 'success': alertBox.classList.add('alert-success-custom'); break;
-            case 'error': alertBox.classList.add('alert-error-custom'); break;
-            case 'warning': alertBox.classList.add('alert-warning-custom'); break;
-            case 'info': alertBox.classList.add('alert-info-custom'); break;
-            case 'complete': alertBox.classList.add('alert-complete-custom'); break;
-            case 'number': alertBox.classList.add('alert-number-custom'); break;
-        }
-
-        if (duration !== 0) {
-            alertTimeout = setTimeout(() => {
-                alertBox.className = 'alert-box';
-            }, duration || 3000);
+        if (duration > 0) {
+            overlayTimer = setTimeout(() => {
+                scanOverlay.className = 'scan-overlay';
+            }, duration);
         }
     }
 
-    // ===== 상품 테이블 렌더링 =====
+    function hideOverlay() {
+        if (overlayTimer) clearTimeout(overlayTimer);
+        scanOverlay.className = 'scan-overlay';
+    }
+
+    // ===== 상품 카드 렌더링 =====
     function renderProducts(products) {
         currentProducts = products;
-        const tbody = document.getElementById('productsBody');
+        const container = document.getElementById('productsContainer');
         let completedCount = 0;
         let totalCount = 0;
 
-        tbody.innerHTML = products.map(p => {
+        container.innerHTML = products.map(p => {
             const isDone = p.scanned_quantity >= p.quantity;
             const isScanning = p.scanned_quantity > 0 && !isDone;
             if (isDone) completedCount++;
             totalCount++;
 
-            let statusIcon, rowClass;
+            let iconClass, cardClass, qtyClass;
             if (isDone) {
-                statusIcon = '<i class="bi bi-check-circle-fill text-success"></i>';
-                rowClass = 'completed';
+                iconClass = 'done';
+                cardClass = 'completed';
+                qtyClass = 'done';
             } else if (isScanning) {
-                statusIcon = '<span class="status-indicator scanning"></span>';
-                rowClass = 'scanning';
+                iconClass = 'scanning';
+                cardClass = 'scanning';
+                qtyClass = 'scanning';
             } else {
-                statusIcon = '<span class="status-indicator waiting"></span>';
-                rowClass = '';
+                iconClass = 'waiting';
+                cardClass = '';
+                qtyClass = 'waiting';
             }
 
-            return `<tr class="product-row ${rowClass}" data-id="${p.id}" data-barcode="${p.barcode}">
-                <td class="text-center">${statusIcon}</td>
-                <td>${p.product_name}</td>
-                <td><code>${p.barcode}</code></td>
-                <td class="text-center">
-                    <span class="scan-badge ${isDone ? 'bg-success text-white' : isScanning ? 'bg-warning text-dark' : 'bg-light text-muted'}">
-                        ${p.scanned_quantity}/${p.quantity}
-                    </span>
-                </td>
-            </tr>`;
+            const iconHtml = isDone
+                ? '<i class="bi bi-check-lg"></i>'
+                : isScanning
+                    ? '<i class="bi bi-arrow-repeat"></i>'
+                    : '<i class="bi bi-box-seam"></i>';
+
+            return `<div class="product-card ${cardClass}" data-id="${p.id}" data-barcode="${p.barcode}">
+                <div class="product-icon ${iconClass}">${iconHtml}</div>
+                <div class="product-detail">
+                    <div class="product-name">${p.product_name}</div>
+                    <div class="product-barcode">${p.barcode}</div>
+                </div>
+                <div class="product-progress">
+                    <div class="qty-display ${qtyClass}">${p.scanned_quantity}/${p.quantity}</div>
+                    <div class="qty-label">스캔</div>
+                </div>
+            </div>`;
         }).join('');
 
         document.getElementById('progressBadge').textContent = `${completedCount}/${totalCount}`;
@@ -396,7 +392,7 @@ document.addEventListener('DOMContentLoaded', function() {
         barcodeInput.disabled = true;
         orderInfoSection.style.display = 'none';
         productSection.style.display = 'none';
-        alertBox.className = 'alert-box';
+        hideOverlay();
         trackingInput.focus();
     }
 
@@ -409,38 +405,34 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.alert_code === '정상') {
                 currentTrackingNumber = trackingNumber;
                 playAlertSound('정상');
-                showAlert('정상 - 상품을 스캔하세요', 'success');
+                showOverlay('ok', 'bi-check-circle-fill', '정상', '상품을 스캔하세요', 800);
 
-                // 주문 정보 표시
                 const order = result.order;
-                document.getElementById('infoSeller').textContent = order.seller;
+                document.getElementById('infoSeller').textContent = order.seller || '-';
                 document.getElementById('infoReceiver').textContent = order.receiver_name;
                 document.getElementById('infoPhone').textContent = order.receiver_phone;
                 document.getElementById('infoAddress').textContent = order.receiver_address;
                 document.getElementById('infoStatus').textContent = order.status;
                 orderInfoSection.style.display = '';
 
-                // 상품 목록
                 renderProducts(result.products);
                 productSection.style.display = '';
 
-                // 포커스 이동
                 barcodeInput.disabled = false;
                 barcodeInput.focus();
 
             } else if (result.alert_code === '송장번호미등록') {
                 playAlertSound('송장번호미등록');
-                showAlert('송장번호 미등록', 'error');
+                showOverlay('error', 'bi-exclamation-triangle-fill', '송장번호 미등록', '', 1500);
                 trackingInput.value = '';
                 trackingInput.focus();
 
             } else if (result.alert_code === '기처리배송') {
                 playAlertSound('기처리배송');
-                showAlert('기처리 배송', 'warning');
+                showOverlay('warning', 'bi-exclamation-circle-fill', '기처리 배송', '이미 완료된 송장입니다', 1500);
 
-                // 완료된 주문 정보 표시 (읽기 전용)
                 const order = result.order;
-                document.getElementById('infoSeller').textContent = order.seller;
+                document.getElementById('infoSeller').textContent = order.seller || '-';
                 document.getElementById('infoReceiver').textContent = order.receiver_name;
                 document.getElementById('infoPhone').textContent = order.receiver_phone;
                 document.getElementById('infoAddress').textContent = order.receiver_address;
@@ -450,14 +442,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderProducts(result.products);
                 productSection.style.display = '';
 
-                // 바코드 입력 비활성화 (이미 완료된 송장)
                 barcodeInput.disabled = true;
                 trackingInput.value = '';
                 trackingInput.focus();
             }
         } catch (error) {
             playAlertSound('스캔오류');
-            showAlert('네트워크 오류', 'error');
+            showOverlay('error', 'bi-wifi-off', '네트워크 오류', '', 1500);
             trackingInput.value = '';
             trackingInput.focus();
         }
@@ -475,72 +466,53 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (result.success) {
                 if (result.alert_code === '완료') {
-                    // 전체 완료
                     playAlertSound('완료');
-                    showAlert('검수 완료!', 'complete', 0);
 
-                    // 마지막 상품 업데이트
-                    if (result.product) {
-                        updateProductRow(result.product);
-                    }
+                    if (result.product) updateProductInList(result.product);
 
-                    // 오버레이 표시
-                    document.getElementById('completeTrackingNumber').textContent = trackingNumber;
-                    completeOverlay.classList.add('show');
+                    showOverlay('complete', 'bi-check-circle-fill', '검수 완료!', trackingNumber, 0);
 
                     setTimeout(() => {
-                        completeOverlay.classList.remove('show');
                         resetAll();
-                    }, 3000);
+                    }, 1500);
 
                 } else if (result.alert_code === '숫자') {
-                    // 남은 수량 알림
                     playAlertSound('숫자', result.remaining);
-                    showAlert(`남은 수량: ${result.remaining}`, 'number');
+                    showOverlay('number', 'bi-hash', result.remaining, '남은 수량', 700);
 
-                    // 상품 목록 갱신
-                    if (result.products) {
-                        renderProducts(result.products);
-                    } else if (result.product) {
-                        updateProductRow(result.product);
-                    }
+                    if (result.products) renderProducts(result.products);
+                    else if (result.product) updateProductInList(result.product);
 
                     barcodeInput.value = '';
                     barcodeInput.focus();
 
                 } else if (result.alert_code === '정상') {
-                    // 해당 상품 완료
                     playAlertSound('정상');
-                    showAlert('정상', 'success');
+                    showOverlay('ok', 'bi-check-circle-fill', '정상', '', 700);
 
-                    if (result.products) {
-                        renderProducts(result.products);
-                    } else if (result.product) {
-                        updateProductRow(result.product);
-                    }
+                    if (result.products) renderProducts(result.products);
+                    else if (result.product) updateProductInList(result.product);
 
                     barcodeInput.value = '';
                     barcodeInput.focus();
                 }
 
             } else {
-                // 에러
                 if (result.alert_code === '상품오류') {
                     playAlertSound('상품오류');
-                    showAlert('상품 오류 - 해당 송장에 없는 상품', 'error');
+                    showOverlay('error', 'bi-x-circle-fill', '상품 오류', '해당 송장에 없는 상품', 1500);
                 } else if (result.alert_code === '중복스캔') {
                     playAlertSound('중복스캔');
-                    showAlert('중복 스캔', 'error');
+                    showOverlay('error', 'bi-arrow-repeat', '중복 스캔', '이미 완료된 상품', 1500);
 
-                    // 해당 상품 깜빡임
-                    const rows = document.querySelectorAll(`[data-barcode="${barcode}"]`);
-                    rows.forEach(row => {
-                        row.classList.add('error-blink');
-                        setTimeout(() => row.classList.remove('error-blink'), 1500);
+                    const cards = document.querySelectorAll(`[data-barcode="${barcode}"]`);
+                    cards.forEach(card => {
+                        card.classList.add('error-blink');
+                        setTimeout(() => card.classList.remove('error-blink'), 1200);
                     });
                 } else {
                     playAlertSound('스캔오류');
-                    showAlert(result.message || '스캔 오류', 'error');
+                    showOverlay('error', 'bi-exclamation-triangle-fill', result.message || '스캔 오류', '', 1500);
                 }
 
                 barcodeInput.value = '';
@@ -548,46 +520,52 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             playAlertSound('스캔오류');
-            showAlert('네트워크 오류', 'error');
+            showOverlay('error', 'bi-wifi-off', '네트워크 오류', '', 1500);
             barcodeInput.value = '';
             barcodeInput.focus();
         }
     }
 
-    // 개별 상품 행 업데이트
-    function updateProductRow(product) {
-        const row = document.querySelector(`[data-id="${product.id}"]`);
-        if (!row) return;
+    // 개별 상품 카드 업데이트
+    function updateProductInList(product) {
+        const card = document.querySelector(`.product-card[data-id="${product.id}"]`);
+        if (!card) return;
 
         const isDone = product.scanned_quantity >= product.quantity;
         const isScanning = product.scanned_quantity > 0 && !isDone;
 
-        row.className = `product-row ${isDone ? 'completed' : isScanning ? 'scanning' : ''}`;
+        // 카드 클래스
+        card.className = `product-card ${isDone ? 'completed' : isScanning ? 'scanning' : ''}`;
+        card.setAttribute('data-barcode', product.barcode);
 
-        const statusCell = row.querySelector('td:first-child');
+        // 아이콘
+        const iconEl = card.querySelector('.product-icon');
         if (isDone) {
-            statusCell.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+            iconEl.className = 'product-icon done';
+            iconEl.innerHTML = '<i class="bi bi-check-lg"></i>';
         } else if (isScanning) {
-            statusCell.innerHTML = '<span class="status-indicator scanning"></span>';
+            iconEl.className = 'product-icon scanning';
+            iconEl.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
         }
 
-        const badgeCell = row.querySelector('.scan-badge');
-        if (badgeCell) {
-            badgeCell.textContent = `${product.scanned_quantity}/${product.quantity}`;
-            badgeCell.className = `scan-badge ${isDone ? 'bg-success text-white' : isScanning ? 'bg-warning text-dark' : 'bg-light text-muted'}`;
+        // 수량
+        const qtyEl = card.querySelector('.qty-display');
+        if (qtyEl) {
+            qtyEl.textContent = `${product.scanned_quantity}/${product.quantity}`;
+            qtyEl.className = `qty-display ${isDone ? 'done' : isScanning ? 'scanning' : 'waiting'}`;
         }
 
-        // 진행률 뱃지 업데이트
+        // 진행률 뱃지
         updateProgressBadge();
     }
 
     function updateProgressBadge() {
-        const rows = document.querySelectorAll('.product-row');
+        const cards = document.querySelectorAll('.product-card');
         let completed = 0;
-        rows.forEach(row => {
-            if (row.classList.contains('completed')) completed++;
+        cards.forEach(card => {
+            if (card.classList.contains('completed')) completed++;
         });
-        document.getElementById('progressBadge').textContent = `${completed}/${rows.length}`;
+        document.getElementById('progressBadge').textContent = `${completed}/${cards.length}`;
     }
 
     // ===== 키보드 이벤트 =====
@@ -595,9 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const value = e.target.value.trim();
-            if (value) {
-                fetchOrder(value);
-            }
+            if (value) fetchOrder(value);
         }
     });
 
@@ -605,9 +581,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const value = e.target.value.trim();
-            if (value && currentTrackingNumber) {
-                scanProduct(currentTrackingNumber, value);
-            }
+            if (value && currentTrackingNumber) scanProduct(currentTrackingNumber, value);
         }
     });
 
