@@ -55,18 +55,30 @@
     .progress-bar-upload.show {
         display: flex;
     }
-    .orders-table th {
+    .batch-table th {
         font-size: 0.85rem;
         font-weight: 600;
         white-space: nowrap;
     }
-    .orders-table td {
+    .batch-table td {
         font-size: 0.85rem;
         vertical-align: middle;
     }
     .badge-status {
         font-size: 0.75rem;
         padding: 0.35em 0.65em;
+    }
+    .progress-mini {
+        height: 6px;
+        border-radius: 3px;
+        min-width: 80px;
+    }
+    .batch-meta {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .batch-meta i {
+        font-size: 0.75rem;
     }
 </style>
 {% endblock %}
@@ -141,43 +153,31 @@
         </div>
     </div>
 
-    <!-- 송장 목록 -->
+    <!-- 업로드 이력 -->
     <div class="col-12">
         <div class="card shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0"><i class="bi bi-list-ul me-2"></i>송장 목록</h5>
-                <div class="d-flex gap-2">
-                    <select class="form-select form-select-sm" id="statusFilter" style="width: auto;">
-                        <option value="">전체 상태</option>
-                        <option value="대기중">대기중</option>
-                        <option value="검수중">검수중</option>
-                        <option value="완료">완료</option>
-                    </select>
-                    <div class="input-group input-group-sm" style="width: 200px;">
-                        <input type="text" class="form-control" placeholder="송장번호 검색" id="searchInput">
-                        <button class="btn btn-outline-secondary" type="button" id="searchBtn">
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                </div>
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>업로드 이력</h5>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0 orders-table">
+                    <table class="table table-hover mb-0 batch-table">
                         <thead class="table-light">
                             <tr>
-                                <th>송장번호</th>
-                                <th>판매처</th>
-                                <th>수령인</th>
-                                <th>상품수</th>
-                                <th>상태</th>
-                                <th>업로드</th>
-                                <th>완료</th>
+                                <th>파일명</th>
+                                <th>출력차수</th>
+                                <th>배송메모</th>
+                                <th class="text-center">송장</th>
+                                <th class="text-center">상품</th>
+                                <th>진행률</th>
+                                <th>업로드자</th>
+                                <th>업로드 시간</th>
+                                <th></th>
                             </tr>
                         </thead>
-                        <tbody id="ordersBody">
+                        <tbody id="batchesBody">
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
+                                <td colspan="9" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -273,8 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             uploadResult.classList.add('show');
-            loadOrders();
-            loadStats();
+            loadBatches();
         } catch (error) {
             uploadAlert.className = 'alert alert-danger';
             uploadAlert.innerHTML = '<i class="bi bi-exclamation-circle me-2"></i>네트워크 오류가 발생했습니다.';
@@ -291,76 +290,109 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 송장 목록 로드
-    async function loadOrders() {
-        const status = document.getElementById('statusFilter').value;
-        const search = document.getElementById('searchInput').value;
-        let url = '{% url "inspection:get_orders_status" %}?';
-        if (status) url += `status=${encodeURIComponent(status)}&`;
-        if (search) url += `search=${encodeURIComponent(search)}&`;
-
+    // 업로드 이력 로드
+    async function loadBatches() {
         try {
-            const response = await fetch(url);
+            const response = await fetch('{% url "inspection:get_upload_batches" %}');
             const result = await response.json();
-            const tbody = document.getElementById('ordersBody');
+            const tbody = document.getElementById('batchesBody');
 
-            if (!result.orders || result.orders.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">등록된 송장이 없습니다.</td></tr>';
+            if (!result.batches || result.batches.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
+                updateStats(0, 0, 0, 0);
                 return;
             }
 
-            tbody.innerHTML = result.orders.map(o => {
-                let badgeClass = 'bg-secondary';
-                if (o.status === '검수중') badgeClass = 'bg-warning text-dark';
-                if (o.status === '완료') badgeClass = 'bg-success';
+            // 현황 카드 갱신
+            let totalAll = 0, waitAll = 0, inspAll = 0, compAll = 0;
+            result.batches.forEach(b => {
+                totalAll += b.total_orders;
+                waitAll += b.waiting;
+                inspAll += b.inspecting;
+                compAll += b.completed;
+            });
+            updateStats(totalAll, waitAll, inspAll, compAll);
 
-                const uploaded = new Date(o.uploaded_at).toLocaleDateString('ko-KR');
-                const completed = o.completed_at ? new Date(o.completed_at).toLocaleDateString('ko-KR') : '-';
+            tbody.innerHTML = result.batches.map(b => {
+                const total = b.total_orders;
+                const pct = total > 0 ? Math.round((b.completed / total) * 100) : 0;
+                const uploaded = new Date(b.uploaded_at);
+                const dateStr = uploaded.toLocaleDateString('ko-KR');
+                const timeStr = uploaded.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+                let barClass = 'bg-primary';
+                if (pct === 100) barClass = 'bg-success';
+                else if (pct > 0) barClass = 'bg-warning';
 
                 return `<tr>
-                    <td><code>${o.tracking_number}</code></td>
-                    <td>${o.seller}</td>
-                    <td>${o.receiver_name}</td>
-                    <td>${o.product_count}</td>
-                    <td><span class="badge badge-status ${badgeClass}">${o.status}</span></td>
-                    <td>${uploaded}</td>
-                    <td>${completed}</td>
+                    <td>
+                        <i class="bi bi-file-earmark-excel text-success me-1"></i>
+                        <span class="fw-medium">${escapeHtml(b.file_name)}</span>
+                    </td>
+                    <td>${escapeHtml(b.print_order) || '<span class="text-muted">-</span>'}</td>
+                    <td>${escapeHtml(b.delivery_memo) || '<span class="text-muted">-</span>'}</td>
+                    <td class="text-center">${b.total_orders}</td>
+                    <td class="text-center">${b.total_products}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress progress-mini flex-grow-1">
+                                <div class="progress-bar ${barClass}" style="width: ${pct}%"></div>
+                            </div>
+                            <small class="text-nowrap">${b.completed}/${total}</small>
+                        </div>
+                    </td>
+                    <td>${escapeHtml(b.uploaded_by) || '-'}</td>
+                    <td>
+                        <span class="batch-meta">${dateStr} ${timeStr}</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteBatch(${b.id}, '${escapeHtml(b.file_name)}')" title="삭제">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
                 </tr>`;
             }).join('');
         } catch (error) {
-            console.error('목록 로드 실패:', error);
+            console.error('업로드 이력 로드 실패:', error);
         }
     }
 
-    // 현황 갱신
-    async function loadStats() {
-        try {
-            const response = await fetch('{% url "inspection:get_orders_status" %}');
-            const all = await response.json();
-
-            const res1 = await fetch('{% url "inspection:get_orders_status" %}?status=대기중');
-            const waiting = await res1.json();
-            const res2 = await fetch('{% url "inspection:get_orders_status" %}?status=검수중');
-            const inspecting = await res2.json();
-            const res3 = await fetch('{% url "inspection:get_orders_status" %}?status=완료');
-            const completed = await res3.json();
-
-            document.getElementById('statTotal').textContent = all.total;
-            document.getElementById('statWaiting').textContent = waiting.total;
-            document.getElementById('statInspecting').textContent = inspecting.total;
-            document.getElementById('statCompleted').textContent = completed.total;
-        } catch (e) {}
+    function updateStats(total, waiting, inspecting, completed) {
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statWaiting').textContent = waiting;
+        document.getElementById('statInspecting').textContent = inspecting;
+        document.getElementById('statCompleted').textContent = completed;
     }
 
-    // 필터/검색
-    document.getElementById('statusFilter').addEventListener('change', loadOrders);
-    document.getElementById('searchBtn').addEventListener('click', loadOrders);
-    document.getElementById('searchInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') loadOrders();
-    });
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // 배치 삭제
+    window.deleteBatch = async function(batchId, fileName) {
+        if (!confirm(`"${fileName}" 업로드 데이터를 삭제하시겠습니까?\n해당 파일의 모든 송장과 상품이 삭제됩니다.`)) {
+            return;
+        }
+        try {
+            const response = await fetch(`/inspection/api/batches/${batchId}/delete/`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (result.success) {
+                loadBatches();
+            } else {
+                alert(result.message);
+            }
+        } catch (error) {
+            alert('삭제 중 오류가 발생했습니다.');
+        }
+    };
 
     // 초기 로드
-    loadOrders();
+    loadBatches();
 });
 </script>
 {% endblock %}

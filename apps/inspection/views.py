@@ -13,7 +13,7 @@ from django.utils import timezone
 import openpyxl
 import xlrd
 
-from .models import Order, OrderProduct, InspectionLog
+from .models import Order, OrderProduct, InspectionLog, UploadBatch
 
 
 def _parse_excel(excel_file):
@@ -38,6 +38,17 @@ def _parse_excel(excel_file):
         raise ValueError('엑셀 파일만 업로드 가능합니다.')
 
     return headers, rows
+
+
+def _get_col(row, col_map, key, default=''):
+    """행에서 컬럼 값을 안전하게 가져온다."""
+    idx = col_map.get(key)
+    if idx is None or idx >= len(row):
+        return default
+    val = row[idx]
+    if val is None:
+        return default
+    return str(val).strip()
 
 
 def office_page(request):
@@ -78,41 +89,87 @@ def upload_excel(request):
         headers, rows = _parse_excel(excel_file)
         headers = [str(h).strip() if h else '' for h in headers]
 
-        required_columns = ['송장번호', '판매처', '수령인', '핸드폰', '주소', '상품바코드', '상품명', '수량']
-        col_map = {}
-        for col_name in required_columns:
-            if col_name in headers:
-                col_map[col_name] = headers.index(col_name)
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'message': f'필수 컬럼이 없습니다: {col_name}'
-                }, status=400)
+        # 엑셀 컬럼명 → 내부 키 매핑
+        COLUMN_MAP = {
+            '송장번호': '송장번호',
+            '쇼핑몰': '판매처',
+            '수령자': '수령인',
+            '전화1': '핸드폰',
+            '주소': '주소',
+            '바코드번호': '상품바코드',
+            '매칭상품명': '매칭상품명',
+            '매칭관리명': '매칭관리명',
+            '매칭수량': '수량',
+            '출력차수': '출력차수',
+            '배송메모': '배송메모',
+            '등록일': '등록일',
+            '택배사': '택배사',
+        }
+
+        # 필수 컬럼 체크
+        required_excel_columns = ['송장번호', '쇼핑몰', '수령자', '전화1', '주소', '바코드번호', '매칭상품명', '매칭수량']
+
+        col_map = {}  # 내부 키 → 인덱스
+        for excel_col, internal_key in COLUMN_MAP.items():
+            if excel_col in headers:
+                col_map[internal_key] = headers.index(excel_col)
+
+        # 필수 컬럼 누락 체크
+        missing = []
+        for excel_col in required_excel_columns:
+            internal_key = COLUMN_MAP[excel_col]
+            if internal_key not in col_map:
+                missing.append(excel_col)
+        if missing:
+            return JsonResponse({
+                'success': False,
+                'message': f'필수 컬럼이 없습니다: {", ".join(missing)}'
+            }, status=400)
 
         # 데이터 파싱 - 송장번호 기준 그룹화
         orders_data = defaultdict(lambda: {'info': None, 'products': []})
-        row_count = 0
+        batch_print_order = ''
+        batch_delivery_memo = ''
 
         for row in rows:
-            if not row or not row[col_map['송장번호']]:
+            tracking_number = _get_col(row, col_map, '송장번호')
+            if not tracking_number:
                 continue
 
-            tracking_number = str(row[col_map['송장번호']]).strip()
-            row_count += 1
+            # 파일 공통 정보: 첫 행에서 출력차수, 배송메모 추출
+            if not batch_print_order:
+                batch_print_order = _get_col(row, col_map, '출력차수')
+            if not batch_delivery_memo:
+                batch_delivery_memo = _get_col(row, col_map, '배송메모')
 
             if orders_data[tracking_number]['info'] is None:
                 orders_data[tracking_number]['info'] = {
-                    'seller': str(row[col_map['판매처']] or '').strip(),
-                    'receiver_name': str(row[col_map['수령인']] or '').strip(),
-                    'receiver_phone': str(row[col_map['핸드폰']] or '').strip(),
-                    'receiver_address': str(row[col_map['주소']] or '').strip(),
+                    'seller': _get_col(row, col_map, '판매처'),
+                    'receiver_name': _get_col(row, col_map, '수령인'),
+                    'receiver_phone': _get_col(row, col_map, '핸드폰'),
+                    'receiver_address': _get_col(row, col_map, '주소'),
+                    'registered_date': _get_col(row, col_map, '등록일'),
+                    'courier': _get_col(row, col_map, '택배사'),
+                    'print_order': _get_col(row, col_map, '출력차수'),
+                    'delivery_memo': _get_col(row, col_map, '배송메모'),
                 }
 
-            barcode = str(row[col_map['상품바코드']] or '').strip()
-            product_name = str(row[col_map['상품명']] or '').strip()
+            barcode = _get_col(row, col_map, '상품바코드')
+            product_name_part = _get_col(row, col_map, '매칭상품명')
+            manage_name_part = _get_col(row, col_map, '매칭관리명')
+
+            # 상품명 = 매칭상품명 + 매칭관리명
+            if product_name_part and manage_name_part:
+                product_name = f'{product_name_part} ({manage_name_part})'
+            elif product_name_part:
+                product_name = product_name_part
+            else:
+                product_name = manage_name_part
+
             try:
-                quantity = int(row[col_map['수량']] or 0)
-            except (ValueError, TypeError):
+                qty_val = row[col_map['수량']] if col_map.get('수량') is not None else 0
+                quantity = int(float(str(qty_val or 0)))
+            except (ValueError, TypeError, IndexError):
                 quantity = 0
 
             if barcode and product_name:
@@ -131,6 +188,18 @@ def upload_excel(request):
         duplicated = 0
 
         with transaction.atomic():
+            # UploadBatch 생성
+            uploader = ''
+            if request.user.is_authenticated:
+                uploader = request.user.name or request.user.email or ''
+
+            batch = UploadBatch.objects.create(
+                file_name=excel_file.name,
+                print_order=batch_print_order,
+                delivery_memo=batch_delivery_memo,
+                uploaded_by=uploader,
+            )
+
             for tracking_number, data in orders_data.items():
                 # 중복 송장번호 처리: 기존 데이터 삭제 후 재등록
                 existing = Order.objects.filter(tracking_number=tracking_number)
@@ -139,6 +208,7 @@ def upload_excel(request):
                     duplicated += 1
 
                 order = Order.objects.create(
+                    upload_batch=batch,
                     tracking_number=tracking_number,
                     **data['info']
                 )
@@ -155,6 +225,11 @@ def upload_excel(request):
                 ]
                 OrderProduct.objects.bulk_create(products)
                 total_products += len(products)
+
+            # 배치에 집계 저장
+            batch.total_orders = total_orders
+            batch.total_products = total_products
+            batch.save(update_fields=['total_orders', 'total_products'])
 
         message = f'{total_orders}건의 송장이 등록되었습니다.'
         if duplicated:
@@ -508,34 +583,56 @@ def get_logs(request):
 
 
 @require_GET
-def get_orders_status(request):
-    """송장 현황 조회 (오피스팀용)"""
-    orders = Order.objects.all()
+def get_upload_batches(request):
+    """업로드 이력 조회 (오피스팀용)"""
+    batches = UploadBatch.objects.all()
 
-    status_filter = request.GET.get('status')
-    if status_filter:
-        orders = orders.filter(status=status_filter)
+    total = batches.count()
+    batches = batches[:100]
 
-    search = request.GET.get('search')
-    if search:
-        orders = orders.filter(tracking_number__icontains=search)
+    result = []
+    for b in batches:
+        orders = b.orders.all()
+        order_count = orders.count()
+        waiting = orders.filter(status='대기중').count()
+        inspecting = orders.filter(status='검수중').count()
+        completed = orders.filter(status='완료').count()
 
-    total = orders.count()
-    orders = orders.prefetch_related('products')[:100]
+        result.append({
+            'id': b.id,
+            'file_name': b.file_name,
+            'print_order': b.print_order,
+            'delivery_memo': b.delivery_memo,
+            'total_orders': b.total_orders,
+            'total_products': b.total_products,
+            'waiting': waiting,
+            'inspecting': inspecting,
+            'completed': completed,
+            'uploaded_by': b.uploaded_by,
+            'uploaded_at': b.uploaded_at.isoformat(),
+        })
 
     return JsonResponse({
         'success': True,
-        'orders': [
-            {
-                'tracking_number': o.tracking_number,
-                'seller': o.seller,
-                'receiver_name': o.receiver_name,
-                'status': o.status,
-                'uploaded_at': o.uploaded_at.isoformat(),
-                'completed_at': o.completed_at.isoformat() if o.completed_at else None,
-                'product_count': o.products.count(),
-            }
-            for o in orders
-        ],
+        'batches': result,
         'total': total,
     })
+
+
+@csrf_exempt
+@require_POST
+def delete_upload_batch(request, batch_id):
+    """업로드 배치 삭제 (해당 배치의 모든 송장/상품 함께 삭제)"""
+    try:
+        batch = UploadBatch.objects.get(id=batch_id)
+        file_name = batch.file_name
+        batch.delete()  # CASCADE로 orders, products 모두 삭제
+        return JsonResponse({
+            'success': True,
+            'message': f'"{file_name}" 업로드 데이터가 삭제되었습니다.',
+        })
+    except UploadBatch.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': '해당 업로드 이력을 찾을 수 없습니다.',
+        }, status=404)

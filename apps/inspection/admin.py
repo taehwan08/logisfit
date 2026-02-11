@@ -2,7 +2,24 @@
 검수 시스템 관리자 설정
 """
 from django.contrib import admin
-from .models import Order, OrderProduct, InspectionLog
+from .models import UploadBatch, Order, OrderProduct, InspectionLog
+
+
+class OrderInline(admin.TabularInline):
+    model = Order
+    extra = 0
+    show_change_link = True
+    fields = ('tracking_number', 'seller', 'receiver_name', 'status')
+    readonly_fields = ('tracking_number', 'seller', 'receiver_name', 'status')
+
+
+@admin.register(UploadBatch)
+class UploadBatchAdmin(admin.ModelAdmin):
+    list_display = ('file_name', 'print_order', 'delivery_memo', 'total_orders', 'total_products', 'uploaded_by', 'uploaded_at')
+    list_filter = ('uploaded_at',)
+    search_fields = ('file_name', 'print_order', 'delivery_memo')
+    readonly_fields = ('uploaded_at',)
+    inlines = [OrderInline]
 
 
 class OrderProductInline(admin.TabularInline):
@@ -13,8 +30,8 @@ class OrderProductInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('tracking_number', 'seller', 'receiver_name', 'status', 'uploaded_at', 'completed_at')
-    list_filter = ('status', 'seller', 'uploaded_at')
+    list_display = ('tracking_number', 'seller', 'receiver_name', 'courier', 'print_order', 'status', 'uploaded_at', 'completed_at')
+    list_filter = ('status', 'seller', 'courier', 'uploaded_at')
     search_fields = ('tracking_number', 'receiver_name', 'seller')
     readonly_fields = ('uploaded_at', 'completed_at')
     inlines = [OrderProductInline]

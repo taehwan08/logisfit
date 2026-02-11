@@ -16,8 +16,9 @@ urlpatterns = [
     # API
     path('upload/', views.upload_excel, name='upload_excel'),
     path('api/orders/<str:tracking_number>/', views.get_order, name='get_order'),
-    path('api/orders/', views.get_orders_status, name='get_orders_status'),
     path('api/scan/product/', views.scan_product, name='scan_product'),
     path('api/scan/complete/', views.complete_inspection, name='complete_inspection'),
     path('api/logs/', views.get_logs, name='get_logs'),
+    path('api/batches/', views.get_upload_batches, name='get_upload_batches'),
+    path('api/batches/<int:batch_id>/delete/', views.delete_upload_batch, name='delete_upload_batch'),
 ]

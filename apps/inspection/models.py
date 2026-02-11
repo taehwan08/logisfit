@@ -4,13 +4,41 @@
 from django.db import models
 
 
+class UploadBatch(models.Model):
+    """업로드 배치 (파일 단위 업로드 이력)"""
+    file_name = models.CharField('파일명', max_length=200)
+    print_order = models.CharField('출력차수', max_length=100, blank=True, default='')
+    delivery_memo = models.CharField('배송메모', max_length=200, blank=True, default='')
+    total_orders = models.IntegerField('송장 수', default=0)
+    total_products = models.IntegerField('상품 수', default=0)
+    uploaded_at = models.DateTimeField('업로드 시간', auto_now_add=True)
+    uploaded_by = models.CharField('업로드자', max_length=50, blank=True, default='')
+
+    class Meta:
+        db_table = 'upload_batches'
+        verbose_name = '업로드 이력'
+        verbose_name_plural = '업로드 이력 목록'
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f'{self.file_name} ({self.uploaded_at.strftime("%Y-%m-%d %H:%M")})'
+
+
 class Order(models.Model):
     """송장 테이블"""
+    upload_batch = models.ForeignKey(
+        UploadBatch, on_delete=models.CASCADE, related_name='orders',
+        null=True, blank=True, verbose_name='업로드 배치'
+    )
     tracking_number = models.CharField('송장번호', max_length=50, unique=True, db_index=True)
     seller = models.CharField('판매처', max_length=100)
     receiver_name = models.CharField('수령인', max_length=100)
     receiver_phone = models.CharField('핸드폰', max_length=20)
     receiver_address = models.TextField('주소')
+    registered_date = models.CharField('등록일', max_length=50, blank=True, default='')
+    courier = models.CharField('택배사', max_length=50, blank=True, default='')
+    print_order = models.CharField('출력차수', max_length=100, blank=True, default='')
+    delivery_memo = models.CharField('배송메모', max_length=200, blank=True, default='')
     status = models.CharField('상태', max_length=20, default='대기중', choices=[
         ('대기중', '대기중'),
         ('검수중', '검수중'),
