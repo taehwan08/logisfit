@@ -724,7 +724,11 @@ def get_logs(request):
         logs = logs.filter(alert_code=alert_code)
 
     total = logs.count()
-    logs = logs[:200]
+    try:
+        limit = int(request.GET.get('limit', 200))
+    except (ValueError, TypeError):
+        limit = 200
+    logs = logs[:limit]
 
     return JsonResponse({
         'success': True,

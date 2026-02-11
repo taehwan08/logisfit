@@ -173,6 +173,145 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.4; }
     }
+
+    /* 로그 모달 */
+    .log-modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 8000;
+    }
+    .log-modal-backdrop.show { display: block; }
+    .log-modal {
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 95%;
+        max-width: 700px;
+        max-height: 85vh;
+        background: #fff;
+        border-radius: 14px;
+        z-index: 8001;
+        display: none;
+        flex-direction: column;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+    }
+    .log-modal.show { display: flex; }
+    .log-modal-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+    .log-modal-header h5 { margin: 0; font-weight: 700; font-size: 1.05rem; }
+    .log-modal-body {
+        padding: 1rem 1.25rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+    .log-search-group {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+    .log-search-group input {
+        flex: 1;
+        padding: 0.5rem 0.75rem;
+        border: 1.5px solid #dee2e6;
+        border-radius: 8px;
+        font-size: 0.9rem;
+    }
+    .log-search-group input:focus {
+        outline: none;
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 2px rgba(13,110,253,0.15);
+    }
+    .log-search-group button {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+    .log-search-btn { background: #0d6efd; color: #fff; }
+    .log-search-btn:hover { background: #0b5ed7; }
+    .log-reset-btn { background: #e9ecef; color: #495057; }
+    .log-reset-btn:hover { background: #dee2e6; }
+
+    .log-table {
+        width: 100%;
+        font-size: 0.8rem;
+        border-collapse: collapse;
+    }
+    .log-table thead th {
+        background: #f8f9fa;
+        padding: 0.5rem 0.5rem;
+        font-weight: 700;
+        border-bottom: 2px solid #dee2e6;
+        white-space: nowrap;
+        text-align: left;
+    }
+    .log-table tbody td {
+        padding: 0.45rem 0.5rem;
+        border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle;
+    }
+    .log-table tbody tr:hover { background: #f8f9fa; }
+
+    .log-alert-badge {
+        display: inline-block;
+        padding: 0.15rem 0.45rem;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .log-alert-badge.정상 { background: #d4edda; color: #155724; }
+    .log-alert-badge.완료 { background: #cce5ff; color: #004085; }
+    .log-alert-badge.숫자 { background: #d4edda; color: #155724; }
+    .log-alert-badge.상품오류 { background: #f8d7da; color: #721c24; }
+    .log-alert-badge.중복스캔 { background: #f8d7da; color: #721c24; }
+    .log-alert-badge.송장번호미등록 { background: #fff3cd; color: #856404; }
+    .log-alert-badge.기처리배송 { background: #fff3cd; color: #856404; }
+    .log-alert-badge.스캔오류 { background: #f8d7da; color: #721c24; }
+
+    .log-empty {
+        text-align: center;
+        padding: 2rem;
+        color: #adb5bd;
+        font-size: 0.9rem;
+    }
+    .log-count {
+        font-size: 0.78rem;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+    }
+
+    /* 로그 버튼 */
+    .log-open-btn {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1.25rem;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #495057;
+        color: #fff;
+        border: none;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
+        cursor: pointer;
+        z-index: 7000;
+        transition: background 0.2s;
+    }
+    .log-open-btn:hover { background: #343a40; }
 </style>
 {% endblock %}
 
@@ -222,6 +361,47 @@
             </div>
             <div class="card-body">
                 <div class="d-flex flex-column gap-2" id="productsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로그 열기 플로팅 버튼 -->
+    <button class="log-open-btn" id="logOpenBtn" title="검수 로그">
+        <i class="bi bi-clock-history"></i>
+    </button>
+
+    <!-- 로그 모달 -->
+    <div class="log-modal-backdrop" id="logBackdrop"></div>
+    <div class="log-modal" id="logModal">
+        <div class="log-modal-header">
+            <h5><i class="bi bi-clock-history me-2"></i>검수 로그</h5>
+            <button type="button" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:#6c757d;" id="logCloseBtn">&times;</button>
+        </div>
+        <div class="log-modal-body">
+            <div class="log-search-group">
+                <input type="text" id="logSearchInput" placeholder="송장번호 검색" autocomplete="off">
+                <button class="log-search-btn" id="logSearchBtn"><i class="bi bi-search"></i> 검색</button>
+                <button class="log-reset-btn" id="logResetBtn"><i class="bi bi-arrow-counterclockwise"></i></button>
+            </div>
+            <div class="log-count" id="logCount"></div>
+            <div style="overflow-x:auto;">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>시간</th>
+                            <th>송장번호</th>
+                            <th>바코드</th>
+                            <th>구분</th>
+                            <th>결과</th>
+                            <th>작업자</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTableBody"></tbody>
+                </table>
+            </div>
+            <div class="log-empty" id="logEmpty" style="display:none;">
+                <i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
+                로그가 없습니다.
             </div>
         </div>
     </div>
@@ -583,6 +763,105 @@ document.addEventListener('DOMContentLoaded', function() {
             const value = e.target.value.trim();
             if (value && currentTrackingNumber) scanProduct(currentTrackingNumber, value);
         }
+    });
+
+    // ===== 로그 모달 =====
+    const logModal = document.getElementById('logModal');
+    const logBackdrop = document.getElementById('logBackdrop');
+    const logOpenBtn = document.getElementById('logOpenBtn');
+    const logCloseBtn = document.getElementById('logCloseBtn');
+    const logSearchInput = document.getElementById('logSearchInput');
+    const logSearchBtn = document.getElementById('logSearchBtn');
+    const logResetBtn = document.getElementById('logResetBtn');
+    const logTableBody = document.getElementById('logTableBody');
+    const logEmpty = document.getElementById('logEmpty');
+    const logCount = document.getElementById('logCount');
+
+    function openLogModal() {
+        logModal.classList.add('show');
+        logBackdrop.classList.add('show');
+        logSearchInput.value = '';
+        loadLogs();
+    }
+
+    function closeLogModal() {
+        logModal.classList.remove('show');
+        logBackdrop.classList.remove('show');
+        // 모달 닫힌 뒤 스캔 입력란으로 포커스 복귀
+        if (currentTrackingNumber) {
+            barcodeInput.focus();
+        } else {
+            trackingInput.focus();
+        }
+    }
+
+    function formatDateTime(isoStr) {
+        const d = new Date(isoStr);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mi = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${mm}-${dd} ${hh}:${mi}:${ss}`;
+    }
+
+    async function loadLogs(trackingNumber) {
+        try {
+            let url = '{% url "inspection:get_logs" %}?limit=50';
+            if (trackingNumber && trackingNumber.trim()) {
+                url += '&tracking_number=' + encodeURIComponent(trackingNumber.trim());
+            }
+            const response = await fetch(url);
+            const result = await response.json();
+
+            if (result.success && result.logs.length > 0) {
+                logEmpty.style.display = 'none';
+                logCount.textContent = trackingNumber
+                    ? `"${trackingNumber}" 검색 결과 ${result.logs.length}건 (전체 ${result.total}건)`
+                    : `최근 ${result.logs.length}건 (전체 ${result.total}건)`;
+
+                logTableBody.innerHTML = result.logs.map(log => `
+                    <tr>
+                        <td style="white-space:nowrap;">${formatDateTime(log.created_at)}</td>
+                        <td style="font-family:monospace;font-size:0.78rem;">${log.tracking_number || '-'}</td>
+                        <td style="font-family:monospace;font-size:0.78rem;">${log.barcode || '-'}</td>
+                        <td>${log.scan_type}</td>
+                        <td><span class="log-alert-badge ${log.alert_code}">${log.alert_code}</span></td>
+                        <td>${log.worker || '-'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                logTableBody.innerHTML = '';
+                logEmpty.style.display = '';
+                logCount.textContent = trackingNumber
+                    ? `"${trackingNumber}" 검색 결과 없음`
+                    : '';
+            }
+        } catch (e) {
+            logTableBody.innerHTML = '';
+            logEmpty.style.display = '';
+            logCount.textContent = '로그를 불러올 수 없습니다.';
+        }
+    }
+
+    logOpenBtn.addEventListener('click', openLogModal);
+    logCloseBtn.addEventListener('click', closeLogModal);
+    logBackdrop.addEventListener('click', closeLogModal);
+
+    logSearchBtn.addEventListener('click', () => {
+        loadLogs(logSearchInput.value);
+    });
+
+    logSearchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            loadLogs(logSearchInput.value);
+        }
+    });
+
+    logResetBtn.addEventListener('click', () => {
+        logSearchInput.value = '';
+        loadLogs();
     });
 
     // 페이지 로드 시 송장 입력란 포커스
