@@ -100,11 +100,17 @@ def _parse_format2_product_cell(product_text):
         if not item:
             continue
 
-        # 바코드 추출: [P1-8800309590019] 또는 [XX-바코드] 패턴
+        # 바코드 추출: [P1-8800309590019] 또는 [B3-00001] 등
+        # "-" 뒤 숫자가 8자리 이상이면 접두사 제거(EAN/JAN), 미만이면 전체 유지(자사 바코드)
         barcode = ''
-        barcode_match = re.search(r'\[[\w]+-(\d+)\]', item)
+        barcode_match = re.search(r'\[([\w]+)-([\d]+)\]', item)
         if barcode_match:
-            barcode = barcode_match.group(1)
+            prefix = barcode_match.group(1)
+            number = barcode_match.group(2)
+            if len(number) >= 8:
+                barcode = number  # EAN/JAN 등 → 숫자만
+            else:
+                barcode = f'{prefix}-{number}'  # B3-00001 등 → 전체 유지
 
         # 수량 추출: ●1개, ●2개 등
         quantity = 1
