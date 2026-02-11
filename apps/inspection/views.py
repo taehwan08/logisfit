@@ -1,6 +1,7 @@
 """
 검수 시스템 뷰
 """
+import re
 import json
 from collections import defaultdict
 
@@ -15,6 +16,10 @@ import xlrd
 
 from .models import Order, OrderProduct, InspectionLog, UploadBatch
 
+
+# ============================================================================
+# 엑셀 파싱 유틸리티
+# ============================================================================
 
 def _parse_excel(excel_file):
     """엑셀 파일을 파싱하여 헤더와 데이터 행을 반환한다. xlsx/xls 모두 지원."""
@@ -51,6 +56,234 @@ def _get_col(row, col_map, key, default=''):
     return str(val).strip()
 
 
+def _detect_format(headers):
+    """헤더를 보고 양식1 / 양식2를 자동 판별한다.
+
+    양식1 식별: '쇼핑몰', '바코드번호', '매칭상품명' 컬럼 존재
+    양식2 식별: '상품명' 컬럼 존재 + '수취인명(받는분)' 컬럼 존재
+
+    Returns: 'format1' | 'format2'
+    """
+    header_set = set(headers)
+    if {'쇼핑몰', '바코드번호', '매칭상품명'}.issubset(header_set):
+        return 'format1'
+    if '상품명' in header_set and any('수취인' in h or '받는분' in h for h in headers):
+        return 'format2'
+    # fallback - 양식1 필수 컬럼으로 재시도
+    if '송장번호' in header_set and '매칭수량' in header_set:
+        return 'format1'
+    return 'unknown'
+
+
+def _parse_format2_product_cell(product_text):
+    """양식2 상품명 셀을 파싱하여 상품 리스트를 반환한다.
+
+    입력 예시:
+    "[이옴] 트러블 컨트롤 패드 140ml(70p)[90019]●1개 [P1-8800309590019]|[이옴] 트러블 패치 마스크 20ml(4p)[90057]●1개 [P1-8800309590057]"
+
+    파싱 규칙:
+    - "|"로 상품 구분
+    - "●" 뒤에 숫자 → 수량
+    - "[P1-바코드]" 또는 유사 패턴에서 "-" 뒤가 바코드번호
+    - "●" 앞이 상품명
+
+    Returns: [{'product_name': ..., 'barcode': ..., 'quantity': ...}, ...]
+    """
+    if not product_text or not product_text.strip():
+        return []
+
+    items = product_text.split('|')
+    products = []
+
+    for item in items:
+        item = item.strip()
+        if not item:
+            continue
+
+        # 바코드 추출: [P1-8800309590019] 또는 [XX-바코드] 패턴
+        barcode = ''
+        barcode_match = re.search(r'\[[\w]+-(\d+)\]', item)
+        if barcode_match:
+            barcode = barcode_match.group(1)
+
+        # 수량 추출: ●1개, ●2개 등
+        quantity = 1
+        qty_match = re.search(r'●\s*(\d+)\s*개', item)
+        if qty_match:
+            quantity = int(qty_match.group(1))
+
+        # 상품명 추출: ● 앞부분
+        product_name = item.split('●')[0].strip() if '●' in item else item.strip()
+        # 상품명에서 후행 바코드 태그 제거
+        product_name = re.sub(r'\s*\[[\w]+-\d+\]\s*$', '', product_name).strip()
+
+        if barcode and product_name:
+            products.append({
+                'product_name': product_name,
+                'barcode': barcode,
+                'quantity': quantity,
+            })
+
+    return products
+
+
+def _process_format1(headers, rows):
+    """양식1 (쇼핑몰/바코드번호/매칭상품명 등 컬럼이 개별 존재) 처리.
+
+    Returns: (orders_data dict, batch_print_order, batch_delivery_memo, error_message or None)
+    """
+    COLUMN_MAP = {
+        '송장번호': '송장번호',
+        '쇼핑몰': '판매처',
+        '수령자': '수령인',
+        '전화1': '핸드폰',
+        '주소': '주소',
+        '바코드번호': '상품바코드',
+        '매칭상품명': '매칭상품명',
+        '매칭관리명': '매칭관리명',
+        '매칭수량': '수량',
+        '출력차수': '출력차수',
+        '배송메모': '배송메모',
+        '등록일': '등록일',
+        '택배사': '택배사',
+    }
+
+    required_excel_columns = ['송장번호', '쇼핑몰', '수령자', '전화1', '주소', '바코드번호', '매칭상품명', '매칭수량']
+
+    col_map = {}
+    for excel_col, internal_key in COLUMN_MAP.items():
+        if excel_col in headers:
+            col_map[internal_key] = headers.index(excel_col)
+
+    missing = []
+    for excel_col in required_excel_columns:
+        internal_key = COLUMN_MAP[excel_col]
+        if internal_key not in col_map:
+            missing.append(excel_col)
+    if missing:
+        return None, '', '', f'필수 컬럼이 없습니다: {", ".join(missing)}'
+
+    orders_data = defaultdict(lambda: {'info': None, 'products': []})
+    batch_print_order = ''
+    batch_delivery_memo = ''
+
+    for row in rows:
+        tracking_number = _get_col(row, col_map, '송장번호')
+        if not tracking_number:
+            continue
+
+        if not batch_print_order:
+            batch_print_order = _get_col(row, col_map, '출력차수')
+        if not batch_delivery_memo:
+            batch_delivery_memo = _get_col(row, col_map, '배송메모')
+
+        if orders_data[tracking_number]['info'] is None:
+            orders_data[tracking_number]['info'] = {
+                'seller': _get_col(row, col_map, '판매처'),
+                'receiver_name': _get_col(row, col_map, '수령인'),
+                'receiver_phone': _get_col(row, col_map, '핸드폰'),
+                'receiver_address': _get_col(row, col_map, '주소'),
+                'registered_date': _get_col(row, col_map, '등록일'),
+                'courier': _get_col(row, col_map, '택배사'),
+                'print_order': _get_col(row, col_map, '출력차수'),
+                'delivery_memo': _get_col(row, col_map, '배송메모'),
+            }
+
+        barcode = _get_col(row, col_map, '상품바코드')
+        product_name_part = _get_col(row, col_map, '매칭상품명')
+        manage_name_part = _get_col(row, col_map, '매칭관리명')
+
+        if product_name_part and manage_name_part:
+            product_name = f'{product_name_part} ({manage_name_part})'
+        elif product_name_part:
+            product_name = product_name_part
+        else:
+            product_name = manage_name_part
+
+        try:
+            qty_val = row[col_map['수량']] if col_map.get('수량') is not None else 0
+            quantity = int(float(str(qty_val or 0)))
+        except (ValueError, TypeError, IndexError):
+            quantity = 0
+
+        if barcode and product_name:
+            orders_data[tracking_number]['products'].append({
+                'barcode': barcode,
+                'product_name': product_name,
+                'quantity': quantity,
+            })
+
+    return orders_data, batch_print_order, batch_delivery_memo, None
+
+
+def _process_format2(headers, rows):
+    """양식2 (상품명 셀에 바코드+수량이 합쳐진 형태) 처리.
+
+    필요 컬럼: 송장번호, 상품명, 수취인명(받는분), 수취인명(받는분) 핸드폰번호, 수취인명(받는분) 주소1
+
+    Returns: (orders_data dict, batch_print_order, batch_delivery_memo, error_message or None)
+    """
+    # 유연한 헤더 매칭 (부분 일치)
+    col_map = {}
+    for idx, h in enumerate(headers):
+        hl = h.lower().strip() if h else ''
+        if h == '송장번호':
+            col_map['송장번호'] = idx
+        elif h == '상품명':
+            col_map['상품명'] = idx
+        elif '핸드폰' in h or '전화' in h or '연락처' in h:
+            col_map['핸드폰'] = idx
+        elif '주소' in h:
+            # 주소1 우선, 아니면 일반 주소
+            if '주소1' in h or '주소' == h.strip():
+                col_map['주소'] = idx
+            elif '주소' not in col_map:
+                col_map['주소'] = idx
+        elif '수취인' in h or '받는분' in h:
+            # 핸드폰/주소가 아닌 수취인명 컬럼
+            if '핸드폰' not in h and '전화' not in h and '주소' not in h:
+                col_map['수령인'] = idx
+
+    # 필수 컬럼 체크
+    required = {'송장번호': '송장번호', '상품명': '상품명', '수령인': '수취인명(받는분)'}
+    missing = []
+    for key, display in required.items():
+        if key not in col_map:
+            missing.append(display)
+    if missing:
+        return None, '', '', f'필수 컬럼이 없습니다: {", ".join(missing)}'
+
+    orders_data = defaultdict(lambda: {'info': None, 'products': []})
+
+    for row in rows:
+        tracking_number = _get_col(row, col_map, '송장번호')
+        if not tracking_number:
+            continue
+
+        if orders_data[tracking_number]['info'] is None:
+            orders_data[tracking_number]['info'] = {
+                'seller': '',
+                'receiver_name': _get_col(row, col_map, '수령인'),
+                'receiver_phone': _get_col(row, col_map, '핸드폰'),
+                'receiver_address': _get_col(row, col_map, '주소'),
+                'registered_date': '',
+                'courier': '',
+                'print_order': '',
+                'delivery_memo': '',
+            }
+
+        product_text = _get_col(row, col_map, '상품명')
+        parsed_products = _parse_format2_product_cell(product_text)
+
+        for p in parsed_products:
+            # 중복 상품 방지 (같은 송장에 같은 바코드가 이미 있으면 스킵)
+            existing = [ep for ep in orders_data[tracking_number]['products'] if ep['barcode'] == p['barcode']]
+            if not existing:
+                orders_data[tracking_number]['products'].append(p)
+
+    return orders_data, '', '', None
+
+
 def office_page(request):
     """오피스팀 페이지"""
     orders = Order.objects.all()
@@ -75,13 +308,12 @@ def field_page(request):
 @csrf_exempt
 @require_POST
 def upload_excel(request):
-    """엑셀 업로드 처리"""
+    """엑셀 업로드 처리 - 양식1(쇼핑몰/바코드번호 개별컬럼), 양식2(상품명 합산셀) 자동 감지"""
     if 'file' not in request.FILES:
         return JsonResponse({'success': False, 'message': '파일이 없습니다.'}, status=400)
 
     excel_file = request.FILES['file']
 
-    # 확장자 검증
     if not excel_file.name.endswith(('.xlsx', '.xls')):
         return JsonResponse({'success': False, 'message': '엑셀 파일만 업로드 가능합니다.'}, status=400)
 
@@ -89,95 +321,21 @@ def upload_excel(request):
         headers, rows = _parse_excel(excel_file)
         headers = [str(h).strip() if h else '' for h in headers]
 
-        # 엑셀 컬럼명 → 내부 키 매핑
-        COLUMN_MAP = {
-            '송장번호': '송장번호',
-            '쇼핑몰': '판매처',
-            '수령자': '수령인',
-            '전화1': '핸드폰',
-            '주소': '주소',
-            '바코드번호': '상품바코드',
-            '매칭상품명': '매칭상품명',
-            '매칭관리명': '매칭관리명',
-            '매칭수량': '수량',
-            '출력차수': '출력차수',
-            '배송메모': '배송메모',
-            '등록일': '등록일',
-            '택배사': '택배사',
-        }
+        # 양식 자동 감지
+        file_format = _detect_format(headers)
 
-        # 필수 컬럼 체크
-        required_excel_columns = ['송장번호', '쇼핑몰', '수령자', '전화1', '주소', '바코드번호', '매칭상품명', '매칭수량']
-
-        col_map = {}  # 내부 키 → 인덱스
-        for excel_col, internal_key in COLUMN_MAP.items():
-            if excel_col in headers:
-                col_map[internal_key] = headers.index(excel_col)
-
-        # 필수 컬럼 누락 체크
-        missing = []
-        for excel_col in required_excel_columns:
-            internal_key = COLUMN_MAP[excel_col]
-            if internal_key not in col_map:
-                missing.append(excel_col)
-        if missing:
+        if file_format == 'format1':
+            orders_data, batch_print_order, batch_delivery_memo, error = _process_format1(headers, rows)
+        elif file_format == 'format2':
+            orders_data, batch_print_order, batch_delivery_memo, error = _process_format2(headers, rows)
+        else:
             return JsonResponse({
                 'success': False,
-                'message': f'필수 컬럼이 없습니다: {", ".join(missing)}'
+                'message': '인식할 수 없는 엑셀 양식입니다. 양식1(쇼핑몰/바코드번호) 또는 양식2(상품명 합산) 형식이 필요합니다.'
             }, status=400)
 
-        # 데이터 파싱 - 송장번호 기준 그룹화
-        orders_data = defaultdict(lambda: {'info': None, 'products': []})
-        batch_print_order = ''
-        batch_delivery_memo = ''
-
-        for row in rows:
-            tracking_number = _get_col(row, col_map, '송장번호')
-            if not tracking_number:
-                continue
-
-            # 파일 공통 정보: 첫 행에서 출력차수, 배송메모 추출
-            if not batch_print_order:
-                batch_print_order = _get_col(row, col_map, '출력차수')
-            if not batch_delivery_memo:
-                batch_delivery_memo = _get_col(row, col_map, '배송메모')
-
-            if orders_data[tracking_number]['info'] is None:
-                orders_data[tracking_number]['info'] = {
-                    'seller': _get_col(row, col_map, '판매처'),
-                    'receiver_name': _get_col(row, col_map, '수령인'),
-                    'receiver_phone': _get_col(row, col_map, '핸드폰'),
-                    'receiver_address': _get_col(row, col_map, '주소'),
-                    'registered_date': _get_col(row, col_map, '등록일'),
-                    'courier': _get_col(row, col_map, '택배사'),
-                    'print_order': _get_col(row, col_map, '출력차수'),
-                    'delivery_memo': _get_col(row, col_map, '배송메모'),
-                }
-
-            barcode = _get_col(row, col_map, '상품바코드')
-            product_name_part = _get_col(row, col_map, '매칭상품명')
-            manage_name_part = _get_col(row, col_map, '매칭관리명')
-
-            # 상품명 = 매칭상품명 + 매칭관리명
-            if product_name_part and manage_name_part:
-                product_name = f'{product_name_part} ({manage_name_part})'
-            elif product_name_part:
-                product_name = product_name_part
-            else:
-                product_name = manage_name_part
-
-            try:
-                qty_val = row[col_map['수량']] if col_map.get('수량') is not None else 0
-                quantity = int(float(str(qty_val or 0)))
-            except (ValueError, TypeError, IndexError):
-                quantity = 0
-
-            if barcode and product_name:
-                orders_data[tracking_number]['products'].append({
-                    'barcode': barcode,
-                    'product_name': product_name,
-                    'quantity': quantity,
-                })
+        if error:
+            return JsonResponse({'success': False, 'message': error}, status=400)
 
         if not orders_data:
             return JsonResponse({'success': False, 'message': '유효한 데이터가 없습니다.'}, status=400)
@@ -188,7 +346,6 @@ def upload_excel(request):
         duplicated = 0
 
         with transaction.atomic():
-            # UploadBatch 생성
             uploader = ''
             if request.user.is_authenticated:
                 uploader = request.user.name or request.user.email or ''
@@ -201,7 +358,6 @@ def upload_excel(request):
             )
 
             for tracking_number, data in orders_data.items():
-                # 중복 송장번호 처리: 기존 데이터 삭제 후 재등록
                 existing = Order.objects.filter(tracking_number=tracking_number)
                 if existing.exists():
                     existing.delete()
@@ -226,12 +382,12 @@ def upload_excel(request):
                 OrderProduct.objects.bulk_create(products)
                 total_products += len(products)
 
-            # 배치에 집계 저장
             batch.total_orders = total_orders
             batch.total_products = total_products
             batch.save(update_fields=['total_orders', 'total_products'])
 
-        message = f'{total_orders}건의 송장이 등록되었습니다.'
+        format_label = '양식1' if file_format == 'format1' else '양식2'
+        message = f'{total_orders}건의 송장이 등록되었습니다. ({format_label})'
         if duplicated:
             message += f' (중복 {duplicated}건 재등록)'
 
