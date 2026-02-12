@@ -33,6 +33,38 @@
     .upload-result.show {
         display: block;
     }
+    /* 다중 파일 목록 */
+    .file-list {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .file-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        background: #f8f9fa;
+        font-size: 0.88rem;
+    }
+    .file-item .file-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+    }
+    .file-item .file-info span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .file-item .file-status {
+        flex-shrink: 0;
+        font-size: 0.78rem;
+    }
+    .file-item.uploading { background: #e7f1ff; }
+    .file-item.done { background: #d4edda; }
+    .file-item.error { background: #f8d7da; }
     .stat-card {
         border-radius: 10px;
         padding: 1.25rem;
@@ -122,20 +154,17 @@
                     <div class="upload-zone" id="uploadZone">
                         <i class="bi bi-file-earmark-spreadsheet"></i>
                         <p class="mt-3 mb-1 fw-semibold">파일을 드래그하거나 클릭하여 선택</p>
-                        <p class="text-muted small mb-0">엑셀 파일 (.xlsx, .xls) 지원</p>
-                        <input type="file" id="fileInput" name="file" accept=".xlsx,.xls" class="d-none">
+                        <p class="text-muted small mb-0">엑셀 파일 (.xlsx, .xls) 지원 | 여러 파일 동시 선택 가능</p>
+                        <input type="file" id="fileInput" name="file" accept=".xlsx,.xls" class="d-none" multiple>
                     </div>
-                    <div id="selectedFile" class="mt-3 d-none">
-                        <div class="d-flex align-items-center justify-content-between bg-light rounded p-3">
-                            <div>
-                                <i class="bi bi-file-earmark-excel text-success me-2"></i>
-                                <span id="fileName"></span>
-                                <small class="text-muted ms-2" id="fileSize"></small>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="removeFile">
-                                <i class="bi bi-x-lg"></i>
+                    <div id="selectedFiles" class="mt-3 d-none">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <small class="text-muted fw-semibold" id="fileCountLabel">0개 파일 선택</small>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="clearFiles">
+                                <i class="bi bi-x-lg me-1"></i>전체 취소
                             </button>
                         </div>
+                        <div class="d-flex flex-column gap-1 file-list" id="fileList"></div>
                     </div>
                     <div class="progress progress-bar-upload mt-3" id="progressBar">
                         <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
@@ -147,7 +176,7 @@
 
                 <!-- 업로드 결과 -->
                 <div class="upload-result mt-4" id="uploadResult">
-                    <div class="alert" id="uploadAlert"></div>
+                    <div id="uploadAlerts"></div>
                 </div>
             </div>
         </div>
@@ -195,11 +224,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('fileInput');
     const uploadForm = document.getElementById('uploadForm');
     const uploadBtn = document.getElementById('uploadBtn');
-    const selectedFile = document.getElementById('selectedFile');
-    const removeFile = document.getElementById('removeFile');
+    const selectedFiles = document.getElementById('selectedFiles');
+    const clearFiles = document.getElementById('clearFiles');
+    const fileList = document.getElementById('fileList');
+    const fileCountLabel = document.getElementById('fileCountLabel');
     const progressBar = document.getElementById('progressBar');
     const uploadResult = document.getElementById('uploadResult');
-    const uploadAlert = document.getElementById('uploadAlert');
+    const uploadAlerts = document.getElementById('uploadAlerts');
+
+    let pendingFiles = [];  // 업로드 대기 파일 목록
 
     // 드래그 앤 드롭
     uploadZone.addEventListener('click', () => fileInput.click());
@@ -215,79 +248,156 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         uploadZone.classList.remove('drag-over');
         const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            fileInput.files = files;
-            showSelectedFile(files[0]);
-        }
+        if (files.length > 0) addFiles(files);
     });
 
     fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            showSelectedFile(e.target.files[0]);
+        if (e.target.files.length > 0) addFiles(e.target.files);
+        fileInput.value = '';  // 같은 파일 재선택 허용
+    });
+
+    clearFiles.addEventListener('click', () => {
+        pendingFiles = [];
+        renderFileList();
+    });
+
+    function addFiles(fileListObj) {
+        for (let i = 0; i < fileListObj.length; i++) {
+            const file = fileListObj[i];
+            if (!file.name.match(/\.(xlsx|xls)$/i)) continue;
+            // 중복 파일명 방지
+            if (pendingFiles.some(f => f.name === file.name && f.size === file.size)) continue;
+            pendingFiles.push(file);
         }
-    });
-
-    removeFile.addEventListener('click', () => {
-        fileInput.value = '';
-        selectedFile.classList.add('d-none');
-        uploadBtn.disabled = true;
-    });
-
-    function showSelectedFile(file) {
-        document.getElementById('fileName').textContent = file.name;
-        const sizeKB = (file.size / 1024).toFixed(1);
-        document.getElementById('fileSize').textContent = `(${sizeKB} KB)`;
-        selectedFile.classList.remove('d-none');
-        uploadBtn.disabled = false;
+        renderFileList();
     }
 
-    // 업로드
+    function removeFileAt(index) {
+        pendingFiles.splice(index, 1);
+        renderFileList();
+    }
+
+    function renderFileList() {
+        if (pendingFiles.length === 0) {
+            selectedFiles.classList.add('d-none');
+            uploadBtn.disabled = true;
+            return;
+        }
+
+        selectedFiles.classList.remove('d-none');
+        uploadBtn.disabled = false;
+        fileCountLabel.textContent = `${pendingFiles.length}개 파일 선택`;
+
+        fileList.innerHTML = pendingFiles.map((file, idx) => {
+            const sizeKB = (file.size / 1024).toFixed(1);
+            return `<div class="file-item" data-index="${idx}" id="fileItem${idx}">
+                <div class="file-info">
+                    <i class="bi bi-file-earmark-excel text-success"></i>
+                    <span>${escapeHtml(file.name)}</span>
+                    <small class="text-muted">(${sizeKB} KB)</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="file-status" id="fileStatus${idx}"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 p-0 px-1"
+                            onclick="removeFileAt(${idx})" title="제거">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    window.removeFileAt = removeFileAt;
+
+    // 다중 파일 순차 업로드
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!fileInput.files.length) return;
+        if (pendingFiles.length === 0) return;
 
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
+        const filesToUpload = [...pendingFiles];
+        const totalCount = filesToUpload.length;
 
         uploadBtn.disabled = true;
-        uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>업로드 중...';
+        uploadAlerts.innerHTML = '';
+        uploadResult.classList.remove('show');
         progressBar.classList.add('show');
-        progressBar.querySelector('.progress-bar').style.width = '50%';
 
-        try {
-            const response = await fetch('{% url "inspection:upload_excel" %}', {
-                method: 'POST',
-                body: formData,
-            });
-            const result = await response.json();
+        let successCount = 0;
+        let failCount = 0;
+        let alertsHtml = '';
 
-            progressBar.querySelector('.progress-bar').style.width = '100%';
+        for (let i = 0; i < filesToUpload.length; i++) {
+            const file = filesToUpload[i];
+            const pct = Math.round(((i) / totalCount) * 100);
+            progressBar.querySelector('.progress-bar').style.width = `${pct}%`;
+            uploadBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${i + 1}/${totalCount} 업로드 중...`;
 
-            if (result.success) {
-                uploadAlert.className = 'alert alert-success';
-                uploadAlert.innerHTML = `<i class="bi bi-check-circle me-2"></i>${result.message}<br>` +
-                    `<small>송장 ${result.total_orders}건, 상품 ${result.total_products}건 등록</small>`;
-            } else {
-                uploadAlert.className = 'alert alert-danger';
-                uploadAlert.innerHTML = `<i class="bi bi-exclamation-circle me-2"></i>${result.message}`;
+            // 파일 아이템 상태 업데이트
+            const fileItem = document.getElementById(`fileItem${i}`);
+            const fileStatus = document.getElementById(`fileStatus${i}`);
+            if (fileItem) fileItem.classList.add('uploading');
+            if (fileStatus) fileStatus.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('{% url "inspection:upload_excel" %}', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    successCount++;
+                    if (fileItem) { fileItem.classList.remove('uploading'); fileItem.classList.add('done'); }
+                    if (fileStatus) fileStatus.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+                    alertsHtml += `<div class="alert alert-success py-2 mb-1">
+                        <i class="bi bi-check-circle me-1"></i>
+                        <strong>${escapeHtml(file.name)}</strong> - ${result.message}
+                        <small class="d-block">송장 ${result.total_orders}건, 상품 ${result.total_products}건</small>
+                    </div>`;
+                } else {
+                    failCount++;
+                    if (fileItem) { fileItem.classList.remove('uploading'); fileItem.classList.add('error'); }
+                    if (fileStatus) fileStatus.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+                    alertsHtml += `<div class="alert alert-danger py-2 mb-1">
+                        <i class="bi bi-exclamation-circle me-1"></i>
+                        <strong>${escapeHtml(file.name)}</strong> - ${result.message}
+                    </div>`;
+                }
+            } catch (error) {
+                failCount++;
+                if (fileItem) { fileItem.classList.remove('uploading'); fileItem.classList.add('error'); }
+                if (fileStatus) fileStatus.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+                alertsHtml += `<div class="alert alert-danger py-2 mb-1">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    <strong>${escapeHtml(file.name)}</strong> - 네트워크 오류
+                </div>`;
             }
-
-            uploadResult.classList.add('show');
-            loadBatches();
-        } catch (error) {
-            uploadAlert.className = 'alert alert-danger';
-            uploadAlert.innerHTML = '<i class="bi bi-exclamation-circle me-2"></i>네트워크 오류가 발생했습니다.';
-            uploadResult.classList.add('show');
-        } finally {
-            setTimeout(() => {
-                progressBar.classList.remove('show');
-                progressBar.querySelector('.progress-bar').style.width = '0%';
-            }, 1000);
-            uploadBtn.disabled = false;
-            uploadBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>업로드하기';
-            fileInput.value = '';
-            selectedFile.classList.add('d-none');
         }
+
+        progressBar.querySelector('.progress-bar').style.width = '100%';
+
+        // 전체 요약
+        let summaryClass = failCount === 0 ? 'alert-success' : successCount === 0 ? 'alert-danger' : 'alert-warning';
+        alertsHtml = `<div class="alert ${summaryClass} mb-2">
+            <strong>총 ${totalCount}개 파일</strong> | 성공 ${successCount}건 | 실패 ${failCount}건
+        </div>` + alertsHtml;
+
+        uploadAlerts.innerHTML = alertsHtml;
+        uploadResult.classList.add('show');
+        loadBatches();
+
+        setTimeout(() => {
+            progressBar.classList.remove('show');
+            progressBar.querySelector('.progress-bar').style.width = '0%';
+        }, 1000);
+
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>업로드하기';
+        pendingFiles = [];
+        renderFileList();
     });
 
     // 업로드 이력 로드

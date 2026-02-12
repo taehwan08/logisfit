@@ -32,15 +32,18 @@ def send_batch_complete_notification(batch):
         p.quantity for o in orders for p in o.products.all()
     )
 
-    # 소요 시간 계산
-    first_completed = orders.order_by('completed_at').first()
-    last_completed = orders.order_by('-completed_at').first()
+    # 소요 시간 계산 (첫 송장 스캔 완료 ~ 마지막 송장 스캔 완료)
+    completed_orders = orders.filter(completed_at__isnull=False).order_by('completed_at')
+    first_completed = completed_orders.first()
+    last_completed = completed_orders.last()
     duration_text = ''
+    start_time_text = ''
+    end_time_text = ''
     if first_completed and last_completed and first_completed.completed_at and last_completed.completed_at:
-        delta = last_completed.completed_at - batch.uploaded_at
-        total_seconds = int(delta.total_seconds())
-        if total_seconds < 0:
-            total_seconds = 0
+        start_time_text = timezone.localtime(first_completed.completed_at).strftime('%H:%M')
+        end_time_text = timezone.localtime(last_completed.completed_at).strftime('%H:%M')
+        delta = last_completed.completed_at - first_completed.completed_at
+        total_seconds = max(0, int(delta.total_seconds()))
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         if hours > 0:
@@ -59,7 +62,7 @@ def send_batch_complete_notification(batch):
     info_parts.append(f'*송장 수:*  {total_orders}건')
     info_parts.append(f'*상품 수:*  {total_products}개')
     if duration_text:
-        info_parts.append(f'*소요시간:*  {duration_text}')
+        info_parts.append(f'*소요시간:*  {duration_text} ({start_time_text} ~ {end_time_text})')
 
     blocks = [
         {
