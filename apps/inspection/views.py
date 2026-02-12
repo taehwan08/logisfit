@@ -1,6 +1,7 @@
 """
 검수 시스템 뷰
 """
+import logging
 import re
 import json
 from collections import defaultdict
@@ -15,6 +16,9 @@ import openpyxl
 import xlrd
 
 from .models import Order, OrderProduct, InspectionLog, UploadBatch
+from .slack import send_batch_complete_notification
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -584,6 +588,16 @@ def scan_product(request):
                     alert_code='완료',
                     worker=worker,
                 )
+
+                # 배치 전체 완료 체크 → 슬랙 알림
+                batch = order.upload_batch
+                if batch:
+                    batch_all_done = not batch.orders.exclude(status='완료').exists()
+                    if batch_all_done:
+                        try:
+                            send_batch_complete_notification(batch)
+                        except Exception as e:
+                            logger.warning('배치 완료 슬랙 알림 실패: %s', e)
 
                 return JsonResponse({
                     'success': True,
