@@ -3,9 +3,15 @@
 
 회원가입, 로그인, 사용자 관리 등의 뷰를 정의합니다.
 """
+import json
+import logging
+
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import (
     CreateView, ListView, DetailView, UpdateView, TemplateView
 )
@@ -18,6 +24,9 @@ from .models import User
 from .forms import (
     UserRegistrationForm, UserLoginForm, UserApprovalForm, UserProfileForm
 )
+from .slack import send_signup_notification, verify_slack_signature, process_slack_action
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterView(CreateView):
@@ -39,12 +48,17 @@ class RegisterView(CreateView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        """회원가입 성공 시 메시지 표시"""
+        """회원가입 성공 시 메시지 표시 및 슬랙 알림 전송"""
         response = super().form_valid(form)
         messages.success(
             self.request,
             '회원가입이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다.'
         )
+        # 슬랙 알림 전송 (실패해도 가입은 정상 처리)
+        try:
+            send_signup_notification(self.object)
+        except Exception as e:
+            logger.warning('슬랙 알림 전송 실패: %s', e)
         return response
 
 
@@ -271,3 +285,32 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             pass
 
         return context
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SlackInteractiveView(View):
+    """
+    Slack Interactive 콜백 뷰
+
+    슬랙에서 승인/거절 버튼을 클릭하면 이 엔드포인트로 요청이 옵니다.
+    Slack Signing Secret으로 요청을 검증한 뒤 처리합니다.
+    """
+
+    def post(self, request):
+        # 슬랙 서명 검증
+        if not verify_slack_signature(request):
+            return HttpResponse('Invalid signature', status=403)
+
+        # 슬랙은 payload를 form-encoded JSON 문자열로 전송
+        try:
+            payload = json.loads(request.POST.get('payload', '{}'))
+        except (json.JSONDecodeError, TypeError):
+            return JsonResponse({'error': 'Invalid payload'}, status=400)
+
+        result = process_slack_action(payload)
+
+        if result is None:
+            # 링크 버튼 등 별도 응답 불필요
+            return HttpResponse(status=200)
+
+        return JsonResponse(result)

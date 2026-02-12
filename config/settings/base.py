@@ -252,6 +252,15 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@logisfit.com')
 
 
 # ============================================================================
+# Slack 연동 설정
+# ============================================================================
+
+SLACK_WEBHOOK_URL = env('SLACK_WEBHOOK_URL', default='')
+SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
+SITE_URL = env('SITE_URL', default='http://localhost:8000')
+
+
+# ============================================================================
 # CORS 설정
 # ============================================================================
 

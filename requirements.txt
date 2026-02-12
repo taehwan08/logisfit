@@ -32,6 +32,9 @@ django-cors-headers>=4.2
 openpyxl>=3.1
 xlrd>=2.0
 
+# HTTP 요청 (Slack 연동 등)
+requests>=2.31
+
 # 폼 스타일링
 django-widget-tweaks>=1.4
 

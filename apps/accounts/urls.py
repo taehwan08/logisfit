@@ -23,4 +23,7 @@ urlpatterns = [
     path('users/<int:pk>/', views.UserDetailView.as_view(), name='user_detail'),
     path('users/<int:pk>/approve/', views.UserApprovalView.as_view(), name='user_approval'),
     path('users/<int:pk>/toggle-active/', views.UserToggleActiveView.as_view(), name='user_toggle_active'),
+
+    # Slack 연동
+    path('slack/interactive/', views.SlackInteractiveView.as_view(), name='slack_interactive'),
 ]
