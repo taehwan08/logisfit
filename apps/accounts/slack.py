@@ -149,11 +149,13 @@ def verify_slack_signature(request):
 def process_slack_action(payload):
     """슬랙 interactive 버튼 클릭을 처리한다.
 
+    승인/거절 처리 후 response_url로 메시지를 업데이트한다.
+
     Args:
         payload: 슬랙에서 전달한 interaction payload (dict)
 
     Returns:
-        dict: 슬랙에 응답할 메시지 (replace_original)
+        dict: 즉시 HTTP 응답으로 반환할 메시지 (None이면 200 OK만)
     """
     actions = payload.get('actions', [])
     if not actions:
@@ -161,6 +163,7 @@ def process_slack_action(payload):
 
     action = actions[0]
     action_id = action.get('action_id', '')
+    response_url = payload.get('response_url', '')
 
     # 관리 페이지 링크 버튼은 별도 처리 불필요
     if action_id == 'open_approval_page':
@@ -169,25 +172,30 @@ def process_slack_action(payload):
     try:
         value = json.loads(action.get('value', '{}'))
     except (json.JSONDecodeError, TypeError):
-        return _error_response('잘못된 요청입니다.')
+        _send_response_url(response_url, _error_response('잘못된 요청입니다.'))
+        return None
 
     user_id = value.get('user_id')
     action_type = value.get('action')
 
     if not user_id or action_type not in ('approve', 'reject'):
-        return _error_response('잘못된 요청입니다.')
+        _send_response_url(response_url, _error_response('잘못된 요청입니다.'))
+        return None
 
     try:
         user = User.objects.get(pk=user_id)
     except User.DoesNotExist:
-        return _error_response('해당 사용자를 찾을 수 없습니다.')
+        _send_response_url(response_url, _error_response('해당 사용자를 찾을 수 없습니다.'))
+        return None
 
     # 이미 처리된 사용자인지 확인
     if user.is_approved:
-        return _already_processed_response(user, '이미 승인된 사용자입니다.')
+        _send_response_url(response_url, _already_processed_response(user, '이미 승인된 사용자입니다.'))
+        return None
 
     if not user.is_active:
-        return _already_processed_response(user, '이미 거절(비활성화)된 사용자입니다.')
+        _send_response_url(response_url, _already_processed_response(user, '이미 거절(비활성화)된 사용자입니다.'))
+        return None
 
     # 슬랙에서 누른 사람 정보
     slack_user = payload.get('user', {})
@@ -198,35 +206,70 @@ def process_slack_action(payload):
     if action_type == 'approve':
         user.is_approved = True
         user.save(update_fields=['is_approved'])
-        return _result_response(user, slack_username, now, approved=True)
+        result_msg = _result_response(user, slack_username, now, approved=True)
     else:
         user.is_active = False
         user.save(update_fields=['is_active'])
-        return _result_response(user, slack_username, now, approved=False)
+        result_msg = _result_response(user, slack_username, now, approved=False)
+
+    # response_url로 원본 메시지를 업데이트
+    _send_response_url(response_url, result_msg)
+    return None
+
+
+def _send_response_url(response_url, message):
+    """Slack response_url로 메시지를 전송하여 원본 메시지를 업데이트한다."""
+    if not response_url:
+        logger.warning('response_url이 없어 슬랙 메시지를 업데이트할 수 없습니다.')
+        return
+
+    try:
+        resp = requests.post(response_url, json=message, timeout=10)
+        if resp.status_code != 200:
+            logger.warning(
+                'Slack response_url 응답 실패: status=%s body=%s',
+                resp.status_code,
+                resp.text[:200],
+            )
+    except requests.RequestException as e:
+        logger.warning('Slack response_url 전송 중 오류: %s', e)
 
 
 def _result_response(user, slack_username, timestamp, approved):
     """승인/거절 완료 후 슬랙 메시지를 업데이트한다."""
     role_label = ROLE_LABELS.get(user.role, user.role)
+    created_at = timezone.localtime(user.created_at).strftime('%Y-%m-%d %H:%M')
 
     if approved:
         emoji = ':white_check_mark:'
         status_text = '승인 완료'
-        color = '#28a745'
     else:
         emoji = ':x:'
         status_text = '거절'
-        color = '#dc3545'
 
     blocks = [
+        {
+            'type': 'header',
+            'text': {
+                'type': 'plain_text',
+                'text': f'{user.name} - {status_text}',
+                'emoji': True,
+            },
+        },
+        {
+            'type': 'section',
+            'fields': [
+                {'type': 'mrkdwn', 'text': f'*이름:*\n{user.name}'},
+                {'type': 'mrkdwn', 'text': f'*이메일:*\n{user.email}'},
+                {'type': 'mrkdwn', 'text': f'*역할:*\n{role_label}'},
+                {'type': 'mrkdwn', 'text': f'*연락처:*\n{user.phone or "-"}'},
+            ],
+        },
         {
             'type': 'section',
             'text': {
                 'type': 'mrkdwn',
-                'text': (
-                    f'{emoji} *{user.name}* ({user.email}) - *{status_text}*\n'
-                    f'역할: {role_label} | 연락처: {user.phone or "-"}'
-                ),
+                'text': f'{emoji} *{status_text}*',
             },
         },
         {
@@ -234,7 +277,7 @@ def _result_response(user, slack_username, timestamp, approved):
             'elements': [
                 {
                     'type': 'mrkdwn',
-                    'text': f'처리자: @{slack_username} | {timestamp}',
+                    'text': f'가입일시: {created_at} | 처리자: @{slack_username} | 처리일시: {timestamp}',
                 },
             ],
         },
@@ -242,6 +285,7 @@ def _result_response(user, slack_username, timestamp, approved):
 
     return {
         'replace_original': True,
+        'text': f'{user.name} ({user.email}) - {status_text}',
         'blocks': blocks,
     }
 
