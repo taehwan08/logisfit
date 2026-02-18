@@ -286,9 +286,11 @@ def _process_format2(headers, rows):
         parsed_products = _parse_format2_product_cell(product_text)
 
         for p in parsed_products:
-            # 중복 상품 방지 (같은 송장에 같은 바코드가 이미 있으면 스킵)
+            # 같은 바코드가 이미 있으면 수량 합산
             existing = [ep for ep in orders_data[tracking_number]['products'] if ep['barcode'] == p['barcode']]
-            if not existing:
+            if existing:
+                existing[0]['quantity'] += p['quantity']
+            else:
                 orders_data[tracking_number]['products'].append(p)
 
     return orders_data, '', '', None
