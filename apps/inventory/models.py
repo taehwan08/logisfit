@@ -10,7 +10,7 @@ class Product(models.Model):
     바코드-상품명 매핑 테이블. 일괄 등록(엑셀) 또는 수동 등록 가능.
     재고 스캔 시 바코드를 입력하면 자동으로 상품명이 표시됩니다.
     """
-    barcode = models.CharField('바코드', max_length=50, unique=True, db_index=True)
+    barcode = models.CharField('바코드', max_length=50, db_index=True)
     name = models.CharField('상품명', max_length=200)
     display_name = models.CharField('관리명', max_length=200, blank=True, default='')
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
@@ -21,6 +21,7 @@ class Product(models.Model):
         verbose_name = '상품'
         verbose_name_plural = '상품 목록'
         ordering = ['name']
+        unique_together = [['barcode', 'name']]
 
     def __str__(self):
         return f'{self.name} ({self.barcode})'

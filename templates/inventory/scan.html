@@ -98,6 +98,28 @@
     .auto-fill-badge.show {
         display: inline-block;
     }
+
+    /* 상품 선택 모달 */
+    .product-select-item {
+        cursor: pointer;
+        padding: 0.75rem 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        margin-bottom: 0.5rem;
+        transition: all 0.2s;
+    }
+    .product-select-item:hover {
+        background: #e8f4fd;
+        border-color: #0d6efd;
+    }
+    .product-select-item .product-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+    .product-select-item .product-meta {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
 </style>
 {% endblock %}
 
@@ -187,6 +209,26 @@
                     <button class="btn btn-success w-100 py-2" id="registerBtn" onclick="registerProduct()" disabled>
                         <i class="bi bi-plus-circle me-1"></i>등록
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상품 선택 모달 (동일 바코드 복수 상품) -->
+    <div class="modal fade" id="productSelectModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 14px;">
+                <div class="modal-header border-0 pb-0">
+                    <h6 class="modal-title fw-bold">
+                        <i class="bi bi-list-check text-primary me-2"></i>상품 선택
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        동일 바코드에 여러 상품이 등록되어 있습니다. 선택해주세요.
+                    </p>
+                    <div id="productSelectList"></div>
                 </div>
             </div>
         </div>
@@ -364,24 +406,61 @@ function enableProductInput() {
     document.getElementById('registerBtn').disabled = false;
 }
 
-function applyLookupResult(data) {
-    // 조회 결과를 상품명 필드에 반영한다.
-    if (!data.found) return;
-
+function applySingleProduct(product) {
+    // 단일 상품 정보를 상품명 필드에 반영한다.
     const nameInput = document.getElementById('productNameInput');
     // 관리명이 있으면 관리명 우선, 없으면 상품명
-    const displayText = data.product.display_name || data.product.name;
+    const displayText = product.display_name || product.name;
     nameInput.value = displayText;
     nameInput.classList.add('auto-filled');
 
     // 배지에 상품명 표시 (관리명과 다를 경우)
     const badge = document.getElementById('autoFillBadge');
-    if (data.product.display_name && data.product.display_name !== data.product.name) {
-        badge.innerHTML = `<i class="bi bi-magic me-1"></i>자동입력 | ${escapeHtml(data.product.name)}`;
+    if (product.display_name && product.display_name !== product.name) {
+        badge.innerHTML = `<i class="bi bi-magic me-1"></i>자동입력 | ${escapeHtml(product.name)}`;
     } else {
         badge.innerHTML = `<i class="bi bi-magic me-1"></i>자동입력`;
     }
     badge.classList.add('show');
+}
+
+function showProductSelectModal(products, autoRegister) {
+    // 동일 바코드 복수 상품 선택 모달을 표시한다.
+    const listEl = document.getElementById('productSelectList');
+    listEl.innerHTML = products.map(p => {
+        const display = p.display_name || '';
+        const metaText = display && display !== p.name
+            ? `관리명: ${escapeHtml(display)}`
+            : '';
+        return `
+            <div class="product-select-item" onclick="selectProduct(${p.id}, '${escapeAttr(p.name)}', '${escapeAttr(p.display_name || '')}', ${autoRegister})">
+                <div class="product-name">${escapeHtml(p.name)}</div>
+                ${metaText ? `<div class="product-meta">${metaText}</div>` : ''}
+            </div>`;
+    }).join('');
+
+    const modal = new bootstrap.Modal(document.getElementById('productSelectModal'));
+    modal.show();
+}
+
+function selectProduct(id, name, displayName, autoRegister) {
+    // 모달에서 상품을 선택했을 때 처리한다.
+    const product = { id, name, display_name: displayName };
+    applySingleProduct(product);
+
+    // 모달 닫기
+    const modalEl = document.getElementById('productSelectModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+
+    if (autoRegister) {
+        registerProduct();
+    }
+}
+
+function escapeAttr(str) {
+    if (!str) return '';
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
 async function lookupProduct(barcode) {
@@ -391,7 +470,15 @@ async function lookupProduct(barcode) {
     try {
         const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
         const data = await resp.json();
-        applyLookupResult(data);
+        if (!data.found) return;
+
+        if (data.multiple) {
+            // 복수 상품 → 선택 모달 (자동등록 안 함)
+            showProductSelectModal(data.products, false);
+        } else {
+            // 단일 상품 → 바로 적용
+            applySingleProduct(data.product);
+        }
     } catch (e) {
         // 조회 실패해도 무시 - 수동 입력 가능
     }
@@ -402,7 +489,20 @@ async function lookupAndRegister(barcode) {
     try {
         const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
         const data = await resp.json();
-        applyLookupResult(data);
+        if (!data.found) {
+            // 미등록 상품 — 바로 등록 진행
+            registerProduct();
+            return;
+        }
+
+        if (data.multiple) {
+            // 복수 상품 → 선택 모달 (선택 후 자동등록)
+            showProductSelectModal(data.products, true);
+            return;
+        } else {
+            // 단일 상품 → 적용 후 등록
+            applySingleProduct(data.product);
+        }
     } catch (e) {
         // 조회 실패해도 진행
     }

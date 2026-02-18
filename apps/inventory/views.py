@@ -136,8 +136,8 @@ def create_product(request):
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
 
-    if Product.objects.filter(barcode=barcode).exists():
-        return JsonResponse({'error': f'이미 등록된 바코드입니다: {barcode}'}, status=400)
+    if Product.objects.filter(barcode=barcode, name=name).exists():
+        return JsonResponse({'error': f'이미 등록된 상품입니다: {barcode} / {name}'}, status=400)
 
     product = Product.objects.create(barcode=barcode, name=name, display_name=display_name)
 
@@ -175,9 +175,9 @@ def update_product(request, product_id):
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
 
-    # 바코드 중복 체크 (자기 자신 제외)
-    if Product.objects.filter(barcode=barcode).exclude(pk=product_id).exists():
-        return JsonResponse({'error': f'이미 등록된 바코드입니다: {barcode}'}, status=400)
+    # 바코드+상품명 중복 체크 (자기 자신 제외)
+    if Product.objects.filter(barcode=barcode, name=name).exclude(pk=product_id).exists():
+        return JsonResponse({'error': f'이미 등록된 상품입니다: {barcode} / {name}'}, status=400)
 
     product.barcode = barcode
     product.name = name
@@ -283,15 +283,18 @@ def upload_products_excel(request):
                 skipped_count += 1
                 continue
 
-            defaults = {'name': name_val}
-            if display_name_val:
-                defaults['display_name'] = display_name_val
-
             try:
-                product, created = Product.objects.update_or_create(
-                    barcode=barcode_val,
-                    defaults=defaults,
-                )
+                if display_name_val:
+                    product, created = Product.objects.update_or_create(
+                        barcode=barcode_val,
+                        name=name_val,
+                        defaults={'display_name': display_name_val},
+                    )
+                else:
+                    product, created = Product.objects.get_or_create(
+                        barcode=barcode_val,
+                        name=name_val,
+                    )
                 if created:
                     created_count += 1
                 else:
@@ -324,6 +327,8 @@ def upload_products_excel(request):
 def lookup_product(request):
     """바코드로 상품을 조회한다 (스캔 시 자동완성용).
 
+    동일 바코드에 여러 상품이 등록되어 있으면 복수 결과를 반환한다.
+
     Query params:
         barcode: 상품 바코드
     """
@@ -331,19 +336,35 @@ def lookup_product(request):
     if not barcode:
         return JsonResponse({'found': False})
 
-    try:
-        product = Product.objects.get(barcode=barcode)
+    products = Product.objects.filter(barcode=barcode).order_by('name')
+
+    if not products.exists():
+        return JsonResponse({'found': False})
+
+    product_list = [
+        {
+            'id': p.pk,
+            'barcode': p.barcode,
+            'name': p.name,
+            'display_name': p.display_name,
+        }
+        for p in products
+    ]
+
+    if len(product_list) == 1:
+        # 단일 상품 — 기존 호환
         return JsonResponse({
             'found': True,
-            'product': {
-                'id': product.pk,
-                'barcode': product.barcode,
-                'name': product.name,
-                'display_name': product.display_name,
-            },
+            'multiple': False,
+            'product': product_list[0],
         })
-    except Product.DoesNotExist:
-        return JsonResponse({'found': False})
+    else:
+        # 동일 바코드 복수 상품 — 선택 필요
+        return JsonResponse({
+            'found': True,
+            'multiple': True,
+            'products': product_list,
+        })
 
 
 def _find_column_index(headers, candidates):
@@ -528,13 +549,11 @@ def scan_product(request):
     except Location.DoesNotExist:
         return JsonResponse({'error': '로케이션을 찾을 수 없습니다.'}, status=400)
 
-    # 상품 마스터에서 상품명 자동 보완
+    # 상품 마스터에서 상품명 자동 보완 (단일 상품만)
     if barcode and not product_name:
-        try:
-            master_product = Product.objects.get(barcode=barcode)
-            product_name = master_product.name
-        except Product.DoesNotExist:
-            pass
+        master_products = Product.objects.filter(barcode=barcode)
+        if master_products.count() == 1:
+            product_name = master_products.first().name
 
     record = InventoryRecord.objects.create(
         session=session,
