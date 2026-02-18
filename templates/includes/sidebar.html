@@ -80,6 +80,30 @@
             {% endif %}
 
             {% if user.is_admin or user.is_superuser %}
+                <!-- 재고 관리 메뉴 -->
+                <li class="sidebar-header-text">재고 관리</li>
+
+                <li class="sidebar-item">
+                    <a href="{% url 'inventory:session_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'session_page' %}active{% endif %}">
+                        <i class="bi bi-clipboard-data"></i>
+                        <span>재고조사</span>
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="{% url 'inventory:scan_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'scan_page' %}active{% endif %}">
+                        <i class="bi bi-upc-scan"></i>
+                        <span>재고 스캔</span>
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="{% url 'inventory:status_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'status_page' %}active{% endif %}">
+                        <i class="bi bi-bar-chart-line"></i>
+                        <span>재고 현황</span>
+                    </a>
+                </li>
+            {% endif %}
+
+            {% if user.is_admin or user.is_superuser %}
                 <!-- 보관 관리 메뉴 -->
                 <li class="sidebar-header-text">보관 관리</li>
 

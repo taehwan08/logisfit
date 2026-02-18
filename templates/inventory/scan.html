@@ -1,0 +1,459 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}재고 스캔{% endblock %}
+{% block page_title %}재고 스캔 입력{% endblock %}
+
+{% block extra_css %}
+<style>
+    .scan-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .scan-input {
+        font-size: 1.1rem;
+        padding: 0.7rem 1rem;
+        border-radius: 10px;
+    }
+    .scan-input:focus {
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+
+    /* 로케이션 정보 카드 */
+    .location-info {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.25rem;
+    }
+    .location-info .location-barcode {
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-family: 'Noto Sans KR', monospace;
+    }
+    .location-info .location-meta {
+        font-size: 0.85rem;
+        opacity: 0.9;
+    }
+
+    /* 상품 입력 영역 */
+    .product-input-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: all 0.3s;
+    }
+    .product-input-area.active {
+        border-color: #28a745;
+        border-style: solid;
+        background: #f8fff8;
+    }
+    .product-input-area.disabled {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
+    /* 기록 테이블 */
+    .record-table th {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #6c757d;
+        border-bottom: 2px solid #dee2e6;
+    }
+    .record-table td {
+        font-size: 0.9rem;
+        vertical-align: middle;
+    }
+
+    /* 없음 안내 */
+    .no-session-alert {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+    }
+
+    /* 성공 플래시 */
+    .flash-success {
+        animation: flashGreen 0.5s ease;
+    }
+    @keyframes flashGreen {
+        0% { background: #d4edda; }
+        100% { background: transparent; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not active_session %}
+<!-- 세션 없음 안내 -->
+<div class="no-session-alert">
+    <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 2.5rem;"></i>
+    <h5 class="mt-3 fw-bold">진행 중인 재고조사 세션이 없습니다</h5>
+    <p class="text-muted mb-3">재고 스캔을 시작하려면 먼저 세션을 시작해주세요.</p>
+    <a href="{% url 'inventory:session_page' %}" class="btn btn-primary">
+        <i class="bi bi-clipboard-data me-1"></i>세션 관리로 이동
+    </a>
+</div>
+{% else %}
+
+<div class="row g-4">
+    <!-- 세션 정보 배지 -->
+    <div class="col-12">
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="badge bg-success">진행중</span>
+            <span class="fw-bold">{{ active_session.name }}</span>
+            <span class="text-muted small">| 시작: {{ active_session.started_at|date:"Y-m-d H:i" }}</span>
+        </div>
+    </div>
+
+    <!-- 로케이션 스캔 -->
+    <div class="col-12">
+        <div class="card scan-card">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3">
+                    <i class="bi bi-geo-alt-fill text-primary me-2"></i>로케이션 스캔
+                </h6>
+                <div class="input-group">
+                    <input type="text" class="form-control scan-input" id="locationInput"
+                           placeholder="로케이션 바코드를 스캔하세요" autofocus>
+                    <button class="btn btn-primary px-4" onclick="scanLocation()">
+                        <i class="bi bi-search me-1"></i>스캔
+                    </button>
+                </div>
+
+                <!-- 현재 로케이션 정보 -->
+                <div id="locationInfoArea" class="mt-3" style="display: none;">
+                    <div class="location-info">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="location-barcode" id="currentLocationBarcode"></div>
+                                <div class="location-meta" id="currentLocationMeta"></div>
+                            </div>
+                            <div>
+                                <span class="badge bg-white text-dark" id="locationRecordCount">0건 등록됨</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상품 입력 -->
+    <div class="col-12">
+        <div class="product-input-area {% if not active_session %}disabled{% endif %}" id="productInputArea">
+            <h6 class="fw-bold mb-3">
+                <i class="bi bi-box-seam text-success me-2"></i>상품 입력
+                <small class="text-muted fw-normal ms-2" id="productInputHint">로케이션을 먼저 스캔해주세요</small>
+            </h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-medium">상품 바코드</label>
+                    <input type="text" class="form-control scan-input" id="productBarcodeInput"
+                           placeholder="바코드 스캔 또는 입력" disabled>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-medium">상품명</label>
+                    <input type="text" class="form-control scan-input" id="productNameInput"
+                           placeholder="상품명 입력" disabled>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-medium">수량</label>
+                    <input type="number" class="form-control scan-input" id="productQuantityInput"
+                           value="1" min="1" disabled>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-success w-100 py-2" id="registerBtn" onclick="registerProduct()" disabled>
+                        <i class="bi bi-plus-circle me-1"></i>등록
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 현재 로케이션 등록 내역 -->
+    <div class="col-12">
+        <div class="card scan-card">
+            <div class="card-header bg-white border-bottom py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold">
+                        <i class="bi bi-list-ul me-2"></i>현재 로케이션 등록 내역
+                    </h6>
+                    <span class="badge bg-primary" id="recordCountBadge">0건</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover record-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">상품바코드</th>
+                                <th>상품명</th>
+                                <th class="text-center">수량</th>
+                                <th>작업자</th>
+                                <th>등록시간</th>
+                                <th class="text-end pe-4">삭제</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox d-block mb-2" style="font-size: 2rem;"></i>
+                                    로케이션을 스캔하면 등록 내역이 표시됩니다.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if active_session %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+const activeSessionId = {{ active_session.pk }};
+let currentLocationId = null;
+let currentLocationBarcode = '';
+
+document.addEventListener('DOMContentLoaded', function() {
+    const locationInput = document.getElementById('locationInput');
+    const barcodeInput = document.getElementById('productBarcodeInput');
+
+    // 로케이션 입력 Enter
+    locationInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            scanLocation();
+        }
+    });
+
+    // 상품 바코드 Enter → 수량으로 포커스 (수량 기본값 있으므로 바로 등록도 가능)
+    barcodeInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            registerProduct();
+        }
+    });
+
+    // 상품명 Enter
+    document.getElementById('productNameInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            registerProduct();
+        }
+    });
+
+    // 수량 Enter
+    document.getElementById('productQuantityInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            registerProduct();
+        }
+    });
+});
+
+async function scanLocation() {
+    const input = document.getElementById('locationInput');
+    const barcode = input.value.trim();
+    if (!barcode) {
+        input.focus();
+        return;
+    }
+
+    try {
+        const resp = await fetch('{% url "inventory:scan_location" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ barcode }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            currentLocationId = data.location.id;
+            currentLocationBarcode = data.location.barcode;
+
+            // 로케이션 정보 표시
+            document.getElementById('currentLocationBarcode').textContent = data.location.barcode;
+
+            let meta = '';
+            if (data.location.name) meta += data.location.name;
+            if (data.location.zone) meta += (meta ? ' | ' : '') + '구역: ' + data.location.zone;
+            if (data.created) meta += (meta ? ' | ' : '') + '신규 등록됨';
+            document.getElementById('currentLocationMeta').textContent = meta || '등록된 로케이션';
+            document.getElementById('locationRecordCount').textContent = (data.record_count || 0) + '건 등록됨';
+
+            document.getElementById('locationInfoArea').style.display = 'block';
+
+            // 상품 입력 활성화
+            enableProductInput();
+
+            // 현재 로케이션 기록 로드
+            loadLocationRecords();
+
+            // 입력 초기화 & 상품 바코드로 포커스
+            input.value = '';
+            document.getElementById('productBarcodeInput').focus();
+        } else {
+            alert(data.error || '로케이션 스캔 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+function enableProductInput() {
+    const area = document.getElementById('productInputArea');
+    area.classList.add('active');
+    area.classList.remove('disabled');
+    document.getElementById('productInputHint').textContent = '';
+
+    document.getElementById('productBarcodeInput').disabled = false;
+    document.getElementById('productNameInput').disabled = false;
+    document.getElementById('productQuantityInput').disabled = false;
+    document.getElementById('registerBtn').disabled = false;
+}
+
+async function registerProduct() {
+    if (!currentLocationId) {
+        alert('로케이션을 먼저 스캔해주세요.');
+        return;
+    }
+
+    const barcode = document.getElementById('productBarcodeInput').value.trim();
+    const productName = document.getElementById('productNameInput').value.trim();
+    const quantity = parseInt(document.getElementById('productQuantityInput').value) || 1;
+
+    if (!barcode && !productName) {
+        document.getElementById('productBarcodeInput').focus();
+        return;
+    }
+
+    try {
+        const resp = await fetch('{% url "inventory:scan_product" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                session_id: activeSessionId,
+                location_id: currentLocationId,
+                barcode,
+                product_name: productName,
+                quantity,
+            }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // 입력 초기화
+            document.getElementById('productBarcodeInput').value = '';
+            document.getElementById('productNameInput').value = '';
+            document.getElementById('productQuantityInput').value = '1';
+            document.getElementById('productBarcodeInput').focus();
+
+            // 기록 새로고침
+            loadLocationRecords();
+
+            // 로케이션 기록 수 업데이트
+            const countEl = document.getElementById('locationRecordCount');
+            const current = parseInt(countEl.textContent) || 0;
+            countEl.textContent = (current + 1) + '건 등록됨';
+        } else {
+            alert(data.error || '등록 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+async function loadLocationRecords() {
+    if (!currentLocationId) return;
+
+    try {
+        const url = `{% url "inventory:get_location_records" %}?session_id=${activeSessionId}&location_id=${currentLocationId}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        renderRecords(data.records || []);
+    } catch (e) {
+        console.error('기록 로드 실패:', e);
+    }
+}
+
+function renderRecords(records) {
+    const tbody = document.getElementById('recordTableBody');
+    const badge = document.getElementById('recordCountBadge');
+
+    badge.textContent = records.length + '건';
+
+    if (!records.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox d-block mb-2" style="font-size: 2rem;"></i>
+                    등록된 상품이 없습니다.
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = records.map(r => `
+        <tr id="record-${r.id}" class="flash-success">
+            <td class="ps-4">
+                <code>${escapeHtml(r.barcode || '-')}</code>
+            </td>
+            <td>${escapeHtml(r.product_name || '-')}</td>
+            <td class="text-center fw-bold">${r.quantity}</td>
+            <td>${escapeHtml(r.worker || '-')}</td>
+            <td class="small text-muted">${escapeHtml(r.created_at)}</td>
+            <td class="text-end pe-4">
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteRecord(${r.id})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function deleteRecord(recordId) {
+    if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+
+    try {
+        const resp = await fetch(`/inventory/api/records/${recordId}/delete/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken },
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            loadLocationRecords();
+        } else {
+            alert(data.error || '삭제 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+{% endif %}
+{% endblock %}

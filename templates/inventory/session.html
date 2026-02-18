@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}재고조사{% endblock %}
+{% block page_title %}재고조사 세션 관리{% endblock %}
+
+{% block extra_css %}
+<style>
+    .session-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .session-active {
+        border: 2px solid #28a745;
+        background: #f0fff4;
+    }
+    .session-active .badge {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+    .session-table th {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #6c757d;
+        border-bottom: 2px solid #dee2e6;
+    }
+    .session-table td {
+        font-size: 0.9rem;
+        vertical-align: middle;
+    }
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+        color: #adb5bd;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- 현재 세션 상태 -->
+    <div class="col-12">
+        <div class="card session-card {% if active_session %}session-active{% endif %}" id="activeSessionCard">
+            <div class="card-body p-4">
+                {% if active_session %}
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="badge bg-success">진행중</span>
+                            <h5 class="mb-0 fw-bold" id="activeSessionName">{{ active_session.name }}</h5>
+                        </div>
+                        <div class="text-muted small">
+                            <i class="bi bi-clock me-1"></i>
+                            시작: {{ active_session.started_at|date:"Y-m-d H:i" }}
+                            {% if active_session.started_by %}
+                                | 시작자: {{ active_session.started_by }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'inventory:scan_page' %}" class="btn btn-success">
+                            <i class="bi bi-upc-scan me-1"></i>스캔 입력
+                        </a>
+                        <button class="btn btn-outline-danger" onclick="endSession({{ active_session.pk }})">
+                            <i class="bi bi-stop-circle me-1"></i>세션 종료
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <div id="noSessionArea">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1 fw-bold text-muted">진행 중인 세션 없음</h5>
+                            <p class="text-muted mb-0 small">새 재고조사 세션을 시작해주세요.</p>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="input-group" style="max-width: 500px;">
+                            <input type="text" class="form-control" id="sessionNameInput"
+                                   placeholder="세션명 (예: 2025년 2월 재고조사)" maxlength="100">
+                            <button class="btn btn-primary" onclick="startSession()">
+                                <i class="bi bi-play-fill me-1"></i>세션 시작
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 세션 이력 목록 -->
+    <div class="col-12">
+        <div class="card session-card">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold">
+                    <i class="bi bi-clock-history me-2"></i>세션 이력
+                </h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover session-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">세션명</th>
+                                <th>상태</th>
+                                <th>시작일시</th>
+                                <th>종료일시</th>
+                                <th>시작자</th>
+                                <th>기록 수</th>
+                                <th class="text-end pe-4">작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionTableBody">
+                            <tr>
+                                <td colspan="7">
+                                    <div class="text-center text-muted py-3">
+                                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                        불러오는 중...
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadSessions();
+
+    // 세션명 입력 시 Enter 키
+    const input = document.getElementById('sessionNameInput');
+    if (input) {
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') startSession();
+        });
+    }
+});
+
+async function loadSessions() {
+    try {
+        const resp = await fetch('{% url "inventory:get_sessions" %}');
+        const data = await resp.json();
+        renderSessions(data.sessions || []);
+    } catch (e) {
+        console.error('세션 목록 로드 실패:', e);
+    }
+}
+
+function renderSessions(sessions) {
+    const tbody = document.getElementById('sessionTableBody');
+    if (!sessions.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7">
+                    <div class="empty-state">
+                        <i class="bi bi-inbox d-block"></i>
+                        <p class="mb-0">세션 이력이 없습니다.</p>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = sessions.map(s => `
+        <tr>
+            <td class="ps-4 fw-medium">${escapeHtml(s.name)}</td>
+            <td>
+                <span class="badge ${s.status === 'active' ? 'bg-success' : 'bg-secondary'}">
+                    ${escapeHtml(s.status_display)}
+                </span>
+            </td>
+            <td>${escapeHtml(s.started_at)}</td>
+            <td>${s.ended_at ? escapeHtml(s.ended_at) : '-'}</td>
+            <td>${escapeHtml(s.started_by || '-')}</td>
+            <td><span class="badge bg-light text-dark">${s.record_count || 0}건</span></td>
+            <td class="text-end pe-4">
+                <a href="{% url 'inventory:status_page' %}?session_id=${s.id}"
+                   class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-eye me-1"></i>현황
+                </a>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function startSession() {
+    const input = document.getElementById('sessionNameInput');
+    const name = input.value.trim();
+    if (!name) {
+        input.focus();
+        input.classList.add('is-invalid');
+        setTimeout(() => input.classList.remove('is-invalid'), 2000);
+        return;
+    }
+
+    try {
+        const resp = await fetch('{% url "inventory:create_session" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ name }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || '세션 시작에 실패했습니다.');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+async function endSession(sessionId) {
+    if (!confirm('세션을 종료하시겠습니까?')) return;
+
+    try {
+        const resp = await fetch(`/inventory/api/sessions/${sessionId}/end/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || '세션 종료에 실패했습니다.');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

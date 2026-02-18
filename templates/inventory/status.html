@@ -1,0 +1,422 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}재고 현황{% endblock %}
+{% block page_title %}재고 현황 조회{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .filter-bar {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+    }
+    .nav-tabs .nav-link {
+        font-weight: 600;
+        color: #6c757d;
+        border: none;
+        padding: 0.75rem 1.5rem;
+    }
+    .nav-tabs .nav-link.active {
+        color: #0d6efd;
+        border-bottom: 3px solid #0d6efd;
+        background: transparent;
+    }
+
+    /* 그룹 카드 */
+    .group-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        overflow: hidden;
+    }
+    .group-header {
+        background: #f8f9fa;
+        padding: 0.75rem 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .group-header:hover {
+        background: #e9ecef;
+    }
+    .group-header .group-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+    .group-header .group-badge {
+        font-size: 0.8rem;
+    }
+    .group-body {
+        border-top: 1px solid #e9ecef;
+    }
+    .group-table {
+        margin-bottom: 0;
+        font-size: 0.85rem;
+    }
+    .group-table th {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #6c757d;
+        background: #fafafa;
+    }
+    .group-table td {
+        vertical-align: middle;
+    }
+
+    /* 통계 */
+    .stat-item {
+        text-align: center;
+        padding: 0.5rem;
+    }
+    .stat-item .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0d6efd;
+    }
+    .stat-item .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    .empty-state {
+        padding: 3rem;
+        text-align: center;
+        color: #adb5bd;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- 필터 바 -->
+    <div class="col-12">
+        <div class="filter-bar">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-medium">세션 선택</label>
+                    <select class="form-select" id="sessionSelect" onchange="onSessionChange()">
+                        <option value="">세션을 선택하세요</option>
+                        {% for s in sessions %}
+                        <option value="{{ s.pk }}"
+                            {% if active_session and s.pk == active_session.pk %}selected{% endif %}>
+                            {{ s.name }}
+                            {% if s.status == 'active' %}(진행중){% else %}(종료){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-medium">검색</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="searchInput"
+                               placeholder="로케이션, 상품명, 바코드 검색">
+                        <button class="btn btn-outline-secondary" onclick="loadRecords()">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="d-flex gap-3 justify-content-end" id="statsArea">
+                        <div class="stat-item">
+                            <div class="stat-value" id="statLocations">-</div>
+                            <div class="stat-label">로케이션</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="statProducts">-</div>
+                            <div class="stat-label">상품종류</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="statQuantity">-</div>
+                            <div class="stat-label">총수량</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 탭 + 데이터 -->
+    <div class="col-12">
+        <div class="card status-card">
+            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                <ul class="nav nav-tabs" id="viewTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-tab="location" onclick="switchTab('location')">
+                            <i class="bi bi-geo-alt me-1"></i>로케이션별
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="product" onclick="switchTab('product')">
+                            <i class="bi bi-box-seam me-1"></i>상품별
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body p-4" id="dataContainer">
+                <div class="empty-state">
+                    <i class="bi bi-bar-chart-line d-block"></i>
+                    <p class="mb-0">세션을 선택하면 재고 현황이 표시됩니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+let currentTab = 'location';
+let currentData = { groups: [] };
+
+document.addEventListener('DOMContentLoaded', function() {
+    // URL에서 session_id 파라미터 확인
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    if (sessionId) {
+        document.getElementById('sessionSelect').value = sessionId;
+    }
+
+    // 세션이 선택되어 있으면 자동 로드
+    if (document.getElementById('sessionSelect').value) {
+        loadRecords();
+    }
+
+    // 검색 Enter 키
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') loadRecords();
+    });
+});
+
+function onSessionChange() {
+    loadRecords();
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('#viewTabs .nav-link').forEach(el => {
+        el.classList.toggle('active', el.dataset.tab === tab);
+    });
+    loadRecords();
+}
+
+async function loadRecords() {
+    const sessionId = document.getElementById('sessionSelect').value;
+    if (!sessionId) {
+        document.getElementById('dataContainer').innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-bar-chart-line d-block"></i>
+                <p class="mb-0">세션을 선택하면 재고 현황이 표시됩니다.</p>
+            </div>`;
+        updateStats(null);
+        return;
+    }
+
+    const search = document.getElementById('searchInput').value.trim();
+    const params = new URLSearchParams({
+        session_id: sessionId,
+        group_by: currentTab,
+    });
+    if (search) params.append('search', search);
+
+    try {
+        document.getElementById('dataContainer').innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">불러오는 중...</p>
+            </div>`;
+
+        const resp = await fetch(`{% url "inventory:get_records" %}?${params.toString()}`);
+        const data = await resp.json();
+        currentData = data;
+
+        if (currentTab === 'location') {
+            renderByLocation(data.groups || []);
+        } else {
+            renderByProduct(data.groups || []);
+        }
+
+        updateStats(data.groups || []);
+    } catch (e) {
+        console.error('기록 로드 실패:', e);
+        document.getElementById('dataContainer').innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-exclamation-circle d-block text-danger"></i>
+                <p class="mb-0">데이터를 불러오는 중 오류가 발생했습니다.</p>
+            </div>`;
+    }
+}
+
+function renderByLocation(groups) {
+    const container = document.getElementById('dataContainer');
+
+    if (!groups.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-inbox d-block"></i>
+                <p class="mb-0">등록된 재고 기록이 없습니다.</p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = groups.map((g, idx) => `
+        <div class="group-card">
+            <div class="group-header" onclick="toggleGroup(${idx})">
+                <div class="group-title">
+                    <i class="bi bi-geo-alt text-primary me-2"></i>
+                    <code>${escapeHtml(g.location.barcode)}</code>
+                    ${g.location.name ? '<span class="text-muted ms-2">' + escapeHtml(g.location.name) + '</span>' : ''}
+                </div>
+                <div class="group-badge">
+                    <span class="badge bg-primary">${g.products.length}종</span>
+                    <span class="badge bg-success ms-1">${g.total_quantity}개</span>
+                    <i class="bi bi-chevron-down ms-2" id="groupIcon-${idx}"></i>
+                </div>
+            </div>
+            <div class="group-body" id="groupBody-${idx}">
+                <table class="table group-table">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">상품바코드</th>
+                            <th>상품명</th>
+                            <th class="text-center">수량</th>
+                            <th>작업자</th>
+                            <th>등록시간</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${g.products.map(p => `
+                        <tr>
+                            <td class="ps-3"><code>${escapeHtml(p.barcode || '-')}</code></td>
+                            <td>${escapeHtml(p.product_name || '-')}</td>
+                            <td class="text-center fw-bold">${p.quantity}</td>
+                            <td>${escapeHtml(p.worker || '-')}</td>
+                            <td class="small text-muted">${escapeHtml(p.created_at)}</td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderByProduct(groups) {
+    const container = document.getElementById('dataContainer');
+
+    if (!groups.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-inbox d-block"></i>
+                <p class="mb-0">등록된 재고 기록이 없습니다.</p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = groups.map((g, idx) => `
+        <div class="group-card">
+            <div class="group-header" onclick="toggleGroup(${idx})">
+                <div class="group-title">
+                    <i class="bi bi-box-seam text-success me-2"></i>
+                    <code>${escapeHtml(g.barcode || '-')}</code>
+                    ${g.product_name ? '<span class="text-muted ms-2">' + escapeHtml(g.product_name) + '</span>' : ''}
+                </div>
+                <div class="group-badge">
+                    <span class="badge bg-info">${g.locations.length}곳</span>
+                    <span class="badge bg-success ms-1">총 ${g.total_quantity}개</span>
+                    <i class="bi bi-chevron-down ms-2" id="groupIcon-${idx}"></i>
+                </div>
+            </div>
+            <div class="group-body" id="groupBody-${idx}">
+                <table class="table group-table">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">로케이션</th>
+                            <th>로케이션명</th>
+                            <th class="text-center">수량</th>
+                            <th>작업자</th>
+                            <th>등록시간</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${g.locations.map(l => `
+                        <tr>
+                            <td class="ps-3"><code>${escapeHtml(l.location_barcode)}</code></td>
+                            <td>${escapeHtml(l.location_name || '-')}</td>
+                            <td class="text-center fw-bold">${l.quantity}</td>
+                            <td>${escapeHtml(l.worker || '-')}</td>
+                            <td class="small text-muted">${escapeHtml(l.created_at)}</td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `).join('');
+}
+
+function toggleGroup(idx) {
+    const body = document.getElementById(`groupBody-${idx}`);
+    const icon = document.getElementById(`groupIcon-${idx}`);
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        icon.className = 'bi bi-chevron-down ms-2';
+    } else {
+        body.style.display = 'none';
+        icon.className = 'bi bi-chevron-right ms-2';
+    }
+}
+
+function updateStats(groups) {
+    if (!groups) {
+        document.getElementById('statLocations').textContent = '-';
+        document.getElementById('statProducts').textContent = '-';
+        document.getElementById('statQuantity').textContent = '-';
+        return;
+    }
+
+    if (currentTab === 'location') {
+        const locationCount = groups.length;
+        let productCount = 0;
+        let totalQty = 0;
+        groups.forEach(g => {
+            productCount += g.products.length;
+            totalQty += g.total_quantity;
+        });
+        document.getElementById('statLocations').textContent = locationCount;
+        document.getElementById('statProducts').textContent = productCount;
+        document.getElementById('statQuantity').textContent = totalQty.toLocaleString();
+    } else {
+        let locationSet = new Set();
+        const productCount = groups.length;
+        let totalQty = 0;
+        groups.forEach(g => {
+            g.locations.forEach(l => locationSet.add(l.location_barcode));
+            totalQty += g.total_quantity;
+        });
+        document.getElementById('statLocations').textContent = locationSet.size;
+        document.getElementById('statProducts').textContent = productCount;
+        document.getElementById('statQuantity').textContent = totalQty.toLocaleString();
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

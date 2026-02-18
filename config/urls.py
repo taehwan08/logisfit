@@ -42,6 +42,9 @@ urlpatterns = [
     # 바코드 검수
     path('inspection/', include('apps.inspection.urls')),
 
+    # 재고 관리
+    path('inventory/', include('apps.inventory.urls')),
+
     # Phase 3 이후 추가될 URL들
     # path('works/', include('apps.works.urls')),
     # path('storage/', include('apps.storage.urls')),
