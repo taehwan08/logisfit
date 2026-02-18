@@ -529,6 +529,8 @@ def scan_product(request):
     barcode = data.get('barcode', '').strip()
     product_name = data.get('product_name', '').strip()
     quantity = data.get('quantity', 1)
+    expiry_date = data.get('expiry_date', '').strip()
+    lot_number = data.get('lot_number', '').strip()
 
     if not session_id or not location_id:
         return JsonResponse({'error': '세션과 로케이션 정보가 필요합니다.'}, status=400)
@@ -575,17 +577,21 @@ def scan_product(request):
     if not product_name:
         return JsonResponse({'error': '상품명을 입력해주세요.'}, status=400)
 
-    # 동일 세션+로케이션+바코드+상품명이 있으면 수량 합산
+    # 동일 세션+로케이션+바코드+상품명+유통기한+로트번호이면 수량 합산
     existing = InventoryRecord.objects.filter(
         session=session,
         location=location,
         barcode=barcode,
         product_name=product_name,
+        expiry_date=expiry_date,
+        lot_number=lot_number,
     ).first()
+
+    worker_name = request.user.name if hasattr(request.user, 'name') else str(request.user)
 
     if existing:
         existing.quantity += quantity
-        existing.worker = request.user.name if hasattr(request.user, 'name') else str(request.user)
+        existing.worker = worker_name
         existing.save(update_fields=['quantity', 'worker'])
         record = existing
     else:
@@ -595,7 +601,9 @@ def scan_product(request):
             barcode=barcode,
             product_name=product_name,
             quantity=quantity,
-            worker=request.user.name if hasattr(request.user, 'name') else str(request.user),
+            expiry_date=expiry_date,
+            lot_number=lot_number,
+            worker=worker_name,
         )
 
     return JsonResponse({
@@ -746,6 +754,8 @@ def _get_records_by_product(records):
             'location_barcode': r.location.barcode,
             'location_name': r.location.name,
             'quantity': r.quantity,
+            'expiry_date': r.expiry_date,
+            'lot_number': r.lot_number,
             'record_id': r.pk,
             'worker': r.worker,
             'created_at': timezone.localtime(r.created_at).strftime('%Y-%m-%d %H:%M'),
@@ -784,6 +794,8 @@ def _record_to_dict(record):
         'barcode': record.barcode,
         'product_name': record.product_name,
         'quantity': record.quantity,
+        'expiry_date': record.expiry_date,
+        'lot_number': record.lot_number,
         'worker': record.worker,
         'location_barcode': record.location.barcode if hasattr(record, 'location') and record.location else '',
         'location_name': record.location.name if hasattr(record, 'location') and record.location else '',

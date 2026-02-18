@@ -91,6 +91,8 @@ class InventoryRecord(models.Model):
     barcode = models.CharField('상품바코드', max_length=50, db_index=True)
     product_name = models.CharField('상품명', max_length=200, blank=True, default='')
     quantity = models.IntegerField('수량', default=1)
+    expiry_date = models.CharField('유통기한', max_length=20, blank=True, default='')
+    lot_number = models.CharField('로트번호', max_length=50, blank=True, default='')
     worker = models.CharField('작업자', max_length=50, blank=True, default='')
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
 

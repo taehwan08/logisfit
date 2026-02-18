@@ -26,6 +26,6 @@ class InventorySessionAdmin(admin.ModelAdmin):
 
 @admin.register(InventoryRecord)
 class InventoryRecordAdmin(admin.ModelAdmin):
-    list_display = ('session', 'location', 'barcode', 'product_name', 'quantity', 'worker', 'created_at')
+    list_display = ('session', 'location', 'barcode', 'product_name', 'quantity', 'expiry_date', 'lot_number', 'worker', 'created_at')
     list_filter = ('session',)
-    search_fields = ('barcode', 'product_name', 'location__barcode')
+    search_fields = ('barcode', 'product_name', 'lot_number', 'location__barcode')

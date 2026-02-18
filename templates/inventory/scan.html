@@ -220,7 +220,7 @@
                 <i class="bi bi-box-seam text-success me-2"></i>상품 입력
                 <small class="text-muted fw-normal ms-2" id="productInputHint">로케이션을 먼저 스캔해주세요</small>
             </h6>
-            <div class="row g-3">
+            <div class="row g-2">
                 <div class="col-md-4">
                     <label class="form-label small fw-medium">상품 바코드</label>
                     <input type="text" class="form-control scan-input barcode-input" id="productBarcodeInput"
@@ -235,6 +235,16 @@
                     <span class="badge bg-info auto-fill-badge" id="autoFillBadge">
                         <i class="bi bi-magic me-1"></i>자동입력
                     </span>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-medium">유통기한</label>
+                    <input type="text" class="form-control scan-input" id="productExpiryInput"
+                           placeholder="예: 2025-12-31" disabled>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-medium">로트번호</label>
+                    <input type="text" class="form-control scan-input" id="productLotInput"
+                           placeholder="로트번호" disabled>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-medium">수량</label>
@@ -867,7 +877,7 @@ async function searchProducts() {
 
         resultArea.innerHTML = products.slice(0, 20).map(p => {
             const displayLabel = p.display_name && p.display_name !== p.name
-                ? `${escapeHtml(p.display_name)} <span class="item-barcode">(${escapeHtml(p.name)})</span>`
+                ? `${escapeHtml(p.name)} <span class="item-barcode">(${escapeHtml(p.display_name)})</span>`
                 : escapeHtml(p.name);
             return `
                 <div class="search-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
