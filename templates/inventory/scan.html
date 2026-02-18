@@ -269,6 +269,7 @@
             </h6>
             <div class="row g-3">
                 <div class="col-md-6">
+                    <label class="form-label small fw-medium">상품 검색</label>
                     <div class="input-group">
                         <input type="text" class="form-control scan-input" id="manualSearchInput"
                                placeholder="상품명으로 검색" disabled>
@@ -278,16 +279,28 @@
                     </div>
                     <div id="searchResultArea" class="mt-2" style="display:none; max-height: 250px; overflow-y: auto;"></div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-6">
+                    <label class="form-label small fw-medium">선택된 상품</label>
                     <input type="text" class="form-control scan-input" id="manualSelectedName"
                            placeholder="선택된 상품" readonly disabled
                            style="background: #e9ecef;">
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-3">
+                    <label class="form-label small fw-medium">유통기한</label>
+                    <input type="text" class="form-control scan-input" id="manualExpiryInput"
+                           placeholder="예: 2025-12-31" disabled>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-medium">로트번호</label>
+                    <input type="text" class="form-control scan-input" id="manualLotInput"
+                           placeholder="로트번호" disabled>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-medium">수량</label>
                     <input type="number" class="form-control scan-input" id="manualQuantityInput"
                            value="1" min="1" disabled>
                 </div>
-                <div class="col-md-2 d-flex align-items-start">
+                <div class="col-md-2 d-flex align-items-end">
                     <button class="btn btn-warning w-100 py-2" id="manualRegisterBtn" onclick="manualRegister()" disabled>
                         <i class="bi bi-plus-circle me-1"></i>등록
                     </button>
@@ -334,6 +347,8 @@
                             <tr>
                                 <th class="ps-4">상품바코드</th>
                                 <th>상품명</th>
+                                <th>유통기한</th>
+                                <th>로트번호</th>
                                 <th class="text-center">수량</th>
                                 <th>작업자</th>
                                 <th>등록시간</th>
@@ -342,7 +357,7 @@
                         </thead>
                         <tbody id="recordTableBody">
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">
+                                <td colspan="8" class="text-center text-muted py-4">
                                     <i class="bi bi-inbox d-block mb-2" style="font-size: 2rem;"></i>
                                     로케이션을 스캔하면 등록 내역이 표시됩니다.
                                 </td>
@@ -517,15 +532,31 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('autoFillBadge').classList.remove('show');
     });
 
-    // 상품명 Enter
+    // 상품명 Enter → 유통기한으로 이동
     document.getElementById('productNameInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('productExpiryInput').focus();
+        }
+    });
+
+    // 유통기한 Enter → 로트번호로 이동
+    document.getElementById('productExpiryInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('productLotInput').focus();
+        }
+    });
+
+    // 로트번호 Enter → 등록
+    document.getElementById('productLotInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             registerProduct();
         }
     });
 
-    // 수량 Enter
+    // 수량 Enter → 등록
     document.getElementById('productQuantityInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -541,7 +572,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 수동 등록: 수량 Enter
+    // 수동 등록: 유통기한 Enter → 로트번호로 이동
+    document.getElementById('manualExpiryInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('manualLotInput').focus();
+        }
+    });
+
+    // 수동 등록: 로트번호 Enter → 수량으로 이동
+    document.getElementById('manualLotInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('manualQuantityInput').focus();
+        }
+    });
+
+    // 수동 등록: 수량 Enter → 등록
     document.getElementById('manualQuantityInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -611,6 +658,8 @@ function enableProductInput() {
 
     document.getElementById('productBarcodeInput').disabled = false;
     document.getElementById('productNameInput').disabled = false;
+    document.getElementById('productExpiryInput').disabled = false;
+    document.getElementById('productLotInput').disabled = false;
     document.getElementById('productQuantityInput').disabled = false;
     document.getElementById('registerBtn').disabled = false;
 
@@ -621,6 +670,8 @@ function enableProductInput() {
     document.getElementById('manualInputHint').textContent = '';
     document.getElementById('manualSearchInput').disabled = false;
     document.getElementById('manualSearchBtn').disabled = false;
+    document.getElementById('manualExpiryInput').disabled = false;
+    document.getElementById('manualLotInput').disabled = false;
     document.getElementById('manualQuantityInput').disabled = false;
     document.getElementById('manualRegisterBtn').disabled = false;
 }
@@ -741,6 +792,8 @@ async function registerProduct() {
 
     const barcode = document.getElementById('productBarcodeInput').value.trim();
     const productName = document.getElementById('productNameInput').value.trim();
+    const expiryDate = document.getElementById('productExpiryInput').value.trim();
+    const lotNumber = document.getElementById('productLotInput').value.trim();
     const quantity = parseInt(document.getElementById('productQuantityInput').value) || 1;
 
     if (!barcode && !productName) {
@@ -760,6 +813,8 @@ async function registerProduct() {
                 location_id: currentLocationId,
                 barcode,
                 product_name: productName,
+                expiry_date: expiryDate,
+                lot_number: lotNumber,
                 quantity,
             }),
         });
@@ -771,6 +826,8 @@ async function registerProduct() {
             document.getElementById('productNameInput').value = '';
             document.getElementById('productNameInput').classList.remove('auto-filled');
             document.getElementById('autoFillBadge').classList.remove('show');
+            document.getElementById('productExpiryInput').value = '';
+            document.getElementById('productLotInput').value = '';
             document.getElementById('productQuantityInput').value = '1';
             document.getElementById('productBarcodeInput').focus();
 
@@ -807,7 +864,7 @@ function renderRecords(records) {
     if (!records.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="text-center text-muted py-4">
+                <td colspan="8" class="text-center text-muted py-4">
                     <i class="bi bi-inbox d-block mb-2" style="font-size: 2rem;"></i>
                     등록된 상품이 없습니다.
                 </td>
@@ -821,6 +878,8 @@ function renderRecords(records) {
                 <code>${escapeHtml(r.barcode || '-')}</code>
             </td>
             <td>${escapeHtml(r.product_name || '-')}</td>
+            <td class="small">${escapeHtml(r.expiry_date || '-')}</td>
+            <td class="small">${escapeHtml(r.lot_number || '-')}</td>
             <td class="text-center fw-bold">${r.quantity}</td>
             <td>${escapeHtml(r.worker || '-')}</td>
             <td class="small text-muted">${escapeHtml(r.created_at)}</td>
@@ -908,6 +967,8 @@ async function manualRegister() {
         return;
     }
 
+    const expiryDate = document.getElementById('manualExpiryInput').value.trim();
+    const lotNumber = document.getElementById('manualLotInput').value.trim();
     const quantity = parseInt(document.getElementById('manualQuantityInput').value) || 1;
 
     try {
@@ -922,6 +983,8 @@ async function manualRegister() {
                 location_id: currentLocationId,
                 barcode: manualSelectedBarcode,
                 product_name: manualSelectedName,
+                expiry_date: expiryDate,
+                lot_number: lotNumber,
                 quantity,
             }),
         });
@@ -931,6 +994,8 @@ async function manualRegister() {
             // 초기화
             document.getElementById('manualSearchInput').value = '';
             document.getElementById('manualSelectedName').value = '';
+            document.getElementById('manualExpiryInput').value = '';
+            document.getElementById('manualLotInput').value = '';
             document.getElementById('manualQuantityInput').value = '1';
             manualSelectedBarcode = '';
             manualSelectedName = '';
