@@ -125,6 +125,33 @@
         font-size: 0.8rem;
         color: #6c757d;
     }
+
+    /* 수동 등록 영역 */
+    .manual-register-area {
+        border: 2px dashed #ffc107;
+        border-radius: 12px;
+        padding: 1.5rem;
+        background: #fffbf0;
+    }
+    .manual-register-area.active {
+        border-color: #fd7e14;
+        border-style: solid;
+    }
+    .search-result-item {
+        cursor: pointer;
+        padding: 0.6rem 0.8rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 0.4rem;
+        transition: all 0.15s;
+        font-size: 0.9rem;
+    }
+    .search-result-item:hover {
+        background: #fff3cd;
+        border-color: #ffc107;
+    }
+    .search-result-item .item-name { font-weight: 600; }
+    .search-result-item .item-barcode { font-size: 0.78rem; color: #6c757d; }
 </style>
 {% endblock %}
 
@@ -216,6 +243,42 @@
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button class="btn btn-success w-100 py-2" id="registerBtn" onclick="registerProduct()" disabled>
+                        <i class="bi bi-plus-circle me-1"></i>등록
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 수동 등록 (상품명 검색) -->
+    <div class="col-12">
+        <div class="manual-register-area {% if not active_session %}disabled{% endif %}" id="manualRegisterArea">
+            <h6 class="fw-bold mb-3">
+                <i class="bi bi-search text-warning me-2"></i>수동 등록 (상품명 검색)
+                <small class="text-muted fw-normal ms-2" id="manualInputHint">로케이션을 먼저 스캔해주세요</small>
+            </h6>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input type="text" class="form-control scan-input" id="manualSearchInput"
+                               placeholder="상품명으로 검색" disabled>
+                        <button class="btn btn-warning px-3" id="manualSearchBtn" onclick="searchProducts()" disabled>
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    <div id="searchResultArea" class="mt-2" style="display:none; max-height: 250px; overflow-y: auto;"></div>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control scan-input" id="manualSelectedName"
+                           placeholder="선택된 상품" readonly disabled
+                           style="background: #e9ecef;">
+                </div>
+                <div class="col-md-1">
+                    <input type="number" class="form-control scan-input" id="manualQuantityInput"
+                           value="1" min="1" disabled>
+                </div>
+                <div class="col-md-2 d-flex align-items-start">
+                    <button class="btn btn-warning w-100 py-2" id="manualRegisterBtn" onclick="manualRegister()" disabled>
                         <i class="bi bi-plus-circle me-1"></i>등록
                     </button>
                 </div>
@@ -459,6 +522,22 @@ document.addEventListener('DOMContentLoaded', function() {
             registerProduct();
         }
     });
+
+    // 수동 등록: 검색 Enter
+    document.getElementById('manualSearchInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchProducts();
+        }
+    });
+
+    // 수동 등록: 수량 Enter
+    document.getElementById('manualQuantityInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            manualRegister();
+        }
+    });
 });
 
 async function scanLocation() {
@@ -524,6 +603,16 @@ function enableProductInput() {
     document.getElementById('productNameInput').disabled = false;
     document.getElementById('productQuantityInput').disabled = false;
     document.getElementById('registerBtn').disabled = false;
+
+    // 수동 등록 영역도 활성화
+    const manualArea = document.getElementById('manualRegisterArea');
+    manualArea.classList.add('active');
+    manualArea.classList.remove('disabled');
+    document.getElementById('manualInputHint').textContent = '';
+    document.getElementById('manualSearchInput').disabled = false;
+    document.getElementById('manualSearchBtn').disabled = false;
+    document.getElementById('manualQuantityInput').disabled = false;
+    document.getElementById('manualRegisterBtn').disabled = false;
 }
 
 function applySingleProduct(product) {
@@ -610,8 +699,9 @@ async function lookupAndRegister(barcode) {
         const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
         const data = await resp.json();
         if (!data.found) {
-            // 미등록 상품 — 바로 등록 진행
-            registerProduct();
+            // 미등록 바코드 — 상품명 입력 필드로 포커스 이동
+            alert('등록되지 않은 바코드입니다.\n상품명을 직접 입력해주세요.');
+            document.getElementById('productNameInput').focus();
             return;
         }
 
@@ -624,7 +714,9 @@ async function lookupAndRegister(barcode) {
             applySingleProduct(data.product);
         }
     } catch (e) {
-        // 조회 실패해도 진행
+        // 조회 실패 — 상품명 입력 유도
+        document.getElementById('productNameInput').focus();
+        return;
     }
 
     // 조회 후 등록 실행
@@ -672,13 +764,8 @@ async function registerProduct() {
             document.getElementById('productQuantityInput').value = '1';
             document.getElementById('productBarcodeInput').focus();
 
-            // 기록 새로고침
+            // 기록 새로고침 (수량 합산 반영)
             loadLocationRecords();
-
-            // 로케이션 기록 수 업데이트
-            const countEl = document.getElementById('locationRecordCount');
-            const current = parseInt(countEl.textContent) || 0;
-            countEl.textContent = (current + 1) + '건 등록됨';
         } else {
             alert(data.error || '등록 실패');
         }
@@ -750,6 +837,99 @@ async function deleteRecord(recordId) {
             loadLocationRecords();
         } else {
             alert(data.error || '삭제 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+// ========== 수동 등록 (상품명 검색) ==========
+let manualSelectedBarcode = '';
+let manualSelectedName = '';
+
+async function searchProducts() {
+    const query = document.getElementById('manualSearchInput').value.trim();
+    if (!query) return;
+
+    const resultArea = document.getElementById('searchResultArea');
+    resultArea.style.display = 'block';
+    resultArea.innerHTML = '<div class="text-center text-muted py-2"><div class="spinner-border spinner-border-sm me-1"></div> 검색 중...</div>';
+
+    try {
+        const resp = await fetch(`{% url "inventory:get_products" %}?search=${encodeURIComponent(query)}`);
+        const data = await resp.json();
+        const products = data.products || [];
+
+        if (!products.length) {
+            resultArea.innerHTML = '<div class="text-center text-muted py-2">검색 결과가 없습니다.</div>';
+            return;
+        }
+
+        resultArea.innerHTML = products.slice(0, 20).map(p => {
+            const displayLabel = p.display_name && p.display_name !== p.name
+                ? `${escapeHtml(p.display_name)} <span class="item-barcode">(${escapeHtml(p.name)})</span>`
+                : escapeHtml(p.name);
+            return `
+                <div class="search-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
+                    <div class="item-name">${displayLabel}</div>
+                    <div class="item-barcode"><i class="bi bi-upc me-1"></i>${escapeHtml(p.barcode)}</div>
+                </div>`;
+        }).join('');
+    } catch (e) {
+        resultArea.innerHTML = '<div class="text-center text-danger py-2">검색 실패</div>';
+    }
+}
+
+function selectManualProduct(barcode, name) {
+    manualSelectedBarcode = barcode;
+    manualSelectedName = name;
+    document.getElementById('manualSelectedName').value = name;
+    document.getElementById('searchResultArea').style.display = 'none';
+    document.getElementById('manualQuantityInput').focus();
+}
+
+async function manualRegister() {
+    if (!currentLocationId) {
+        alert('로케이션을 먼저 스캔해주세요.');
+        return;
+    }
+    if (!manualSelectedName) {
+        alert('상품을 먼저 검색하여 선택해주세요.');
+        return;
+    }
+
+    const quantity = parseInt(document.getElementById('manualQuantityInput').value) || 1;
+
+    try {
+        const resp = await fetch('{% url "inventory:scan_product" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                session_id: activeSessionId,
+                location_id: currentLocationId,
+                barcode: manualSelectedBarcode,
+                product_name: manualSelectedName,
+                quantity,
+            }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // 초기화
+            document.getElementById('manualSearchInput').value = '';
+            document.getElementById('manualSelectedName').value = '';
+            document.getElementById('manualQuantityInput').value = '1';
+            manualSelectedBarcode = '';
+            manualSelectedName = '';
+            document.getElementById('searchResultArea').style.display = 'none';
+            document.getElementById('manualSearchInput').focus();
+
+            loadLocationRecords();
+        } else {
+            alert(data.error || '등록 실패');
         }
     } catch (e) {
         alert('네트워크 오류가 발생했습니다.');

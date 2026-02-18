@@ -512,7 +512,13 @@ def scan_location(request):
 @admin_required
 @require_POST
 def scan_product(request):
-    """상품을 등록한다."""
+    """상품을 등록한다.
+
+    동일 세션+로케이션+바코드+상품명 조합이 이미 있으면 수량을 합산한다.
+    바코드만 입력하고 상품명이 없는 경우:
+      - 상품 마스터에 단일 상품이 있으면 자동 보완
+      - 없으면 에러 반환 (수기 입력 유도)
+    """
     try:
         data = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
@@ -552,17 +558,45 @@ def scan_product(request):
     # 상품 마스터에서 상품명 자동 보완 (단일 상품만)
     if barcode and not product_name:
         master_products = Product.objects.filter(barcode=barcode)
-        if master_products.count() == 1:
-            product_name = master_products.first().name
+        cnt = master_products.count()
+        if cnt == 1:
+            product_name = master_products.first().display_name or master_products.first().name
+        elif cnt == 0:
+            # 미등록 바코드 — 자동 등록 차단
+            return JsonResponse({
+                'error': f'등록되지 않은 바코드입니다: {barcode}\n상품 관리에서 먼저 등록하거나, 상품명을 수기로 입력해주세요.',
+            }, status=400)
+        else:
+            # 복수 상품 — 클라이언트에서 선택해야 함
+            return JsonResponse({
+                'error': '동일 바코드에 여러 상품이 있습니다. 상품을 선택해주세요.',
+            }, status=400)
 
-    record = InventoryRecord.objects.create(
+    if not product_name:
+        return JsonResponse({'error': '상품명을 입력해주세요.'}, status=400)
+
+    # 동일 세션+로케이션+바코드+상품명이 있으면 수량 합산
+    existing = InventoryRecord.objects.filter(
         session=session,
         location=location,
         barcode=barcode,
         product_name=product_name,
-        quantity=quantity,
-        worker=request.user.name if hasattr(request.user, 'name') else str(request.user),
-    )
+    ).first()
+
+    if existing:
+        existing.quantity += quantity
+        existing.worker = request.user.name if hasattr(request.user, 'name') else str(request.user)
+        existing.save(update_fields=['quantity', 'worker'])
+        record = existing
+    else:
+        record = InventoryRecord.objects.create(
+            session=session,
+            location=location,
+            barcode=barcode,
+            product_name=product_name,
+            quantity=quantity,
+            worker=request.user.name if hasattr(request.user, 'name') else str(request.user),
+        )
 
     return JsonResponse({
         'success': True,
