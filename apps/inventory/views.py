@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import Location, InventorySession, InventoryRecord
+from .models import Product, Location, InventorySession, InventoryRecord
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,278 @@ def status_page(request):
         'sessions': sessions,
         'active_session': active_session,
     })
+
+
+@login_required
+@admin_required
+def products_page(request):
+    """상품 마스터 관리 페이지"""
+    return render(request, 'inventory/products.html')
+
+
+# ============================================================================
+# API: 상품 마스터
+# ============================================================================
+
+@login_required
+@admin_required
+@require_GET
+def get_products(request):
+    """상품 목록을 조회한다.
+
+    Query params:
+        search: 검색어 (바코드 or 상품명)
+    """
+    from django.db.models import Q
+
+    search = request.GET.get('search', '').strip()
+    products = Product.objects.all()
+
+    if search:
+        products = products.filter(
+            Q(barcode__icontains=search) |
+            Q(name__icontains=search)
+        )
+
+    products = products.order_by('name')[:500]
+
+    return JsonResponse({
+        'products': [
+            {
+                'id': p.pk,
+                'barcode': p.barcode,
+                'name': p.name,
+                'created_at': timezone.localtime(p.created_at).strftime('%Y-%m-%d %H:%M'),
+            }
+            for p in products
+        ],
+        'total': Product.objects.count(),
+    })
+
+
+@csrf_exempt
+@login_required
+@admin_required
+@require_POST
+def create_product(request):
+    """상품을 수동으로 등록한다."""
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    barcode = data.get('barcode', '').strip()
+    name = data.get('name', '').strip()
+
+    if not barcode or not name:
+        return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
+
+    if Product.objects.filter(barcode=barcode).exists():
+        return JsonResponse({'error': f'이미 등록된 바코드입니다: {barcode}'}, status=400)
+
+    product = Product.objects.create(barcode=barcode, name=name)
+
+    return JsonResponse({
+        'success': True,
+        'product': {
+            'id': product.pk,
+            'barcode': product.barcode,
+            'name': product.name,
+        },
+    })
+
+
+@csrf_exempt
+@login_required
+@admin_required
+@require_POST
+def update_product(request, product_id):
+    """상품 정보를 수정한다."""
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': '상품을 찾을 수 없습니다.'}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    barcode = data.get('barcode', '').strip()
+    name = data.get('name', '').strip()
+
+    if not barcode or not name:
+        return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
+
+    # 바코드 중복 체크 (자기 자신 제외)
+    if Product.objects.filter(barcode=barcode).exclude(pk=product_id).exists():
+        return JsonResponse({'error': f'이미 등록된 바코드입니다: {barcode}'}, status=400)
+
+    product.barcode = barcode
+    product.name = name
+    product.save(update_fields=['barcode', 'name', 'updated_at'])
+
+    return JsonResponse({
+        'success': True,
+        'product': {
+            'id': product.pk,
+            'barcode': product.barcode,
+            'name': product.name,
+        },
+    })
+
+
+@csrf_exempt
+@login_required
+@admin_required
+def delete_product(request, product_id):
+    """상품을 삭제한다."""
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'DELETE 메서드만 허용됩니다.'}, status=405)
+
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': '상품을 찾을 수 없습니다.'}, status=404)
+
+    product.delete()
+    return JsonResponse({'success': True})
+
+
+@csrf_exempt
+@login_required
+@admin_required
+@require_POST
+def upload_products_excel(request):
+    """엑셀 파일로 상품을 일괄 등록한다.
+
+    엑셀 첫 번째 행: 헤더 (바코드, 상품명)
+    두 번째 행부터: 데이터
+    """
+    import openpyxl
+    import xlrd
+
+    excel_file = request.FILES.get('file')
+    if not excel_file:
+        return JsonResponse({'error': '파일을 선택해주세요.'}, status=400)
+
+    filename = excel_file.name.lower()
+    if not filename.endswith(('.xlsx', '.xls')):
+        return JsonResponse({'error': '엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.'}, status=400)
+
+    try:
+        # 엑셀 파싱
+        if filename.endswith('.xlsx'):
+            wb = openpyxl.load_workbook(excel_file, read_only=True)
+            ws = wb.active
+            headers = [str(cell.value or '').strip() for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            rows = list(ws.iter_rows(min_row=2, values_only=True))
+            wb.close()
+        else:
+            content = excel_file.read()
+            wb = xlrd.open_workbook(file_contents=content)
+            ws = wb.sheet_by_index(0)
+            headers = [str(ws.cell_value(0, col)).strip() for col in range(ws.ncols)]
+            rows = []
+            for row_idx in range(1, ws.nrows):
+                rows.append(tuple(ws.cell_value(row_idx, col) for col in range(ws.ncols)))
+
+        # 헤더에서 바코드/상품명 컬럼 인덱스 찾기
+        barcode_idx = _find_column_index(headers, ['바코드', '바코드번호', 'barcode', 'BarCode', 'BARCODE'])
+        name_idx = _find_column_index(headers, ['상품명', '품명', '제품명', '이름', 'name', 'product_name', '상품이름'])
+
+        if barcode_idx is None:
+            return JsonResponse({'error': '바코드 컬럼을 찾을 수 없습니다. 헤더에 "바코드" 또는 "barcode"가 포함되어야 합니다.'}, status=400)
+        if name_idx is None:
+            return JsonResponse({'error': '상품명 컬럼을 찾을 수 없습니다. 헤더에 "상품명" 또는 "name"이 포함되어야 합니다.'}, status=400)
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+
+        for row_num, row in enumerate(rows, start=2):
+            barcode_val = str(row[barcode_idx] or '').strip() if barcode_idx < len(row) else ''
+            name_val = str(row[name_idx] or '').strip() if name_idx < len(row) else ''
+
+            # 바코드가 숫자로 읽힌 경우 정수로 변환
+            if barcode_val and '.' in barcode_val:
+                try:
+                    barcode_val = str(int(float(barcode_val)))
+                except (ValueError, OverflowError):
+                    pass
+
+            if not barcode_val or not name_val:
+                skipped_count += 1
+                continue
+
+            try:
+                product, created = Product.objects.update_or_create(
+                    barcode=barcode_val,
+                    defaults={'name': name_val},
+                )
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+            except Exception as e:
+                errors.append(f'{row_num}행: {str(e)}')
+                skipped_count += 1
+
+        result_msg = f'신규 {created_count}건, 업데이트 {updated_count}건'
+        if skipped_count:
+            result_msg += f', 스킵 {skipped_count}건'
+
+        return JsonResponse({
+            'success': True,
+            'message': result_msg,
+            'created': created_count,
+            'updated': updated_count,
+            'skipped': skipped_count,
+            'errors': errors[:10],  # 최대 10개만
+        })
+
+    except Exception as e:
+        logger.error('상품 엑셀 업로드 실패: %s', e, exc_info=True)
+        return JsonResponse({'error': f'파일 처리 중 오류: {str(e)}'}, status=500)
+
+
+@login_required
+@admin_required
+@require_GET
+def lookup_product(request):
+    """바코드로 상품을 조회한다 (스캔 시 자동완성용).
+
+    Query params:
+        barcode: 상품 바코드
+    """
+    barcode = request.GET.get('barcode', '').strip()
+    if not barcode:
+        return JsonResponse({'found': False})
+
+    try:
+        product = Product.objects.get(barcode=barcode)
+        return JsonResponse({
+            'found': True,
+            'product': {
+                'id': product.pk,
+                'barcode': product.barcode,
+                'name': product.name,
+            },
+        })
+    except Product.DoesNotExist:
+        return JsonResponse({'found': False})
+
+
+def _find_column_index(headers, candidates):
+    """헤더 리스트에서 후보 컬럼명 중 매칭되는 인덱스를 반환한다."""
+    headers_lower = [h.lower().replace(' ', '') for h in headers]
+    for candidate in candidates:
+        candidate_lower = candidate.lower().replace(' ', '')
+        for idx, h in enumerate(headers_lower):
+            if candidate_lower in h or h in candidate_lower:
+                return idx
+    return None
 
 
 # ============================================================================
@@ -239,6 +511,14 @@ def scan_product(request):
         location = Location.objects.get(pk=location_id)
     except Location.DoesNotExist:
         return JsonResponse({'error': '로케이션을 찾을 수 없습니다.'}, status=400)
+
+    # 상품 마스터에서 상품명 자동 보완
+    if barcode and not product_name:
+        try:
+            master_product = Product.objects.get(barcode=barcode)
+            product_name = master_product.name
+        except Product.DoesNotExist:
+            pass
 
     record = InventoryRecord.objects.create(
         session=session,

@@ -83,6 +83,21 @@
         0% { background: #d4edda; }
         100% { background: transparent; }
     }
+
+    /* 상품 자동완성 표시 */
+    .auto-filled {
+        background-color: #d1ecf1 !important;
+        border-color: #0dcaf0 !important;
+        transition: background-color 0.3s;
+    }
+    .auto-fill-badge {
+        display: none;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+    .auto-fill-badge.show {
+        display: inline-block;
+    }
 </style>
 {% endblock %}
 
@@ -159,6 +174,9 @@
                     <label class="form-label small fw-medium">상품명</label>
                     <input type="text" class="form-control scan-input" id="productNameInput"
                            placeholder="상품명 입력" disabled>
+                    <span class="badge bg-info auto-fill-badge" id="autoFillBadge">
+                        <i class="bi bi-magic me-1"></i>자동입력
+                    </span>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-medium">수량</label>
@@ -236,12 +254,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 상품 바코드 Enter → 수량으로 포커스 (수량 기본값 있으므로 바로 등록도 가능)
+    // 상품 바코드 Enter → 바코드 조회 후 등록
     barcodeInput.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
-            registerProduct();
+            // 상품명이 비어있으면 조회 후 등록, 이미 있으면 바로 등록
+            const nameInput = document.getElementById('productNameInput');
+            if (!nameInput.value.trim() && barcodeInput.value.trim()) {
+                lookupAndRegister(barcodeInput.value.trim());
+            } else {
+                registerProduct();
+            }
         }
+    });
+
+    // 상품 바코드 포커스 해제 시 자동 조회
+    barcodeInput.addEventListener('blur', function() {
+        const barcode = barcodeInput.value.trim();
+        const nameInput = document.getElementById('productNameInput');
+        if (barcode && !nameInput.value.trim()) {
+            lookupProduct(barcode);
+        }
+    });
+
+    // 상품명 입력 시 자동입력 표시 제거
+    document.getElementById('productNameInput').addEventListener('input', function() {
+        this.classList.remove('auto-filled');
+        document.getElementById('autoFillBadge').classList.remove('show');
     });
 
     // 상품명 Enter
@@ -325,6 +364,45 @@ function enableProductInput() {
     document.getElementById('registerBtn').disabled = false;
 }
 
+async function lookupProduct(barcode) {
+    // 바코드로 상품 마스터를 조회하여 상품명을 자동 입력한다.
+    if (!barcode) return;
+
+    try {
+        const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
+        const data = await resp.json();
+
+        if (data.found) {
+            const nameInput = document.getElementById('productNameInput');
+            nameInput.value = data.product.name;
+            nameInput.classList.add('auto-filled');
+            document.getElementById('autoFillBadge').classList.add('show');
+        }
+    } catch (e) {
+        // 조회 실패해도 무시 - 수동 입력 가능
+    }
+}
+
+async function lookupAndRegister(barcode) {
+    // 바코드 조회 후 바로 등록한다 (Enter 키 처리용).
+    try {
+        const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
+        const data = await resp.json();
+
+        if (data.found) {
+            const nameInput = document.getElementById('productNameInput');
+            nameInput.value = data.product.name;
+            nameInput.classList.add('auto-filled');
+            document.getElementById('autoFillBadge').classList.add('show');
+        }
+    } catch (e) {
+        // 조회 실패해도 진행
+    }
+
+    // 조회 후 등록 실행
+    registerProduct();
+}
+
 async function registerProduct() {
     if (!currentLocationId) {
         alert('로케이션을 먼저 스캔해주세요.');
@@ -361,6 +439,8 @@ async function registerProduct() {
             // 입력 초기화
             document.getElementById('productBarcodeInput').value = '';
             document.getElementById('productNameInput').value = '';
+            document.getElementById('productNameInput').classList.remove('auto-filled');
+            document.getElementById('autoFillBadge').classList.remove('show');
             document.getElementById('productQuantityInput').value = '1';
             document.getElementById('productBarcodeInput').focus();
 

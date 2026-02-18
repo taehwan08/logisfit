@@ -11,6 +11,15 @@ urlpatterns = [
     path('', views.session_page, name='session_page'),
     path('scan/', views.scan_page, name='scan_page'),
     path('status/', views.status_page, name='status_page'),
+    path('products/', views.products_page, name='products_page'),
+
+    # API: 상품 마스터
+    path('api/products/', views.get_products, name='get_products'),
+    path('api/products/create/', views.create_product, name='create_product'),
+    path('api/products/<int:product_id>/update/', views.update_product, name='update_product'),
+    path('api/products/<int:product_id>/delete/', views.delete_product, name='delete_product'),
+    path('api/products/upload/', views.upload_products_excel, name='upload_products_excel'),
+    path('api/products/lookup/', views.lookup_product, name='lookup_product'),
 
     # API: 세션
     path('api/sessions/', views.get_sessions, name='get_sessions'),

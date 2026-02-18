@@ -1,0 +1,466 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}상품 관리{% endblock %}
+{% block page_title %}상품 마스터 관리{% endblock %}
+
+{% block extra_css %}
+<style>
+    .products-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    /* 업로드 영역 */
+    .upload-zone {
+        border: 2px dashed #dee2e6;
+        border-radius: 12px;
+        padding: 2rem 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: #fafbfc;
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+        border-color: #0d6efd;
+        background: #f0f6ff;
+    }
+    .upload-zone i {
+        font-size: 2.5rem;
+        color: #adb5bd;
+    }
+
+    /* 수동 등록 폼 */
+    .add-form .form-control {
+        border-radius: 10px;
+    }
+
+    /* 테이블 */
+    .product-table th {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #6c757d;
+        border-bottom: 2px solid #dee2e6;
+    }
+    .product-table td {
+        font-size: 0.9rem;
+        vertical-align: middle;
+    }
+
+    /* 통계 */
+    .stat-badge {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    /* 수정 모드 */
+    .edit-input {
+        border: 1px solid #0d6efd;
+        border-radius: 6px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.88rem;
+        width: 100%;
+    }
+
+    .empty-state {
+        padding: 3rem;
+        text-align: center;
+        color: #adb5bd;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- 상품 등록 영역 (엑셀 + 수동) -->
+    <div class="col-md-6">
+        <div class="card products-card h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold">
+                    <i class="bi bi-file-earmark-spreadsheet text-success me-2"></i>엑셀 일괄 등록
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="upload-zone" id="uploadZone"
+                     onclick="document.getElementById('excelFileInput').click()">
+                    <i class="bi bi-cloud-arrow-up d-block mb-2"></i>
+                    <p class="fw-medium mb-1">엑셀 파일을 드래그하거나 클릭하세요</p>
+                    <p class="text-muted small mb-0">
+                        .xlsx, .xls 지원 | 헤더: <code>바코드</code>, <code>상품명</code>
+                    </p>
+                </div>
+                <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none"
+                       onchange="uploadExcel(this.files[0])">
+
+                <div id="uploadResult" class="mt-3" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card products-card h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold">
+                    <i class="bi bi-plus-circle text-primary me-2"></i>수동 등록
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="add-form">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">바코드</label>
+                        <input type="text" class="form-control" id="addBarcodeInput"
+                               placeholder="상품 바코드 입력">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">상품명</label>
+                        <input type="text" class="form-control" id="addNameInput"
+                               placeholder="상품명 입력">
+                    </div>
+                    <button class="btn btn-primary w-100" onclick="addProduct()">
+                        <i class="bi bi-plus-lg me-1"></i>상품 등록
+                    </button>
+                </div>
+                <div id="addResult" class="mt-3" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상품 목록 -->
+    <div class="col-12">
+        <div class="card products-card">
+            <div class="card-header bg-white border-bottom py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold">
+                        <i class="bi bi-box-seam me-2"></i>등록된 상품
+                        <span class="badge bg-primary ms-2 stat-badge" id="totalCount">0</span>
+                    </h6>
+                    <div class="d-flex gap-2" style="max-width: 350px; width: 100%;">
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="searchInput"
+                                   placeholder="바코드 또는 상품명 검색">
+                            <button class="btn btn-outline-secondary" onclick="loadProducts()">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover product-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-4" style="width: 30%;">바코드</th>
+                                <th style="width: 40%;">상품명</th>
+                                <th>등록일</th>
+                                <th class="text-end pe-4" style="width: 120px;">작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTableBody">
+                            <tr>
+                                <td colspan="4">
+                                    <div class="text-center text-muted py-3">
+                                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                        불러오는 중...
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+let editingProductId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadProducts();
+
+    // 검색 Enter
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') loadProducts();
+    });
+
+    // 수동 등록 Enter
+    document.getElementById('addBarcodeInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('addNameInput').focus();
+    });
+    document.getElementById('addNameInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') addProduct();
+    });
+
+    // 드래그 & 드롭
+    const zone = document.getElementById('uploadZone');
+    zone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        zone.classList.add('drag-over');
+    });
+    zone.addEventListener('dragleave', function() {
+        zone.classList.remove('drag-over');
+    });
+    zone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadExcel(file);
+    });
+});
+
+// ========== 상품 목록 ==========
+async function loadProducts() {
+    const search = document.getElementById('searchInput').value.trim();
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+
+    try {
+        const resp = await fetch(`{% url "inventory:get_products" %}?${params.toString()}`);
+        const data = await resp.json();
+        renderProducts(data.products || []);
+        document.getElementById('totalCount').textContent = data.total || 0;
+    } catch (e) {
+        console.error('상품 목록 로드 실패:', e);
+    }
+}
+
+function renderProducts(products) {
+    const tbody = document.getElementById('productTableBody');
+
+    if (!products.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4">
+                    <div class="empty-state">
+                        <i class="bi bi-inbox d-block"></i>
+                        <p class="mb-0">등록된 상품이 없습니다.</p>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = products.map(p => `
+        <tr id="product-row-${p.id}">
+            <td class="ps-4">
+                <code id="barcode-${p.id}">${escapeHtml(p.barcode)}</code>
+            </td>
+            <td>
+                <span id="name-${p.id}">${escapeHtml(p.name)}</span>
+            </td>
+            <td class="small text-muted">${escapeHtml(p.created_at)}</td>
+            <td class="text-end pe-4">
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="startEdit(${p.id}, '${escapeAttr(p.barcode)}', '${escapeAttr(p.name)}')" title="수정">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct(${p.id})" title="삭제">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ========== 수동 등록 ==========
+async function addProduct() {
+    const barcode = document.getElementById('addBarcodeInput').value.trim();
+    const name = document.getElementById('addNameInput').value.trim();
+
+    if (!barcode || !name) {
+        showResult('addResult', 'danger', '바코드와 상품명을 모두 입력해주세요.');
+        return;
+    }
+
+    try {
+        const resp = await fetch('{% url "inventory:create_product" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ barcode, name }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            showResult('addResult', 'success', `등록 완료: ${escapeHtml(data.product.name)}`);
+            document.getElementById('addBarcodeInput').value = '';
+            document.getElementById('addNameInput').value = '';
+            document.getElementById('addBarcodeInput').focus();
+            loadProducts();
+        } else {
+            showResult('addResult', 'danger', data.error);
+        }
+    } catch (e) {
+        showResult('addResult', 'danger', '네트워크 오류가 발생했습니다.');
+    }
+}
+
+// ========== 인라인 수정 ==========
+function startEdit(id, barcode, name) {
+    // 이전 편집 취소
+    if (editingProductId && editingProductId !== id) {
+        cancelEdit(editingProductId);
+    }
+    editingProductId = id;
+
+    const barcodeCell = document.getElementById(`barcode-${id}`);
+    const nameCell = document.getElementById(`name-${id}`);
+    const row = document.getElementById(`product-row-${id}`);
+    const actionCell = row.querySelector('td:last-child');
+
+    barcodeCell.innerHTML = `<input type="text" class="edit-input" id="edit-barcode-${id}" value="${escapeAttr(barcode)}">`;
+    nameCell.innerHTML = `<input type="text" class="edit-input" id="edit-name-${id}" value="${escapeAttr(name)}">`;
+    actionCell.innerHTML = `
+        <button class="btn btn-sm btn-success me-1" onclick="saveEdit(${id})" title="저장">
+            <i class="bi bi-check-lg"></i>
+        </button>
+        <button class="btn btn-sm btn-secondary" onclick="cancelEdit(${id})" title="취소">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    `;
+
+    document.getElementById(`edit-barcode-${id}`).focus();
+
+    // Enter키로 저장
+    document.getElementById(`edit-barcode-${id}`).addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') saveEdit(id);
+        if (e.key === 'Escape') cancelEdit(id);
+    });
+    document.getElementById(`edit-name-${id}`).addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') saveEdit(id);
+        if (e.key === 'Escape') cancelEdit(id);
+    });
+}
+
+async function saveEdit(id) {
+    const barcode = document.getElementById(`edit-barcode-${id}`).value.trim();
+    const name = document.getElementById(`edit-name-${id}`).value.trim();
+
+    if (!barcode || !name) {
+        alert('바코드와 상품명을 모두 입력해주세요.');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/inventory/api/products/${id}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ barcode, name }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            editingProductId = null;
+            loadProducts();
+        } else {
+            alert(data.error);
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+function cancelEdit(id) {
+    editingProductId = null;
+    loadProducts();
+}
+
+// ========== 삭제 ==========
+async function deleteProduct(id) {
+    if (!confirm('이 상품을 삭제하시겠습니까?')) return;
+
+    try {
+        const resp = await fetch(`/inventory/api/products/${id}/delete/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken },
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            loadProducts();
+        } else {
+            alert(data.error || '삭제 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+// ========== 엑셀 업로드 ==========
+async function uploadExcel(file) {
+    if (!file) return;
+
+    const resultEl = document.getElementById('uploadResult');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+        <div class="alert alert-info mb-0 d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            <strong>${escapeHtml(file.name)}</strong> 업로드 중...
+        </div>`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch('{% url "inventory:upload_products_excel" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData,
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            let msg = `<strong>${escapeHtml(file.name)}</strong> 업로드 완료<br>`;
+            msg += `<span class="badge bg-success me-1">신규 ${data.created}건</span>`;
+            msg += `<span class="badge bg-info me-1">업데이트 ${data.updated}건</span>`;
+            if (data.skipped) {
+                msg += `<span class="badge bg-warning text-dark">스킵 ${data.skipped}건</span>`;
+            }
+            resultEl.innerHTML = `<div class="alert alert-success mb-0">${msg}</div>`;
+            loadProducts();
+        } else {
+            resultEl.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(data.error)}</div>`;
+        }
+    } catch (e) {
+        resultEl.innerHTML = `<div class="alert alert-danger mb-0">네트워크 오류가 발생했습니다.</div>`;
+    }
+
+    // 파일 인풋 초기화
+    document.getElementById('excelFileInput').value = '';
+}
+
+// ========== 유틸 ==========
+function showResult(elementId, type, message) {
+    const el = document.getElementById(elementId);
+    el.style.display = 'block';
+    el.innerHTML = `<div class="alert alert-${type} mb-0 small">${message}</div>`;
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function escapeAttr(str) {
+    if (!str) return '';
+    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}
