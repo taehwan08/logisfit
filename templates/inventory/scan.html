@@ -364,6 +364,26 @@ function enableProductInput() {
     document.getElementById('registerBtn').disabled = false;
 }
 
+function applyLookupResult(data) {
+    // 조회 결과를 상품명 필드에 반영한다.
+    if (!data.found) return;
+
+    const nameInput = document.getElementById('productNameInput');
+    // 관리명이 있으면 관리명 우선, 없으면 상품명
+    const displayText = data.product.display_name || data.product.name;
+    nameInput.value = displayText;
+    nameInput.classList.add('auto-filled');
+
+    // 배지에 상품명 표시 (관리명과 다를 경우)
+    const badge = document.getElementById('autoFillBadge');
+    if (data.product.display_name && data.product.display_name !== data.product.name) {
+        badge.innerHTML = `<i class="bi bi-magic me-1"></i>자동입력 | ${escapeHtml(data.product.name)}`;
+    } else {
+        badge.innerHTML = `<i class="bi bi-magic me-1"></i>자동입력`;
+    }
+    badge.classList.add('show');
+}
+
 async function lookupProduct(barcode) {
     // 바코드로 상품 마스터를 조회하여 상품명을 자동 입력한다.
     if (!barcode) return;
@@ -371,13 +391,7 @@ async function lookupProduct(barcode) {
     try {
         const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
         const data = await resp.json();
-
-        if (data.found) {
-            const nameInput = document.getElementById('productNameInput');
-            nameInput.value = data.product.name;
-            nameInput.classList.add('auto-filled');
-            document.getElementById('autoFillBadge').classList.add('show');
-        }
+        applyLookupResult(data);
     } catch (e) {
         // 조회 실패해도 무시 - 수동 입력 가능
     }
@@ -388,13 +402,7 @@ async function lookupAndRegister(barcode) {
     try {
         const resp = await fetch(`{% url "inventory:lookup_product" %}?barcode=${encodeURIComponent(barcode)}`);
         const data = await resp.json();
-
-        if (data.found) {
-            const nameInput = document.getElementById('productNameInput');
-            nameInput.value = data.product.name;
-            nameInput.classList.add('auto-filled');
-            document.getElementById('autoFillBadge').classList.add('show');
-        }
+        applyLookupResult(data);
     } catch (e) {
         // 조회 실패해도 진행
     }

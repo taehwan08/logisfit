@@ -92,7 +92,7 @@
                     <i class="bi bi-cloud-arrow-up d-block mb-2"></i>
                     <p class="fw-medium mb-1">엑셀 파일을 드래그하거나 클릭하세요</p>
                     <p class="text-muted small mb-0">
-                        .xlsx, .xls 지원 | 헤더: <code>바코드</code>, <code>상품명</code>
+                        .xlsx, .xls 지원 | 헤더: <code>상품명</code>, <code>관리명</code>, <code>바코드</code>
                     </p>
                 </div>
                 <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none"
@@ -122,6 +122,11 @@
                         <input type="text" class="form-control" id="addNameInput"
                                placeholder="상품명 입력">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">관리명</label>
+                        <input type="text" class="form-control" id="addDisplayNameInput"
+                               placeholder="관리명 입력 (선택)">
+                    </div>
                     <button class="btn btn-primary w-100" onclick="addProduct()">
                         <i class="bi bi-plus-lg me-1"></i>상품 등록
                     </button>
@@ -143,7 +148,7 @@
                     <div class="d-flex gap-2" style="max-width: 350px; width: 100%;">
                         <div class="input-group input-group-sm">
                             <input type="text" class="form-control" id="searchInput"
-                                   placeholder="바코드 또는 상품명 검색">
+                                   placeholder="바코드, 상품명, 관리명 검색">
                             <button class="btn btn-outline-secondary" onclick="loadProducts()">
                                 <i class="bi bi-search"></i>
                             </button>
@@ -156,15 +161,16 @@
                     <table class="table table-hover product-table mb-0">
                         <thead>
                             <tr>
-                                <th class="ps-4" style="width: 30%;">바코드</th>
-                                <th style="width: 40%;">상품명</th>
+                                <th class="ps-4">바코드</th>
+                                <th>상품명</th>
+                                <th>관리명</th>
                                 <th>등록일</th>
-                                <th class="text-end pe-4" style="width: 120px;">작업</th>
+                                <th class="text-end pe-4" style="width: 110px;">작업</th>
                             </tr>
                         </thead>
                         <tbody id="productTableBody">
                             <tr>
-                                <td colspan="4">
+                                <td colspan="5">
                                     <div class="text-center text-muted py-3">
                                         <div class="spinner-border spinner-border-sm me-2" role="status"></div>
                                         불러오는 중...
@@ -193,11 +199,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') loadProducts();
     });
 
-    // 수동 등록 Enter
+    // 수동 등록 Enter 체인
     document.getElementById('addBarcodeInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') document.getElementById('addNameInput').focus();
     });
     document.getElementById('addNameInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('addDisplayNameInput').focus();
+    });
+    document.getElementById('addDisplayNameInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') addProduct();
     });
 
@@ -240,7 +249,7 @@ function renderProducts(products) {
     if (!products.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="4">
+                <td colspan="5">
                     <div class="empty-state">
                         <i class="bi bi-inbox d-block"></i>
                         <p class="mb-0">등록된 상품이 없습니다.</p>
@@ -258,9 +267,12 @@ function renderProducts(products) {
             <td>
                 <span id="name-${p.id}">${escapeHtml(p.name)}</span>
             </td>
+            <td>
+                <span id="display-name-${p.id}" class="text-muted">${escapeHtml(p.display_name || '-')}</span>
+            </td>
             <td class="small text-muted">${escapeHtml(p.created_at)}</td>
             <td class="text-end pe-4">
-                <button class="btn btn-sm btn-outline-primary me-1" onclick="startEdit(${p.id}, '${escapeAttr(p.barcode)}', '${escapeAttr(p.name)}')" title="수정">
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="startEdit(${p.id}, '${escapeAttr(p.barcode)}', '${escapeAttr(p.name)}', '${escapeAttr(p.display_name || '')}')" title="수정">
                     <i class="bi bi-pencil"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct(${p.id})" title="삭제">
@@ -275,6 +287,7 @@ function renderProducts(products) {
 async function addProduct() {
     const barcode = document.getElementById('addBarcodeInput').value.trim();
     const name = document.getElementById('addNameInput').value.trim();
+    const displayName = document.getElementById('addDisplayNameInput').value.trim();
 
     if (!barcode || !name) {
         showResult('addResult', 'danger', '바코드와 상품명을 모두 입력해주세요.');
@@ -288,7 +301,7 @@ async function addProduct() {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': csrfToken,
             },
-            body: JSON.stringify({ barcode, name }),
+            body: JSON.stringify({ barcode, name, display_name: displayName }),
         });
         const data = await resp.json();
 
@@ -296,6 +309,7 @@ async function addProduct() {
             showResult('addResult', 'success', `등록 완료: ${escapeHtml(data.product.name)}`);
             document.getElementById('addBarcodeInput').value = '';
             document.getElementById('addNameInput').value = '';
+            document.getElementById('addDisplayNameInput').value = '';
             document.getElementById('addBarcodeInput').focus();
             loadProducts();
         } else {
@@ -307,7 +321,7 @@ async function addProduct() {
 }
 
 // ========== 인라인 수정 ==========
-function startEdit(id, barcode, name) {
+function startEdit(id, barcode, name, displayName) {
     // 이전 편집 취소
     if (editingProductId && editingProductId !== id) {
         cancelEdit(editingProductId);
@@ -316,11 +330,13 @@ function startEdit(id, barcode, name) {
 
     const barcodeCell = document.getElementById(`barcode-${id}`);
     const nameCell = document.getElementById(`name-${id}`);
+    const displayNameCell = document.getElementById(`display-name-${id}`);
     const row = document.getElementById(`product-row-${id}`);
     const actionCell = row.querySelector('td:last-child');
 
     barcodeCell.innerHTML = `<input type="text" class="edit-input" id="edit-barcode-${id}" value="${escapeAttr(barcode)}">`;
     nameCell.innerHTML = `<input type="text" class="edit-input" id="edit-name-${id}" value="${escapeAttr(name)}">`;
+    displayNameCell.innerHTML = `<input type="text" class="edit-input" id="edit-display-name-${id}" value="${escapeAttr(displayName)}">`;
     actionCell.innerHTML = `
         <button class="btn btn-sm btn-success me-1" onclick="saveEdit(${id})" title="저장">
             <i class="bi bi-check-lg"></i>
@@ -332,20 +348,19 @@ function startEdit(id, barcode, name) {
 
     document.getElementById(`edit-barcode-${id}`).focus();
 
-    // Enter키로 저장
-    document.getElementById(`edit-barcode-${id}`).addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') saveEdit(id);
-        if (e.key === 'Escape') cancelEdit(id);
-    });
-    document.getElementById(`edit-name-${id}`).addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') saveEdit(id);
-        if (e.key === 'Escape') cancelEdit(id);
+    // Enter키로 저장, Escape로 취소
+    [`edit-barcode-${id}`, `edit-name-${id}`, `edit-display-name-${id}`].forEach(elId => {
+        document.getElementById(elId).addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') saveEdit(id);
+            if (e.key === 'Escape') cancelEdit(id);
+        });
     });
 }
 
 async function saveEdit(id) {
     const barcode = document.getElementById(`edit-barcode-${id}`).value.trim();
     const name = document.getElementById(`edit-name-${id}`).value.trim();
+    const displayName = document.getElementById(`edit-display-name-${id}`).value.trim();
 
     if (!barcode || !name) {
         alert('바코드와 상품명을 모두 입력해주세요.');
@@ -359,7 +374,7 @@ async function saveEdit(id) {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': csrfToken,
             },
-            body: JSON.stringify({ barcode, name }),
+            body: JSON.stringify({ barcode, name, display_name: displayName }),
         });
         const data = await resp.json();
 

@@ -97,7 +97,8 @@ def get_products(request):
     if search:
         products = products.filter(
             Q(barcode__icontains=search) |
-            Q(name__icontains=search)
+            Q(name__icontains=search) |
+            Q(display_name__icontains=search)
         )
 
     products = products.order_by('name')[:500]
@@ -108,6 +109,7 @@ def get_products(request):
                 'id': p.pk,
                 'barcode': p.barcode,
                 'name': p.name,
+                'display_name': p.display_name,
                 'created_at': timezone.localtime(p.created_at).strftime('%Y-%m-%d %H:%M'),
             }
             for p in products
@@ -129,6 +131,7 @@ def create_product(request):
 
     barcode = data.get('barcode', '').strip()
     name = data.get('name', '').strip()
+    display_name = data.get('display_name', '').strip()
 
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
@@ -136,7 +139,7 @@ def create_product(request):
     if Product.objects.filter(barcode=barcode).exists():
         return JsonResponse({'error': f'이미 등록된 바코드입니다: {barcode}'}, status=400)
 
-    product = Product.objects.create(barcode=barcode, name=name)
+    product = Product.objects.create(barcode=barcode, name=name, display_name=display_name)
 
     return JsonResponse({
         'success': True,
@@ -144,6 +147,7 @@ def create_product(request):
             'id': product.pk,
             'barcode': product.barcode,
             'name': product.name,
+            'display_name': product.display_name,
         },
     })
 
@@ -166,6 +170,7 @@ def update_product(request, product_id):
 
     barcode = data.get('barcode', '').strip()
     name = data.get('name', '').strip()
+    display_name = data.get('display_name', '').strip()
 
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
@@ -176,7 +181,8 @@ def update_product(request, product_id):
 
     product.barcode = barcode
     product.name = name
-    product.save(update_fields=['barcode', 'name', 'updated_at'])
+    product.display_name = display_name
+    product.save(update_fields=['barcode', 'name', 'display_name', 'updated_at'])
 
     return JsonResponse({
         'success': True,
@@ -184,6 +190,7 @@ def update_product(request, product_id):
             'id': product.pk,
             'barcode': product.barcode,
             'name': product.name,
+            'display_name': product.display_name,
         },
     })
 
@@ -243,9 +250,10 @@ def upload_products_excel(request):
             for row_idx in range(1, ws.nrows):
                 rows.append(tuple(ws.cell_value(row_idx, col) for col in range(ws.ncols)))
 
-        # 헤더에서 바코드/상품명 컬럼 인덱스 찾기
+        # 헤더에서 바코드/상품명/관리명 컬럼 인덱스 찾기
         barcode_idx = _find_column_index(headers, ['바코드', '바코드번호', 'barcode', 'BarCode', 'BARCODE'])
         name_idx = _find_column_index(headers, ['상품명', '품명', '제품명', '이름', 'name', 'product_name', '상품이름'])
+        display_name_idx = _find_column_index(headers, ['관리명', '관리이름', '관리상품명', 'display_name', '별칭'])
 
         if barcode_idx is None:
             return JsonResponse({'error': '바코드 컬럼을 찾을 수 없습니다. 헤더에 "바코드" 또는 "barcode"가 포함되어야 합니다.'}, status=400)
@@ -260,6 +268,9 @@ def upload_products_excel(request):
         for row_num, row in enumerate(rows, start=2):
             barcode_val = str(row[barcode_idx] or '').strip() if barcode_idx < len(row) else ''
             name_val = str(row[name_idx] or '').strip() if name_idx < len(row) else ''
+            display_name_val = ''
+            if display_name_idx is not None and display_name_idx < len(row):
+                display_name_val = str(row[display_name_idx] or '').strip()
 
             # 바코드가 숫자로 읽힌 경우 정수로 변환
             if barcode_val and '.' in barcode_val:
@@ -272,10 +283,14 @@ def upload_products_excel(request):
                 skipped_count += 1
                 continue
 
+            defaults = {'name': name_val}
+            if display_name_val:
+                defaults['display_name'] = display_name_val
+
             try:
                 product, created = Product.objects.update_or_create(
                     barcode=barcode_val,
-                    defaults={'name': name_val},
+                    defaults=defaults,
                 )
                 if created:
                     created_count += 1
@@ -324,6 +339,7 @@ def lookup_product(request):
                 'id': product.pk,
                 'barcode': product.barcode,
                 'name': product.name,
+                'display_name': product.display_name,
             },
         })
     except Product.DoesNotExist:

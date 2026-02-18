@@ -5,8 +5,8 @@ from .models import Product, Location, InventorySession, InventoryRecord
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('barcode', 'name', 'created_at', 'updated_at')
-    search_fields = ('barcode', 'name')
+    list_display = ('barcode', 'name', 'display_name', 'created_at', 'updated_at')
+    search_fields = ('barcode', 'name', 'display_name')
     ordering = ('name',)
 
 
