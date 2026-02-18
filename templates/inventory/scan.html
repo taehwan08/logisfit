@@ -20,6 +20,11 @@
         box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
     }
 
+    /* 바코드 입력 필드: IME(한글) 비활성화 */
+    .barcode-input {
+        ime-mode: disabled !important;
+    }
+
     /* 로케이션 정보 카드 */
     .location-info {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -154,8 +159,10 @@
                     <i class="bi bi-geo-alt-fill text-primary me-2"></i>로케이션 스캔
                 </h6>
                 <div class="input-group">
-                    <input type="text" class="form-control scan-input" id="locationInput"
-                           placeholder="로케이션 바코드를 스캔하세요" autofocus>
+                    <input type="text" class="form-control scan-input barcode-input" id="locationInput"
+                           placeholder="로케이션 바코드를 스캔하세요" autofocus
+                           inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off"
+                           enterkeyhint="go" data-barcode-field="true">
                     <button class="btn btn-primary px-4" onclick="scanLocation()">
                         <i class="bi bi-search me-1"></i>스캔
                     </button>
@@ -189,8 +196,10 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label small fw-medium">상품 바코드</label>
-                    <input type="text" class="form-control scan-input" id="productBarcodeInput"
-                           placeholder="바코드 스캔 또는 입력" disabled>
+                    <input type="text" class="form-control scan-input barcode-input" id="productBarcodeInput"
+                           placeholder="바코드 스캔 또는 입력" disabled
+                           inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off"
+                           enterkeyhint="go" data-barcode-field="true">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-medium">상품명</label>
@@ -358,16 +367,32 @@ function koreanToEnglish(str) {
 }
 
 function autoConvertInput(inputEl) {
-    // input 이벤트에서 한글 감지 시 영문으로 자동 변환
-    inputEl.addEventListener('input', function() {
+    let isComposing = false;
+
+    // IME 조합 시작 — 변환하지 않음
+    inputEl.addEventListener('compositionstart', function() {
+        isComposing = true;
+    });
+
+    // IME 조합 완료 — 이때 변환
+    inputEl.addEventListener('compositionend', function() {
+        isComposing = false;
         const val = this.value;
         if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(val)) {
             const converted = koreanToEnglish(val);
-            const pos = this.selectionStart;
-            const diff = val.length - converted.length;
             this.value = converted;
-            // 커서 위치 보정
-            this.setSelectionRange(Math.max(0, pos - diff), Math.max(0, pos - diff));
+            this.setSelectionRange(converted.length, converted.length);
+        }
+    });
+
+    // input 이벤트 — 조합 중이 아닐 때만 (안전장치)
+    inputEl.addEventListener('input', function() {
+        if (isComposing) return;
+        const val = this.value;
+        if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(val)) {
+            const converted = koreanToEnglish(val);
+            this.value = converted;
+            this.setSelectionRange(converted.length, converted.length);
         }
     });
 }
@@ -380,17 +405,17 @@ document.addEventListener('DOMContentLoaded', function() {
     autoConvertInput(locationInput);
     autoConvertInput(barcodeInput);
 
-    // 로케이션 입력 Enter
+    // 로케이션 입력 Enter (IME 조합 중이면 무시)
     locationInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.isComposing) {
             e.preventDefault();
             scanLocation();
         }
     });
 
-    // 상품 바코드 Enter → 바코드 조회 후 등록
+    // 상품 바코드 Enter → 바코드 조회 후 등록 (IME 조합 중이면 무시)
     barcodeInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.isComposing) {
             e.preventDefault();
             // Enter 시 한글→영문 변환 보정
             barcodeInput.value = koreanToEnglish(barcodeInput.value.trim());
