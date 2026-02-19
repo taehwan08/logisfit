@@ -15,7 +15,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import FulfillmentOrder
+from .models import FulfillmentOrder, FulfillmentComment
 from apps.clients.models import Client
 
 
@@ -373,44 +373,54 @@ def update_status(request, order_id):
     action = data.get('action', '')
     user = request.user
 
-    if action == 'confirm':
-        if order.confirm(user):
-            return JsonResponse({
-                'success': True,
-                'message': '확인완료 처리되었습니다.',
-                'status': order.status,
-                'status_display': order.get_status_display(),
-                'confirmed_at': order.confirmed_at.strftime('%Y-%m-%d %H:%M'),
-            })
-        else:
-            return JsonResponse({'error': '확인 처리할 수 없는 상태입니다.'}, status=400)
+    status_actions = {
+        'confirm': {
+            'method': order.confirm,
+            'message': '확인완료 처리되었습니다.',
+            'system_msg': '상태가 [확인완료]로 변경되었습니다.',
+            'time_field': 'confirmed_at',
+        },
+        'ship': {
+            'method': order.ship,
+            'message': '출고완료 처리되었습니다.',
+            'system_msg': '상태가 [출고완료]로 변경되었습니다.',
+            'time_field': 'shipped_at',
+        },
+        'sync': {
+            'method': order.sync,
+            'message': '전산반영 처리되었습니다.',
+            'system_msg': '상태가 [전산반영]으로 변경되었습니다.',
+            'time_field': 'synced_at',
+        },
+    }
 
-    elif action == 'ship':
-        if order.ship(user):
-            return JsonResponse({
-                'success': True,
-                'message': '출고완료 처리되었습니다.',
-                'status': order.status,
-                'status_display': order.get_status_display(),
-                'shipped_at': order.shipped_at.strftime('%Y-%m-%d %H:%M'),
-            })
-        else:
-            return JsonResponse({'error': '출고 처리할 수 없는 상태입니다.'}, status=400)
-
-    elif action == 'sync':
-        if order.sync(user):
-            return JsonResponse({
-                'success': True,
-                'message': '전산반영 처리되었습니다.',
-                'status': order.status,
-                'status_display': order.get_status_display(),
-                'synced_at': order.synced_at.strftime('%Y-%m-%d %H:%M'),
-            })
-        else:
-            return JsonResponse({'error': '전산반영 처리할 수 없는 상태입니다.'}, status=400)
-
-    else:
+    if action not in status_actions:
         return JsonResponse({'error': '잘못된 액션입니다.'}, status=400)
+
+    cfg = status_actions[action]
+    if cfg['method'](user):
+        # 시스템 댓글 자동 추가
+        FulfillmentComment.objects.create(
+            order=order,
+            author=user,
+            content=f"{cfg['system_msg']} ({user.name})",
+            is_system=True,
+        )
+        time_val = getattr(order, cfg['time_field'])
+        return JsonResponse({
+            'success': True,
+            'message': cfg['message'],
+            'status': order.status,
+            'status_display': order.get_status_display(),
+            cfg['time_field']: time_val.strftime('%Y-%m-%d %H:%M') if time_val else '',
+        })
+    else:
+        error_msgs = {
+            'confirm': '확인 처리할 수 없는 상태입니다.',
+            'ship': '출고 처리할 수 없는 상태입니다.',
+            'sync': '전산반영 처리할 수 없는 상태입니다.',
+        }
+        return JsonResponse({'error': error_msgs[action]}, status=400)
 
 
 @fulfillment_access_required
@@ -782,3 +792,111 @@ def upload_orders_excel(request):
         result['error_count'] = len(errors)
 
     return JsonResponse(result)
+
+
+# ============================================================================
+# 댓글 API
+# ============================================================================
+
+def _check_order_access(user, order):
+    """주문에 대한 접근 권한 확인"""
+    if user.is_admin or user.is_superuser or user.is_worker:
+        return True
+    if user.is_client:
+        return user.clients.filter(id=order.client_id).exists()
+    return False
+
+
+@fulfillment_access_required
+@require_http_methods(["GET"])
+def get_comments(request, order_id):
+    """댓글 목록 조회"""
+    try:
+        order = FulfillmentOrder.objects.get(id=order_id)
+    except FulfillmentOrder.DoesNotExist:
+        return JsonResponse({'error': '주문을 찾을 수 없습니다.'}, status=404)
+
+    # 권한 확인
+    if not _check_order_access(request.user, order):
+        return JsonResponse({'error': '접근 권한이 없습니다.'}, status=403)
+
+    comments = order.comments.select_related('author').all()
+    comment_list = []
+    for c in comments:
+        comment_list.append({
+            'id': c.id,
+            'author_name': c.author.name if c.author else '시스템',
+            'author_role': c.author.get_role_display() if c.author else '',
+            'author_id': c.author.id if c.author else None,
+            'content': c.content,
+            'is_system': c.is_system,
+            'created_at': c.created_at.strftime('%Y-%m-%d %H:%M'),
+            'is_mine': c.author_id == request.user.id if c.author else False,
+        })
+
+    return JsonResponse({'comments': comment_list})
+
+
+@fulfillment_access_required
+@require_http_methods(["POST"])
+def add_comment(request, order_id):
+    """댓글 등록"""
+    try:
+        order = FulfillmentOrder.objects.get(id=order_id)
+    except FulfillmentOrder.DoesNotExist:
+        return JsonResponse({'error': '주문을 찾을 수 없습니다.'}, status=404)
+
+    # 권한 확인
+    if not _check_order_access(request.user, order):
+        return JsonResponse({'error': '접근 권한이 없습니다.'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    content = data.get('content', '').strip()
+    if not content:
+        return JsonResponse({'error': '댓글 내용을 입력해주세요.'}, status=400)
+
+    comment = FulfillmentComment.objects.create(
+        order=order,
+        author=request.user,
+        content=content,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '댓글이 등록되었습니다.',
+        'comment': {
+            'id': comment.id,
+            'author_name': comment.author.name,
+            'author_role': comment.author.get_role_display(),
+            'author_id': comment.author.id,
+            'content': comment.content,
+            'is_system': False,
+            'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M'),
+            'is_mine': True,
+        },
+    })
+
+
+@fulfillment_access_required
+@require_http_methods(["POST"])
+def delete_comment(request, order_id, comment_id):
+    """댓글 삭제 (본인 또는 관리자)"""
+    try:
+        comment = FulfillmentComment.objects.get(id=comment_id, order_id=order_id)
+    except FulfillmentComment.DoesNotExist:
+        return JsonResponse({'error': '댓글을 찾을 수 없습니다.'}, status=404)
+
+    user = request.user
+    # 본인 댓글이거나 관리자만 삭제 가능
+    if comment.author_id != user.id and not (user.is_admin or user.is_superuser):
+        return JsonResponse({'error': '삭제 권한이 없습니다.'}, status=403)
+
+    comment.delete()
+    return JsonResponse({
+        'success': True,
+        'message': '댓글이 삭제되었습니다.',
+    })

@@ -244,3 +244,46 @@ class FulfillmentOrder(models.Model):
         self.synced_by = user
         self.save(update_fields=['status', 'synced_at', 'synced_by', 'updated_at'])
         return True
+
+
+class FulfillmentComment(models.Model):
+    """
+    출고 주문 댓글 모델
+
+    발주 건별로 관리자↔고객사 간 소통을 위한 댓글 기능입니다.
+    수정 요청, 확인 사항, 안내 등을 댓글로 주고받을 수 있습니다.
+    """
+
+    order = models.ForeignKey(
+        FulfillmentOrder,
+        on_delete=models.CASCADE,
+        verbose_name='출고 주문',
+        related_name='comments',
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name='작성자',
+        related_name='fulfillment_comments',
+    )
+    content = models.TextField(
+        '내용',
+    )
+    is_system = models.BooleanField(
+        '시스템 메시지',
+        default=False,
+        help_text='상태 변경 등 시스템 자동 생성 메시지 여부',
+    )
+    created_at = models.DateTimeField('작성일시', auto_now_add=True)
+    updated_at = models.DateTimeField('수정일시', auto_now=True)
+
+    class Meta:
+        db_table = 'fulfillment_comments'
+        verbose_name = '출고 주문 댓글'
+        verbose_name_plural = '출고 주문 댓글 목록'
+        ordering = ['created_at']
+
+    def __str__(self):
+        author_name = self.author.name if self.author else '시스템'
+        return f"[{self.order.order_number}] {author_name}: {self.content[:30]}"

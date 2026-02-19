@@ -158,6 +158,131 @@
         font-size: 0.85rem;
     }
 
+    /* 댓글 영역 */
+    .comment-section {
+        border-top: 1px solid #eee;
+        margin-top: 16px;
+        padding-top: 16px;
+    }
+    .comment-section h6 {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #495057;
+        margin-bottom: 12px;
+    }
+    .comment-list {
+        max-height: 300px;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+    .comment-item {
+        display: flex;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid #f5f5f5;
+    }
+    .comment-item:last-child {
+        border-bottom: none;
+    }
+    .comment-avatar {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    .comment-avatar.admin { background: #3498db; }
+    .comment-avatar.client { background: #2ecc71; }
+    .comment-avatar.worker { background: #f39c12; }
+    .comment-avatar.system { background: #95a5a6; }
+    .comment-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .comment-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
+    }
+    .comment-author {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #333;
+    }
+    .comment-role {
+        font-size: 0.65rem;
+        padding: 1px 5px;
+        border-radius: 8px;
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    .comment-time {
+        font-size: 0.7rem;
+        color: #adb5bd;
+        margin-left: auto;
+    }
+    .comment-content {
+        font-size: 0.82rem;
+        color: #333;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .comment-item.system-msg {
+        padding: 6px 0;
+    }
+    .comment-item.system-msg .comment-content {
+        font-size: 0.75rem;
+        color: #6c757d;
+        font-style: italic;
+    }
+    .comment-input-area {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+    }
+    .comment-input-area textarea {
+        flex: 1;
+        font-size: 0.82rem;
+        border-radius: 8px;
+        resize: none;
+        min-height: 38px;
+        max-height: 80px;
+        padding: 8px 12px;
+    }
+    .comment-input-area .btn {
+        flex-shrink: 0;
+        align-self: flex-end;
+    }
+    .comment-delete-btn {
+        opacity: 0;
+        transition: opacity 0.2s;
+        border: none;
+        background: none;
+        color: #adb5bd;
+        font-size: 0.7rem;
+        padding: 0 4px;
+        cursor: pointer;
+    }
+    .comment-item:hover .comment-delete-btn {
+        opacity: 1;
+    }
+    .comment-delete-btn:hover {
+        color: #e74c3c;
+    }
+    .comment-empty {
+        text-align: center;
+        padding: 20px;
+        color: #adb5bd;
+        font-size: 0.82rem;
+    }
+
     /* 액션 툴바 */
     .action-toolbar {
         display: flex;
@@ -490,8 +615,26 @@
                 <h5 class="modal-title">주문 상세</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="detailModalBody">
-                <!-- JS로 렌더링 -->
+            <div class="modal-body">
+                <!-- 주문 상세 정보 -->
+                <div id="detailModalBody">
+                    <!-- JS로 렌더링 -->
+                </div>
+
+                <!-- 댓글 영역 -->
+                <div class="comment-section">
+                    <h6><i class="bi bi-chat-dots me-1"></i>댓글 <span class="text-muted fw-normal" id="commentCount"></span></h6>
+                    <div class="comment-list" id="commentList">
+                        <div class="comment-empty">댓글을 불러오는 중...</div>
+                    </div>
+                    <div class="comment-input-area">
+                        <textarea class="form-control" id="commentInput" placeholder="댓글을 입력하세요..."
+                                  rows="1" onkeydown="handleCommentKeydown(event)"></textarea>
+                        <button class="btn btn-primary btn-sm" onclick="addComment()">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1033,9 +1176,13 @@ function deleteOrder(orderId) {
 // ============================================================================
 // 상세 보기
 // ============================================================================
+let currentDetailOrderId = null;
+
 function showDetail(orderId) {
     const order = ordersData.find(o => o.id === orderId);
     if (!order) return;
+
+    currentDetailOrderId = orderId;
 
     const statusBadge = {
         pending: '<span class="badge bg-secondary">대기</span>',
@@ -1078,7 +1225,170 @@ function showDetail(orderId) {
     </table>`;
 
     document.getElementById('detailModalBody').innerHTML = html;
+    document.getElementById('commentInput').value = '';
     new bootstrap.Modal(document.getElementById('detailModal')).show();
+
+    // 댓글 로드
+    loadComments(orderId);
+}
+
+// ============================================================================
+// 댓글
+// ============================================================================
+function loadComments(orderId) {
+    const listEl = document.getElementById('commentList');
+    const countEl = document.getElementById('commentCount');
+    listEl.innerHTML = '<div class="comment-empty"><span class="spinner-border spinner-border-sm me-1"></span>불러오는 중...</div>';
+
+    fetch(`/fulfillment/api/orders/${orderId}/comments/`)
+        .then(r => r.json())
+        .then(data => {
+            const comments = data.comments || [];
+            countEl.textContent = `(${comments.length})`;
+
+            if (comments.length === 0) {
+                listEl.innerHTML = '<div class="comment-empty">아직 댓글이 없습니다.</div>';
+                return;
+            }
+
+            let html = '';
+            comments.forEach(c => {
+                html += renderComment(c);
+            });
+            listEl.innerHTML = html;
+            listEl.scrollTop = listEl.scrollHeight;
+        })
+        .catch(() => {
+            listEl.innerHTML = '<div class="comment-empty text-danger">댓글을 불러올 수 없습니다.</div>';
+        });
+}
+
+function renderComment(c) {
+    if (c.is_system) {
+        return `
+        <div class="comment-item system-msg">
+            <div class="comment-avatar system"><i class="bi bi-gear-fill"></i></div>
+            <div class="comment-body">
+                <div class="comment-meta">
+                    <span class="comment-time">${c.created_at}</span>
+                </div>
+                <div class="comment-content">${escapeHtml(c.content)}</div>
+            </div>
+        </div>`;
+    }
+
+    const roleClass = c.author_role === '관리자' ? 'admin' : c.author_role === '고객사' ? 'client' : 'worker';
+    const initials = c.author_name ? c.author_name.substring(0, 1) : '?';
+    const deleteBtn = (c.is_mine || IS_ADMIN)
+        ? `<button class="comment-delete-btn" onclick="deleteComment(${c.id})" title="삭제"><i class="bi bi-x-lg"></i></button>`
+        : '';
+
+    return `
+    <div class="comment-item" id="comment-${c.id}">
+        <div class="comment-avatar ${roleClass}">${escapeHtml(initials)}</div>
+        <div class="comment-body">
+            <div class="comment-meta">
+                <span class="comment-author">${escapeHtml(c.author_name)}</span>
+                <span class="comment-role">${escapeHtml(c.author_role)}</span>
+                <span class="comment-time">${c.created_at}</span>
+                ${deleteBtn}
+            </div>
+            <div class="comment-content">${escapeHtml(c.content)}</div>
+        </div>
+    </div>`;
+}
+
+function addComment() {
+    if (!currentDetailOrderId) return;
+
+    const input = document.getElementById('commentInput');
+    const content = input.value.trim();
+    if (!content) return;
+
+    const btn = input.nextElementSibling;
+    btn.disabled = true;
+
+    fetch(`/fulfillment/api/orders/${currentDetailOrderId}/comments/add/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': CSRF_TOKEN,
+        },
+        body: JSON.stringify({content: content}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+            input.value = '';
+            input.style.height = 'auto';
+
+            // 댓글 리스트에 추가
+            const listEl = document.getElementById('commentList');
+            const emptyEl = listEl.querySelector('.comment-empty');
+            if (emptyEl) emptyEl.remove();
+
+            listEl.insertAdjacentHTML('beforeend', renderComment(data.comment));
+            listEl.scrollTop = listEl.scrollHeight;
+
+            // 카운트 업데이트
+            const countEl = document.getElementById('commentCount');
+            const currentCount = parseInt(countEl.textContent.replace(/[()]/g, '') || '0');
+            countEl.textContent = `(${currentCount + 1})`;
+        } else {
+            showToast(data.error || '댓글 등록 실패', 'danger');
+        }
+    })
+    .catch(() => {
+        btn.disabled = false;
+        showToast('서버 오류', 'danger');
+    });
+}
+
+function deleteComment(commentId) {
+    if (!currentDetailOrderId) return;
+    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+
+    fetch(`/fulfillment/api/orders/${currentDetailOrderId}/comments/${commentId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': CSRF_TOKEN,
+        },
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const el = document.getElementById(`comment-${commentId}`);
+            if (el) el.remove();
+
+            // 카운트 업데이트
+            const countEl = document.getElementById('commentCount');
+            const currentCount = parseInt(countEl.textContent.replace(/[()]/g, '') || '1');
+            const newCount = Math.max(0, currentCount - 1);
+            countEl.textContent = `(${newCount})`;
+
+            if (newCount === 0) {
+                document.getElementById('commentList').innerHTML = '<div class="comment-empty">아직 댓글이 없습니다.</div>';
+            }
+        } else {
+            showToast(data.error || '삭제 실패', 'danger');
+        }
+    })
+    .catch(() => showToast('서버 오류', 'danger'));
+}
+
+function handleCommentKeydown(e) {
+    // Ctrl+Enter 또는 Cmd+Enter로 전송
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        addComment();
+    }
+    // textarea 자동 높이 조정
+    setTimeout(() => {
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.min(e.target.scrollHeight, 80) + 'px';
+    }, 0);
 }
 
 // ============================================================================

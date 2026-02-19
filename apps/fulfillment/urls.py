@@ -19,4 +19,9 @@ urlpatterns = [
     path('api/orders/export/', views.export_excel, name='export_excel'),
     path('api/orders/template/', views.download_template, name='download_template'),
     path('api/orders/upload/', views.upload_orders_excel, name='upload_orders_excel'),
+
+    # 댓글 API
+    path('api/orders/<int:order_id>/comments/', views.get_comments, name='get_comments'),
+    path('api/orders/<int:order_id>/comments/add/', views.add_comment, name='add_comment'),
+    path('api/orders/<int:order_id>/comments/<int:comment_id>/delete/', views.delete_comment, name='delete_comment'),
 ]
