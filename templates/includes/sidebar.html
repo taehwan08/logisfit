@@ -79,7 +79,7 @@
                 -->
             {% endif %}
 
-            {% if user.is_admin or user.is_superuser %}
+            {% if user.is_admin or user.is_superuser or user.is_worker %}
                 <!-- 재고 관리 메뉴 -->
                 <li class="sidebar-header-text">재고 관리</li>
 

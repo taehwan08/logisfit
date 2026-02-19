@@ -19,14 +19,25 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# 관리자 권한 체크 데코레이터
+# 권한 체크 데코레이터
 # ============================================================================
 
 def admin_required(view_func):
-    """관리자 전용 뷰 데코레이터 (v1에서는 관리자만 접근 가능)"""
+    """관리자 전용 뷰 데코레이터"""
     def wrapper(request, *args, **kwargs):
         if not (request.user.is_admin or request.user.is_superuser):
             return JsonResponse({'error': '관리자 권한이 필요합니다.'}, status=403)
+        return view_func(request, *args, **kwargs)
+    wrapper.__name__ = view_func.__name__
+    wrapper.__doc__ = view_func.__doc__
+    return wrapper
+
+
+def staff_required(view_func):
+    """관리자 또는 작업자 접근 가능 데코레이터"""
+    def wrapper(request, *args, **kwargs):
+        if not (request.user.is_admin or request.user.is_worker or request.user.is_superuser):
+            return JsonResponse({'error': '접근 권한이 없습니다.'}, status=403)
         return view_func(request, *args, **kwargs)
     wrapper.__name__ = view_func.__name__
     wrapper.__doc__ = view_func.__doc__
@@ -38,7 +49,7 @@ def admin_required(view_func):
 # ============================================================================
 
 @login_required
-@admin_required
+@staff_required
 def session_page(request):
     """재고조사 세션 관리 페이지"""
     active_session = InventorySession.objects.filter(status='active').first()
@@ -48,9 +59,9 @@ def session_page(request):
 
 
 @login_required
-@admin_required
+@staff_required
 def scan_page(request):
-    """재고 스캔 입력 페이지"""
+    """재고 스캔 입력 페이지 (관리자 + 작업자)"""
     active_session = InventorySession.objects.filter(status='active').first()
     return render(request, 'inventory/scan.html', {
         'active_session': active_session,
@@ -58,9 +69,9 @@ def scan_page(request):
 
 
 @login_required
-@admin_required
+@staff_required
 def status_page(request):
-    """재고 현황 조회 페이지"""
+    """재고 현황 조회 페이지 (관리자 + 작업자)"""
     sessions = InventorySession.objects.all()
     active_session = sessions.filter(status='active').first()
     return render(request, 'inventory/status.html', {
@@ -70,7 +81,7 @@ def status_page(request):
 
 
 @login_required
-@admin_required
+@staff_required
 def products_page(request):
     """상품 마스터 관리 페이지"""
     return render(request, 'inventory/products.html')
@@ -108,7 +119,7 @@ CHOSUNG_GROUP = {
 
 
 @login_required
-@admin_required
+@staff_required
 @require_GET
 def get_products(request):
     """상품 목록을 조회한다.
@@ -170,7 +181,7 @@ def get_products(request):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def create_product(request):
     """상품을 수동으로 등록한다."""
@@ -204,7 +215,7 @@ def create_product(request):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def update_product(request, product_id):
     """상품 정보를 수정한다."""
@@ -247,7 +258,7 @@ def update_product(request, product_id):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 def delete_product(request, product_id):
     """상품을 삭제한다."""
     if request.method != 'DELETE':
@@ -264,7 +275,7 @@ def delete_product(request, product_id):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def upload_products_excel(request):
     """엑셀 파일로 상품을 일괄 등록한다.
@@ -372,7 +383,7 @@ def upload_products_excel(request):
 
 
 @login_required
-@admin_required
+@staff_required
 @require_GET
 def lookup_product(request):
     """바코드로 상품을 조회한다 (스캔 시 자동완성용).
@@ -434,7 +445,7 @@ def _find_column_index(headers, candidates):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def create_session(request):
     """새 재고조사 세션을 시작한다."""
@@ -467,7 +478,7 @@ def create_session(request):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def end_session(request, session_id):
     """재고조사 세션을 종료한다."""
@@ -490,7 +501,7 @@ def end_session(request, session_id):
 
 
 @login_required
-@admin_required
+@staff_required
 @require_GET
 def get_sessions(request):
     """세션 목록을 조회한다."""
@@ -515,7 +526,7 @@ def get_sessions(request):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def scan_location(request):
     """로케이션 바코드를 스캔한다. 미등록이면 자동 생성."""
@@ -559,7 +570,7 @@ def scan_location(request):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 @require_POST
 def scan_product(request):
     """상품을 등록한다.
@@ -667,7 +678,7 @@ def scan_product(request):
 # ============================================================================
 
 @login_required
-@admin_required
+@staff_required
 @require_GET
 def get_records(request):
     """재고 기록을 조회한다.
@@ -701,7 +712,7 @@ def get_records(request):
 
 @csrf_exempt
 @login_required
-@admin_required
+@staff_required
 def delete_record(request, record_id):
     """재고 기록을 삭제한다."""
     if request.method != 'DELETE':
@@ -717,7 +728,7 @@ def delete_record(request, record_id):
 
 
 @login_required
-@admin_required
+@staff_required
 @require_GET
 def get_location_records(request):
     """특정 로케이션의 현재 세션 기록을 조회한다.
