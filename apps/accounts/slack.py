@@ -165,8 +165,8 @@ def process_slack_action(payload):
     action_id = action.get('action_id', '')
     response_url = payload.get('response_url', '')
 
-    # 관리 페이지 링크 버튼은 별도 처리 불필요
-    if action_id == 'open_approval_page':
+    # URL 링크 버튼은 별도 처리 불필요 (브라우저에서 직접 열림)
+    if action_id.startswith('open_'):
         return None
 
     try:
