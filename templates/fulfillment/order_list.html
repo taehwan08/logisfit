@@ -508,6 +508,30 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <!-- 양식 다운로드 섹션 -->
+                <div class="mb-3 p-3 border rounded" style="background:#f8fafe;">
+                    <label class="form-label fw-semibold mb-2">
+                        <i class="bi bi-download me-1"></i>양식 다운로드
+                    </label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <select class="form-select form-select-sm" id="templatePlatform" onchange="onTemplatePlatformChange()" style="max-width:180px;">
+                            <option value="">플랫폼 선택</option>
+                            {% for value, label in platforms %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-sm btn-outline-primary" id="btnDownloadTemplate" onclick="downloadTemplate()" disabled>
+                            <i class="bi bi-file-earmark-arrow-down me-1"></i>양식 다운로드
+                        </button>
+                    </div>
+                    <div class="mt-2" id="templateColumnsPreview" style="display:none;">
+                        <small class="text-muted" id="templateColumnsText"></small>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- 파일 업로드 섹션 -->
                 <div class="upload-drop-zone" id="uploadDropZone" onclick="document.getElementById('uploadFile').click()">
                     <i class="bi bi-cloud-arrow-up" style="font-size:2rem;"></i>
                     <p class="mb-1 mt-2">클릭하거나 파일을 드래그하세요</p>
@@ -523,13 +547,6 @@
                     </div>
                 </div>
                 <div class="mt-3" id="uploadResult" style="display:none;"></div>
-
-                <div class="mt-3">
-                    <small class="text-muted">
-                        <strong>컬럼 순서:</strong> 거래처, 플랫폼, 발주번호, 발주일, 상품명,
-                        바코드, 발주수량, 박스수량, 상태, 소비기한, 입고일, 담당자, 주소지, 비고
-                    </small>
-                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
@@ -1100,7 +1117,55 @@ function exportExcel() {
 function showUploadModal() {
     clearUploadFile();
     document.getElementById('uploadResult').style.display = 'none';
+    document.getElementById('templatePlatform').value = '';
+    document.getElementById('btnDownloadTemplate').disabled = true;
+    document.getElementById('templateColumnsPreview').style.display = 'none';
     new bootstrap.Modal(document.getElementById('uploadModal')).show();
+}
+
+// 플랫폼별 추가 컬럼 정의 (양식 미리보기용)
+const TEMPLATE_EXTRA_COLUMNS = {
+    coupang: ['배송유형', '벤더코드'],
+    kurly: ['배송예정일', '온도대'],
+    oliveyoung: ['매장코드', '진열예정일'],
+    smartstore: ['판매채널'],
+    offline: ['매장명', '배송방법'],
+    'export': ['수출국', '인코텀즈'],
+    other: [],
+};
+
+const BASE_COLUMNS = ['거래처', '플랫폼', '발주번호', '발주일', '상품명',
+    '바코드', '발주수량', '박스수량', '상태', '소비기한', '입고일', '담당자', '주소지', '비고'];
+
+function onTemplatePlatformChange() {
+    const platform = document.getElementById('templatePlatform').value;
+    const btn = document.getElementById('btnDownloadTemplate');
+    const preview = document.getElementById('templateColumnsPreview');
+    const previewText = document.getElementById('templateColumnsText');
+
+    if (!platform) {
+        btn.disabled = true;
+        preview.style.display = 'none';
+        return;
+    }
+
+    btn.disabled = false;
+    const extras = TEMPLATE_EXTRA_COLUMNS[platform] || [];
+    const allCols = BASE_COLUMNS.concat(extras);
+    const extraLabel = extras.length > 0
+        ? ` + <strong style="color:#2980B9;">${extras.join(', ')}</strong>`
+        : '';
+    previewText.innerHTML = `<strong>컬럼 (${allCols.length}개):</strong> ${BASE_COLUMNS.join(', ')}${extraLabel}`;
+    preview.style.display = 'block';
+}
+
+function downloadTemplate() {
+    const platform = document.getElementById('templatePlatform').value;
+    if (!platform) {
+        showToast('플랫폼을 선택해주세요.', 'warning');
+        return;
+    }
+    window.location.href = `{% url 'fulfillment:download_template' %}?platform=${platform}`;
 }
 
 function initUploadDragDrop() {

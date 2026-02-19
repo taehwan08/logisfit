@@ -17,5 +17,6 @@ urlpatterns = [
     path('api/orders/<int:order_id>/delete/', views.delete_order, name='delete_order'),
     path('api/orders/<int:order_id>/status/', views.update_status, name='update_status'),
     path('api/orders/export/', views.export_excel, name='export_excel'),
+    path('api/orders/template/', views.download_template, name='download_template'),
     path('api/orders/upload/', views.upload_orders_excel, name='upload_orders_excel'),
 ]

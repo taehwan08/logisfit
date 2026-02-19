@@ -529,6 +529,136 @@ def export_excel(request):
     return response
 
 
+# 플랫폼별 추가 컬럼 정의
+PLATFORM_EXTRA_COLUMNS = {
+    'coupang': ['배송유형', '벤더코드'],
+    'kurly': ['배송예정일', '온도대'],
+    'oliveyoung': ['매장코드', '진열예정일'],
+    'smartstore': ['판매채널'],
+    'offline': ['매장명', '배송방법'],
+    'export': ['수출국', '인코텀즈'],
+    'other': [],
+}
+
+# 플랫폼별 예시 데이터
+PLATFORM_EXAMPLE_DATA = {
+    'coupang': {
+        'base': ['(주)예시거래처', '쿠팡', 'CPG-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 100, 10, '', '2026-12-31', '2025-03-05', '홍길동', '서울시 강남구', '비고 예시'],
+        'extra': ['로켓배송', 'VD12345'],
+    },
+    'kurly': {
+        'base': ['(주)예시거래처', '컬리', 'KRL-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 50, 5, '', '2026-06-30', '2025-03-03', '김철수', '서울시 송파구', ''],
+        'extra': ['2025-03-05', '냉장'],
+    },
+    'oliveyoung': {
+        'base': ['(주)예시거래처', '올리브영', 'OY-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 200, 20, '', '2026-12-31', '2025-03-10', '이영희', '', ''],
+        'extra': ['OY-STORE-001', '2025-03-15'],
+    },
+    'smartstore': {
+        'base': ['(주)예시거래처', '스마트스토어', 'SS-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 30, 3, '', '2026-12-31', '', '박민수', '경기도 성남시', ''],
+        'extra': ['네이버'],
+    },
+    'offline': {
+        'base': ['(주)예시거래처', '오프라인마트', 'OFF-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 500, 50, '', '2026-12-31', '2025-03-07', '최수진', '서울시 마포구', ''],
+        'extra': ['이마트 홍대점', '직배'],
+    },
+    'export': {
+        'base': ['(주)예시거래처', '해외수출', 'EXP-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 1000, 100, '', '2026-12-31', '2025-04-01', '정대한', '', ''],
+        'extra': ['일본', 'FOB'],
+    },
+    'other': {
+        'base': ['(주)예시거래처', '기타', 'ETC-2025-001', '2025-03-01', '상품명 예시',
+                 '8801234567890', 100, 10, '', '2026-12-31', '', '담당자명', '', ''],
+        'extra': [],
+    },
+}
+
+
+@fulfillment_access_required
+@require_http_methods(["GET"])
+def download_template(request):
+    """플랫폼별 엑셀 업로드 양식 다운로드"""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    except ImportError:
+        return JsonResponse({'error': 'openpyxl 패키지가 필요합니다.'}, status=500)
+
+    platform = request.GET.get('platform', 'other')
+    if platform not in PLATFORM_EXTRA_COLUMNS:
+        platform = 'other'
+
+    # 플랫폼 표시명
+    platform_labels = dict(FulfillmentOrder.Platform.choices)
+    platform_label = platform_labels.get(platform, '기타')
+
+    # 공통 헤더
+    base_headers = [
+        '거래처', '플랫폼', '발주번호', '발주일', '상품명',
+        '바코드', '발주수량', '박스수량', '상태',
+        '소비기한', '입고일', '담당자', '주소지', '비고',
+    ]
+    extra_headers = PLATFORM_EXTRA_COLUMNS.get(platform, [])
+    all_headers = base_headers + extra_headers
+
+    # 엑셀 생성
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f'{platform_label} 양식'
+
+    # 헤더 스타일
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid')
+    extra_fill = PatternFill(start_color='2980B9', end_color='2980B9', fill_type='solid')
+    header_alignment = Alignment(horizontal='center', vertical='center')
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin'),
+    )
+
+    # 헤더 행
+    for col, header in enumerate(all_headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = extra_fill if col > len(base_headers) else header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    # 예시 데이터 행
+    example = PLATFORM_EXAMPLE_DATA.get(platform, PLATFORM_EXAMPLE_DATA['other'])
+    example_data = example['base'] + example['extra']
+    example_font = Font(color='999999', italic=True, size=10)
+    for col, value in enumerate(example_data, 1):
+        cell = ws.cell(row=2, column=col, value=value)
+        cell.font = example_font
+        cell.border = thin_border
+        cell.alignment = Alignment(vertical='center')
+
+    # 컬럼 너비
+    base_widths = [15, 12, 15, 12, 30, 15, 10, 10, 10, 12, 12, 10, 30, 20]
+    extra_widths = [15] * len(extra_headers)
+    all_widths = base_widths + extra_widths
+    for i, width in enumerate(all_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+
+    # 응답
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    now_str = timezone.now().strftime('%Y%m%d')
+    response['Content-Disposition'] = f'attachment; filename="fulfillment_template_{platform}_{now_str}.xlsx"'
+    wb.save(response)
+    return response
+
+
 @admin_required
 @require_http_methods(["POST"])
 def upload_orders_excel(request):
