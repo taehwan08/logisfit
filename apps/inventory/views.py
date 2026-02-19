@@ -80,23 +80,31 @@ def products_page(request):
 # API: 상품 마스터
 # ============================================================================
 
-def _get_chosung_range(chosung_char):
-    """초성 문자에 해당하는 한글 유니코드 범위를 반환한다.
+def _get_chosung_regex(chosung_char):
+    """초성 문자에 해당하는 한글 정규식 문자 클래스를 반환한다.
 
-    예: 'ㄱ' → ('가', '나' 직전), 'ㅎ' → ('하', '힣' 이후)
+    예: 'ㄱ' → '^[가-깋]', 'ㄷ' → '^[다-딯]', 'ㅎ' → '^[하-힣]'
+    PostgreSQL에서 locale-independent하게 동작하기 위해 정규식 사용.
     """
     CHO_LIST = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
     idx = CHO_LIST.find(chosung_char)
     if idx < 0:
-        return None, None
+        return None
 
     # 한글 유니코드: 0xAC00 + (초성idx * 21 * 28)
     start = chr(0xAC00 + idx * 21 * 28)
-    if idx < len(CHO_LIST) - 1:
-        end = chr(0xAC00 + (idx + 1) * 21 * 28)
-    else:
-        end = chr(0xD7A4)  # '힣' + 1
-    return start, end
+    end = chr(0xAC00 + idx * 21 * 28 + 21 * 28 - 1)
+    return f'^[{start}-{end}]'
+
+
+# 초성 버튼 → 실제 검색할 초성 목록 매핑
+# 예: 'ㄱ' → ['ㄱ', 'ㄲ'], 'ㄷ' → ['ㄷ', 'ㄸ'], 'ㅂ' → ['ㅂ', 'ㅃ'], 'ㅅ' → ['ㅅ', 'ㅆ'], 'ㅈ' → ['ㅈ', 'ㅉ']
+CHOSUNG_GROUP = {
+    'ㄱ': ['ㄱ', 'ㄲ'], 'ㄴ': ['ㄴ'], 'ㄷ': ['ㄷ', 'ㄸ'], 'ㄹ': ['ㄹ'],
+    'ㅁ': ['ㅁ'], 'ㅂ': ['ㅂ', 'ㅃ'], 'ㅅ': ['ㅅ', 'ㅆ'], 'ㅇ': ['ㅇ'],
+    'ㅈ': ['ㅈ', 'ㅉ'], 'ㅊ': ['ㅊ'], 'ㅋ': ['ㅋ'], 'ㅌ': ['ㅌ'],
+    'ㅍ': ['ㅍ'], 'ㅎ': ['ㅎ'],
+}
 
 
 @login_required
@@ -123,32 +131,24 @@ def get_products(request):
         )
     elif initial:
         # 초성 검색 (ㄱ~ㅎ)
-        CHO_LIST = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
-        if initial in CHO_LIST:
-            start, end = _get_chosung_range(initial)
-            if start and end:
-                products = products.filter(
-                    Q(name__gte=start, name__lt=end) |
-                    Q(display_name__gte=start, display_name__lt=end)
-                )
+        if initial in CHOSUNG_GROUP:
+            q = Q()
+            for cho in CHOSUNG_GROUP[initial]:
+                regex = _get_chosung_regex(cho)
+                if regex:
+                    q |= Q(name__regex=regex) | Q(display_name__regex=regex)
+            products = products.filter(q)
         # 알파벳 검색 (A~Z)
         elif initial.isalpha() and len(initial) == 1:
-            upper = initial.upper()
-            lower = initial.lower()
             products = products.filter(
-                Q(name__istartswith=upper) | Q(name__istartswith=lower) |
-                Q(display_name__istartswith=upper) | Q(display_name__istartswith=lower)
+                Q(name__iregex=f'^{initial}') |
+                Q(display_name__iregex=f'^{initial}')
             )
-        # 숫자 검색 (0~9) — initial='0'이면 0~9 전부 검색
+        # 숫자 검색 (0~9)
         elif initial == '0':
-            q = Q()
-            for d in '0123456789':
-                q |= Q(name__startswith=d) | Q(display_name__startswith=d)
-            products = products.filter(q)
-        elif initial.isdigit():
             products = products.filter(
-                Q(name__startswith=initial) |
-                Q(display_name__startswith=initial)
+                Q(name__regex=r'^[0-9]') |
+                Q(display_name__regex=r'^[0-9]')
             )
 
     products = products.order_by('name')[:100]
