@@ -970,13 +970,16 @@ function renderComment(c) {
         </div></div>`;
 }
 
+let isAddingComment = false;
 function addComment() {
     if (!currentDetailOrderId) return;
+    if (isAddingComment) return;
     const input = document.getElementById('commentInput');
     const content = input.value.trim();
     if (!content) return;
     const btn = input.nextElementSibling;
     btn.disabled = true;
+    isAddingComment = true;
 
     fetch(`/fulfillment/api/orders/${currentDetailOrderId}/comments/add/`, {
         method: 'POST',
@@ -986,6 +989,7 @@ function addComment() {
     .then(r => r.json())
     .then(data => {
         btn.disabled = false;
+        isAddingComment = false;
         if (data.success) {
             input.value = '';
             input.style.height = 'auto';
@@ -999,7 +1003,7 @@ function addComment() {
             countEl.textContent = `(${cnt + 1})`;
         } else showToast(data.error || '댓글 등록 실패', 'danger');
     })
-    .catch(() => { btn.disabled = false; showToast('서버 오류', 'danger'); });
+    .catch(() => { btn.disabled = false; isAddingComment = false; showToast('서버 오류', 'danger'); });
 }
 
 function deleteComment(commentId) {
