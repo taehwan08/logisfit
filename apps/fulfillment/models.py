@@ -14,8 +14,11 @@ class FulfillmentOrder(models.Model):
     """
     출고 주문(발주) 모델
 
-    거래처별 플랫폼 출고 주문을 관리합니다.
+    거래처 → 브랜드 하위 구조로 출고 주문을 관리합니다.
     3단계 상태 관리: 대기 → 확인완료 → 출고완료 → 전산반영
+
+    붙여넣기 컬럼 (쿠팡 기준):
+    발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
     """
 
     class Platform(models.TextChoices):
@@ -35,25 +38,25 @@ class FulfillmentOrder(models.Model):
         SHIPPED = 'shipped', '출고완료'
         SYNCED = 'synced', '전산반영'
 
-    # 기본 정보
+    # 기본 정보 - 거래처 + 브랜드
     client = models.ForeignKey(
         'clients.Client',
         on_delete=models.CASCADE,
         verbose_name='거래처',
         related_name='fulfillment_orders',
     )
+    brand = models.ForeignKey(
+        'clients.Brand',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='브랜드',
+        related_name='fulfillment_orders',
+    )
     platform = models.CharField(
         '플랫폼',
         max_length=20,
         choices=Platform.choices,
-    )
-    order_number = models.CharField(
-        '발주번호',
-        max_length=100,
-    )
-    order_date = models.DateField(
-        '발주일',
-        default=timezone.now,
     )
     status = models.CharField(
         '상태',
@@ -62,7 +65,26 @@ class FulfillmentOrder(models.Model):
         default=Status.PENDING,
     )
 
-    # 공통 필드
+    # ─── 붙여넣기 대응 필드 (쿠팡 등) ───
+    order_number = models.CharField(
+        '발주번호',
+        max_length=100,
+    )
+    order_type = models.CharField(
+        '발주유형',
+        max_length=100,
+        blank=True,
+    )
+    order_confirmed = models.CharField(
+        '발주확정',
+        max_length=100,
+        blank=True,
+    )
+    sku_id = models.CharField(
+        'SKU ID',
+        max_length=100,
+        blank=True,
+    )
     product_name = models.CharField(
         '상품명',
         max_length=300,
@@ -72,11 +94,33 @@ class FulfillmentOrder(models.Model):
         max_length=100,
         blank=True,
     )
+    center = models.CharField(
+        '센터',
+        max_length=100,
+        blank=True,
+    )
+    receiving_date = models.CharField(
+        '입고일',
+        max_length=50,
+        blank=True,
+    )
+    order_date = models.CharField(
+        '발주일시',
+        max_length=50,
+        blank=True,
+    )
     order_quantity = models.IntegerField(
         '발주수량',
         default=0,
         validators=[MinValueValidator(0)],
     )
+    confirmed_quantity = models.IntegerField(
+        '확정수량',
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+
+    # 기존 유지 필드
     manager = models.CharField(
         '담당자',
         max_length=100,
@@ -85,11 +129,6 @@ class FulfillmentOrder(models.Model):
     expiry_date = models.CharField(
         '소비기한',
         max_length=50,
-        blank=True,
-    )
-    receiving_date = models.DateField(
-        '입고일',
-        null=True,
         blank=True,
     )
     box_quantity = models.IntegerField(
@@ -170,7 +209,7 @@ class FulfillmentOrder(models.Model):
         db_table = 'fulfillment_orders'
         verbose_name = '출고 주문'
         verbose_name_plural = '출고 주문 목록'
-        ordering = ['-order_date', '-created_at']
+        ordering = ['-created_at']
         indexes = [
             models.Index(
                 fields=['client', 'platform'],
@@ -179,10 +218,6 @@ class FulfillmentOrder(models.Model):
             models.Index(
                 fields=['status'],
                 name='idx_fulfill_status',
-            ),
-            models.Index(
-                fields=['order_date'],
-                name='idx_fulfill_order_date',
             ),
             models.Index(
                 fields=['order_number'],

@@ -10,36 +10,40 @@ class FulfillmentOrderAdmin(admin.ModelAdmin):
     """출고 주문 관리자 설정"""
 
     list_display = [
-        'order_number', 'client', 'platform', 'product_name',
-        'order_quantity', 'status', 'order_date', 'created_at',
+        'order_number', 'client', 'brand', 'platform', 'product_name',
+        'order_quantity', 'confirmed_quantity', 'status', 'created_at',
     ]
-    list_filter = ['platform', 'status', 'client', 'order_date']
-    search_fields = ['order_number', 'product_name', 'barcode']
-    ordering = ['-order_date', '-created_at']
+    list_filter = ['platform', 'status', 'client', 'brand']
+    search_fields = ['order_number', 'product_name', 'barcode', 'sku_id']
+    ordering = ['-created_at']
     readonly_fields = [
         'confirmed_at', 'confirmed_by',
         'shipped_at', 'shipped_by',
         'synced_at', 'synced_by',
         'created_at', 'updated_at',
     ]
-    raw_id_fields = ['client', 'created_by']
+    raw_id_fields = ['client', 'brand', 'created_by']
 
     fieldsets = (
         ('기본 정보', {
             'fields': (
-                'client', 'platform', 'order_number', 'order_date', 'status',
+                'client', 'brand', 'platform', 'status',
             ),
         }),
-        ('상품 정보', {
+        ('발주 정보', {
             'fields': (
-                'product_name', 'barcode', 'order_quantity',
-                'box_quantity', 'expiry_date',
+                'order_number', 'order_type', 'order_confirmed',
+                'sku_id', 'product_name', 'barcode',
+                'center', 'receiving_date', 'order_date',
+                'order_quantity', 'confirmed_quantity',
             ),
         }),
         ('기타 정보', {
             'fields': (
-                'manager', 'receiving_date', 'address', 'memo',
+                'manager', 'expiry_date', 'box_quantity',
+                'address', 'memo',
             ),
+            'classes': ('collapse',),
         }),
         ('플랫폼별 데이터', {
             'fields': ('platform_data',),

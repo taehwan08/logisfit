@@ -1,9 +1,10 @@
 """
 출고 관리 뷰
 
-B2B 출고 주문 목록, 등록, 수정, 삭제, 상태변경, 엑셀 다운로드/업로드 기능을 제공합니다.
+B2B 출고 주문 목록, 등록, 수정, 삭제, 상태변경, 벌크 붙여넣기, 엑셀 다운로드 기능을 제공합니다.
 """
 import json
+import re
 from datetime import datetime
 from functools import wraps
 
@@ -16,7 +17,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import FulfillmentOrder, FulfillmentComment
-from apps.clients.models import Client
+from apps.clients.models import Client, Brand
 
 
 # ============================================================================
@@ -35,6 +36,18 @@ def fulfillment_access_required(view_func):
     return wrapper
 
 
+def admin_or_worker_required(view_func):
+    """관리자 또는 작업자 전용 데코레이터"""
+    @wraps(view_func)
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        user = request.user
+        if not (user.is_admin or user.is_worker or user.is_superuser):
+            return JsonResponse({'error': '관리자/작업자 권한이 필요합니다.'}, status=403)
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
 def admin_required(view_func):
     """관리자 전용 데코레이터"""
     @wraps(view_func)
@@ -43,18 +56,6 @@ def admin_required(view_func):
         user = request.user
         if not (user.is_admin or user.is_superuser):
             return JsonResponse({'error': '관리자 권한이 필요합니다.'}, status=403)
-        return view_func(request, *args, **kwargs)
-    return wrapper
-
-
-def admin_or_client_required(view_func):
-    """관리자 또는 고객사 데코레이터"""
-    @wraps(view_func)
-    @login_required
-    def wrapper(request, *args, **kwargs):
-        user = request.user
-        if not (user.is_admin or user.is_client or user.is_superuser):
-            return JsonResponse({'error': '접근 권한이 없습니다.'}, status=403)
         return view_func(request, *args, **kwargs)
     return wrapper
 
@@ -94,7 +95,118 @@ def order_list_page(request):
 
 
 # ============================================================================
-# API 뷰
+# 브랜드 API
+# ============================================================================
+
+@fulfillment_access_required
+@require_http_methods(["GET"])
+def get_brands(request):
+    """거래처별 브랜드 목록 조회"""
+    client_id = request.GET.get('client_id')
+    if not client_id:
+        return JsonResponse({'brands': []})
+
+    brands = Brand.objects.filter(
+        client_id=client_id,
+        is_active=True,
+    ).order_by('name')
+
+    brand_list = [{'id': b.id, 'name': b.name, 'code': b.code} for b in brands]
+    return JsonResponse({'brands': brand_list})
+
+
+@admin_or_worker_required
+@require_http_methods(["POST"])
+def create_brand(request):
+    """브랜드 등록 (관리자/작업자)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    client_id = data.get('client_id')
+    name = data.get('name', '').strip()
+
+    if not client_id or not name:
+        return JsonResponse({'error': '거래처와 브랜드명을 입력해주세요.'}, status=400)
+
+    try:
+        client = Client.objects.get(id=client_id, is_active=True)
+    except Client.DoesNotExist:
+        return JsonResponse({'error': '유효하지 않은 거래처입니다.'}, status=400)
+
+    if Brand.objects.filter(client=client, name=name).exists():
+        return JsonResponse({'error': '이미 등록된 브랜드명입니다.'}, status=400)
+
+    brand = Brand.objects.create(
+        client=client,
+        name=name,
+        code=data.get('code', '').strip(),
+        memo=data.get('memo', '').strip(),
+        created_by=request.user,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '브랜드가 등록되었습니다.',
+        'brand': {'id': brand.id, 'name': brand.name, 'code': brand.code},
+    })
+
+
+@admin_or_worker_required
+@require_http_methods(["POST"])
+def update_brand(request, brand_id):
+    """브랜드 수정 (관리자/작업자)"""
+    try:
+        brand = Brand.objects.get(id=brand_id)
+    except Brand.DoesNotExist:
+        return JsonResponse({'error': '브랜드를 찾을 수 없습니다.'}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    if 'name' in data:
+        name = data['name'].strip()
+        if name:
+            # 중복 체크 (같은 거래처 내)
+            dup = Brand.objects.filter(client=brand.client, name=name).exclude(id=brand.id)
+            if dup.exists():
+                return JsonResponse({'error': '이미 등록된 브랜드명입니다.'}, status=400)
+            brand.name = name
+    if 'code' in data:
+        brand.code = data['code'].strip()
+    if 'memo' in data:
+        brand.memo = data['memo'].strip()
+    if 'is_active' in data:
+        brand.is_active = data['is_active']
+
+    brand.save()
+    return JsonResponse({'success': True, 'message': '브랜드가 수정되었습니다.'})
+
+
+@admin_or_worker_required
+@require_http_methods(["POST"])
+def delete_brand(request, brand_id):
+    """브랜드 삭제 (관리자/작업자)"""
+    try:
+        brand = Brand.objects.get(id=brand_id)
+    except Brand.DoesNotExist:
+        return JsonResponse({'error': '브랜드를 찾을 수 없습니다.'}, status=404)
+
+    # 해당 브랜드에 연결된 주문이 있으면 비활성화만
+    if brand.fulfillment_orders.exists():
+        brand.is_active = False
+        brand.save()
+        return JsonResponse({'success': True, 'message': '브랜드가 비활성화되었습니다. (연결된 주문이 존재)'})
+
+    brand.delete()
+    return JsonResponse({'success': True, 'message': '브랜드가 삭제되었습니다.'})
+
+
+# ============================================================================
+# 주문 API
 # ============================================================================
 
 @fulfillment_access_required
@@ -102,13 +214,14 @@ def order_list_page(request):
 def get_orders(request):
     """주문 목록 JSON API (필터/검색/페이징)"""
     user = request.user
-    qs = FulfillmentOrder.objects.select_related('client', 'created_by')
+    qs = FulfillmentOrder.objects.select_related('client', 'brand', 'created_by')
 
     # 고객사 필터 (권한)
     qs = qs.filter(_get_client_filter(user))
 
     # 필터 파라미터
     client_id = request.GET.get('client_id')
+    brand_id = request.GET.get('brand_id')
     platform = request.GET.get('platform')
     status = request.GET.get('status')
     search = request.GET.get('search', '').strip()
@@ -119,6 +232,8 @@ def get_orders(request):
 
     if client_id:
         qs = qs.filter(client_id=client_id)
+    if brand_id:
+        qs = qs.filter(brand_id=brand_id)
     if platform:
         qs = qs.filter(platform=platform)
     if status:
@@ -127,21 +242,16 @@ def get_orders(request):
         qs = qs.filter(
             Q(order_number__icontains=search) |
             Q(product_name__icontains=search) |
-            Q(barcode__icontains=search)
+            Q(barcode__icontains=search) |
+            Q(sku_id__icontains=search)
         )
     if date_from:
-        try:
-            qs = qs.filter(order_date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
-        except ValueError:
-            pass
+        qs = qs.filter(order_date__gte=date_from)
     if date_to:
-        try:
-            qs = qs.filter(order_date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
-        except ValueError:
-            pass
+        qs = qs.filter(order_date__lte=date_to)
 
     # 정렬
-    qs = qs.order_by('-order_date', '-created_at')
+    qs = qs.order_by('-created_at')
 
     # 페이징
     try:
@@ -161,19 +271,26 @@ def get_orders(request):
             'id': order.id,
             'client_id': order.client_id,
             'client_name': order.client.company_name,
+            'brand_id': order.brand_id,
+            'brand_name': order.brand.name if order.brand else '',
             'platform': order.platform,
             'platform_display': order.get_platform_display(),
             'order_number': order.order_number,
-            'order_date': order.order_date.strftime('%Y-%m-%d') if order.order_date else '',
-            'status': order.status,
-            'status_display': order.get_status_display(),
+            'order_type': order.order_type,
+            'order_confirmed': order.order_confirmed,
+            'sku_id': order.sku_id,
             'product_name': order.product_name,
             'barcode': order.barcode,
+            'center': order.center,
+            'receiving_date': order.receiving_date,
+            'order_date': order.order_date,
             'order_quantity': order.order_quantity,
-            'box_quantity': order.box_quantity,
+            'confirmed_quantity': order.confirmed_quantity,
+            'status': order.status,
+            'status_display': order.get_status_display(),
             'manager': order.manager,
             'expiry_date': order.expiry_date,
-            'receiving_date': order.receiving_date.strftime('%Y-%m-%d') if order.receiving_date else '',
+            'box_quantity': order.box_quantity,
             'address': order.address,
             'memo': order.memo,
             'platform_data': order.platform_data,
@@ -194,7 +311,7 @@ def get_orders(request):
     })
 
 
-@admin_or_client_required
+@fulfillment_access_required
 @require_http_methods(["POST"])
 def create_order(request):
     """주문 등록"""
@@ -219,6 +336,15 @@ def create_order(request):
     if user.is_client and not user.clients.filter(id=client_id).exists():
         return JsonResponse({'error': '해당 거래처에 대한 권한이 없습니다.'}, status=403)
 
+    # 브랜드 검증
+    brand = None
+    brand_id = data.get('brand_id')
+    if brand_id:
+        try:
+            brand = Brand.objects.get(id=brand_id, client=client, is_active=True)
+        except Brand.DoesNotExist:
+            return JsonResponse({'error': '유효하지 않은 브랜드입니다.'}, status=400)
+
     # 필수 필드 검증
     platform = data.get('platform', '')
     order_number = data.get('order_number', '').strip()
@@ -231,36 +357,30 @@ def create_order(request):
     if not product_name:
         return JsonResponse({'error': '상품명을 입력해주세요.'}, status=400)
 
-    # 발주일 파싱
-    order_date_str = data.get('order_date', '')
-    order_date = timezone.now().date()
-    if order_date_str:
+    def safe_int(val, default=0):
         try:
-            order_date = datetime.strptime(order_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            pass
-
-    # 입고일 파싱
-    receiving_date = None
-    receiving_date_str = data.get('receiving_date', '')
-    if receiving_date_str:
-        try:
-            receiving_date = datetime.strptime(receiving_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            pass
+            return int(val or default)
+        except (ValueError, TypeError):
+            return default
 
     order = FulfillmentOrder.objects.create(
         client=client,
+        brand=brand,
         platform=platform,
         order_number=order_number,
-        order_date=order_date,
+        order_type=data.get('order_type', '').strip(),
+        order_confirmed=data.get('order_confirmed', '').strip(),
+        sku_id=data.get('sku_id', '').strip(),
         product_name=product_name,
         barcode=data.get('barcode', '').strip(),
-        order_quantity=int(data.get('order_quantity', 0) or 0),
+        center=data.get('center', '').strip(),
+        receiving_date=data.get('receiving_date', '').strip(),
+        order_date=data.get('order_date', '').strip(),
+        order_quantity=safe_int(data.get('order_quantity')),
+        confirmed_quantity=safe_int(data.get('confirmed_quantity')),
         manager=data.get('manager', '').strip(),
         expiry_date=data.get('expiry_date', '').strip(),
-        receiving_date=receiving_date,
-        box_quantity=int(data.get('box_quantity', 0) or 0),
+        box_quantity=safe_int(data.get('box_quantity')),
         address=data.get('address', '').strip(),
         memo=data.get('memo', '').strip(),
         platform_data=data.get('platform_data', {}),
@@ -274,10 +394,133 @@ def create_order(request):
     })
 
 
-@admin_required
+@fulfillment_access_required
+@require_http_methods(["POST"])
+def bulk_paste_orders(request):
+    """
+    붙여넣기 벌크 주문 등록
+
+    쿠팡 등 플랫폼 표에서 복사한 텍스트를 탭 구분으로 파싱하여 일괄 등록.
+    컬럼 순서: 발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    user = request.user
+    client_id = data.get('client_id')
+    brand_id = data.get('brand_id')
+    platform = data.get('platform', '')
+    paste_text = data.get('paste_text', '')
+
+    if not client_id:
+        return JsonResponse({'error': '거래처를 선택해주세요.'}, status=400)
+    if not platform:
+        return JsonResponse({'error': '플랫폼을 선택해주세요.'}, status=400)
+    if not paste_text.strip():
+        return JsonResponse({'error': '붙여넣기 데이터가 없습니다.'}, status=400)
+
+    try:
+        client = Client.objects.get(id=client_id, is_active=True)
+    except Client.DoesNotExist:
+        return JsonResponse({'error': '유효하지 않은 거래처입니다.'}, status=400)
+
+    # 고객사 권한 체크
+    if user.is_client and not user.clients.filter(id=client_id).exists():
+        return JsonResponse({'error': '해당 거래처에 대한 권한이 없습니다.'}, status=403)
+
+    # 브랜드
+    brand = None
+    if brand_id:
+        try:
+            brand = Brand.objects.get(id=brand_id, client=client, is_active=True)
+        except Brand.DoesNotExist:
+            pass
+
+    # 탭 구분 텍스트 파싱
+    lines = paste_text.strip().split('\n')
+    created_count = 0
+    errors = []
+
+    def safe_int(val, default=0):
+        """숫자 파싱 - 쉼표 제거 후 정수 변환"""
+        if not val:
+            return default
+        try:
+            # 쉼표 제거 (1,000 → 1000)
+            cleaned = str(val).strip().replace(',', '')
+            return int(cleaned) if cleaned else default
+        except (ValueError, TypeError):
+            return default
+
+    for row_idx, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line:
+            continue
+
+        cols = line.split('\t')
+
+        # 최소 1개 컬럼 (발주번호)이 있어야 함
+        if not cols or not cols[0].strip():
+            errors.append(f'{row_idx}행: 발주번호가 비어있습니다.')
+            continue
+
+        try:
+            order_number = cols[0].strip() if len(cols) > 0 else ''
+            order_type = cols[1].strip() if len(cols) > 1 else ''
+            order_confirmed = cols[2].strip() if len(cols) > 2 else ''
+            sku_id = cols[3].strip() if len(cols) > 3 else ''
+            product_name = cols[4].strip() if len(cols) > 4 else ''
+            barcode = cols[5].strip() if len(cols) > 5 else ''
+            center = cols[6].strip() if len(cols) > 6 else ''
+            receiving_date = cols[7].strip() if len(cols) > 7 else ''
+            order_date = cols[8].strip() if len(cols) > 8 else ''
+            order_quantity = safe_int(cols[9]) if len(cols) > 9 else 0
+            confirmed_quantity = safe_int(cols[10]) if len(cols) > 10 else 0
+
+            if not product_name:
+                errors.append(f'{row_idx}행: 상품명이 비어있습니다.')
+                continue
+
+            FulfillmentOrder.objects.create(
+                client=client,
+                brand=brand,
+                platform=platform,
+                order_number=order_number,
+                order_type=order_type,
+                order_confirmed=order_confirmed,
+                sku_id=sku_id,
+                product_name=product_name,
+                barcode=barcode,
+                center=center,
+                receiving_date=receiving_date,
+                order_date=order_date,
+                order_quantity=order_quantity,
+                confirmed_quantity=confirmed_quantity,
+                created_by=user,
+            )
+            created_count += 1
+
+        except Exception as e:
+            errors.append(f'{row_idx}행: {str(e)}')
+
+    result = {
+        'success': True,
+        'message': f'{created_count}건이 등록되었습니다.',
+        'created_count': created_count,
+    }
+    if errors:
+        result['errors'] = errors[:20]
+        result['error_count'] = len(errors)
+
+    return JsonResponse(result)
+
+
+@admin_or_worker_required
 @require_http_methods(["POST"])
 def update_order(request, order_id):
-    """주문 수정 (관리자 전용)"""
+    """주문 수정 (관리자/작업자)"""
     try:
         order = FulfillmentOrder.objects.get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
@@ -296,39 +539,35 @@ def update_order(request, order_id):
         except Client.DoesNotExist:
             return JsonResponse({'error': '유효하지 않은 거래처입니다.'}, status=400)
 
-    if 'platform' in data:
-        order.platform = data['platform']
-    if 'order_number' in data:
-        order.order_number = data['order_number'].strip()
-    if 'order_date' in data and data['order_date']:
-        try:
-            order.order_date = datetime.strptime(data['order_date'], '%Y-%m-%d').date()
-        except ValueError:
-            pass
-    if 'product_name' in data:
-        order.product_name = data['product_name'].strip()
-    if 'barcode' in data:
-        order.barcode = data['barcode'].strip()
-    if 'order_quantity' in data:
-        order.order_quantity = int(data['order_quantity'] or 0)
-    if 'box_quantity' in data:
-        order.box_quantity = int(data['box_quantity'] or 0)
-    if 'manager' in data:
-        order.manager = data['manager'].strip()
-    if 'expiry_date' in data:
-        order.expiry_date = data['expiry_date'].strip()
-    if 'receiving_date' in data:
-        if data['receiving_date']:
+    if 'brand_id' in data:
+        if data['brand_id']:
             try:
-                order.receiving_date = datetime.strptime(data['receiving_date'], '%Y-%m-%d').date()
-            except ValueError:
+                brand = Brand.objects.get(id=data['brand_id'], client=order.client, is_active=True)
+                order.brand = brand
+            except Brand.DoesNotExist:
                 pass
         else:
-            order.receiving_date = None
-    if 'address' in data:
-        order.address = data['address'].strip()
-    if 'memo' in data:
-        order.memo = data['memo'].strip()
+            order.brand = None
+
+    text_fields = [
+        'platform', 'order_number', 'order_type', 'order_confirmed',
+        'sku_id', 'product_name', 'barcode', 'center',
+        'receiving_date', 'order_date', 'manager', 'expiry_date',
+        'address', 'memo',
+    ]
+    for field in text_fields:
+        if field in data:
+            val = data[field]
+            setattr(order, field, val.strip() if isinstance(val, str) else val)
+
+    int_fields = ['order_quantity', 'confirmed_quantity', 'box_quantity']
+    for field in int_fields:
+        if field in data:
+            try:
+                setattr(order, field, int(data[field] or 0))
+            except (ValueError, TypeError):
+                pass
+
     if 'platform_data' in data:
         order.platform_data = data['platform_data']
 
@@ -340,10 +579,10 @@ def update_order(request, order_id):
     })
 
 
-@admin_required
+@admin_or_worker_required
 @require_http_methods(["POST"])
 def delete_order(request, order_id):
-    """주문 삭제 (관리자 전용)"""
+    """주문 삭제 (관리자/작업자)"""
     try:
         order = FulfillmentOrder.objects.get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
@@ -356,10 +595,10 @@ def delete_order(request, order_id):
     })
 
 
-@admin_required
+@admin_or_worker_required
 @require_http_methods(["POST"])
 def update_status(request, order_id):
-    """상태 변경 (관리자 전용) - 확인/출고/전산반영"""
+    """상태 변경 (관리자/작업자 전용) - 확인/출고/전산반영"""
     try:
         order = FulfillmentOrder.objects.get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
@@ -434,13 +673,14 @@ def export_excel(request):
         return JsonResponse({'error': 'openpyxl 패키지가 필요합니다.'}, status=500)
 
     user = request.user
-    qs = FulfillmentOrder.objects.select_related('client')
+    qs = FulfillmentOrder.objects.select_related('client', 'brand')
 
     # 고객사 필터 (권한)
     qs = qs.filter(_get_client_filter(user))
 
     # 필터 파라미터 (목록 API와 동일)
     client_id = request.GET.get('client_id')
+    brand_id = request.GET.get('brand_id')
     platform = request.GET.get('platform')
     status = request.GET.get('status')
     search = request.GET.get('search', '').strip()
@@ -449,6 +689,8 @@ def export_excel(request):
 
     if client_id:
         qs = qs.filter(client_id=client_id)
+    if brand_id:
+        qs = qs.filter(brand_id=brand_id)
     if platform:
         qs = qs.filter(platform=platform)
     if status:
@@ -457,20 +699,15 @@ def export_excel(request):
         qs = qs.filter(
             Q(order_number__icontains=search) |
             Q(product_name__icontains=search) |
-            Q(barcode__icontains=search)
+            Q(barcode__icontains=search) |
+            Q(sku_id__icontains=search)
         )
     if date_from:
-        try:
-            qs = qs.filter(order_date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
-        except ValueError:
-            pass
+        qs = qs.filter(order_date__gte=date_from)
     if date_to:
-        try:
-            qs = qs.filter(order_date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
-        except ValueError:
-            pass
+        qs = qs.filter(order_date__lte=date_to)
 
-    qs = qs.order_by('-order_date', '-created_at')
+    qs = qs.order_by('-created_at')
 
     # 엑셀 생성
     wb = openpyxl.Workbook()
@@ -490,9 +727,9 @@ def export_excel(request):
 
     # 헤더
     headers = [
-        '거래처', '플랫폼', '발주번호', '발주일', '상품명',
-        '바코드', '발주수량', '박스수량', '상태',
-        '소비기한', '입고일', '담당자', '주소지', '비고',
+        '거래처', '브랜드', '플랫폼', '발주번호', '발주유형', '발주확정',
+        'SKU ID', '상품명', '바코드', '센터', '입고일', '발주일시',
+        '발주수량', '확정수량', '상태', '비고',
     ]
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -505,18 +742,20 @@ def export_excel(request):
     for row_idx, order in enumerate(qs, 2):
         row_data = [
             order.client.company_name,
+            order.brand.name if order.brand else '',
             order.get_platform_display(),
             order.order_number,
-            order.order_date.strftime('%Y-%m-%d') if order.order_date else '',
+            order.order_type,
+            order.order_confirmed,
+            order.sku_id,
             order.product_name,
             order.barcode,
+            order.center,
+            order.receiving_date,
+            order.order_date,
             order.order_quantity,
-            order.box_quantity,
+            order.confirmed_quantity,
             order.get_status_display(),
-            order.expiry_date,
-            order.receiving_date.strftime('%Y-%m-%d') if order.receiving_date else '',
-            order.manager,
-            order.address,
             order.memo,
         ]
         for col, value in enumerate(row_data, 1):
@@ -525,7 +764,7 @@ def export_excel(request):
             cell.alignment = Alignment(vertical='center')
 
     # 컬럼 너비 조정
-    col_widths = [15, 12, 15, 12, 30, 15, 10, 10, 10, 12, 12, 10, 30, 20]
+    col_widths = [15, 12, 12, 15, 10, 10, 15, 30, 15, 12, 12, 16, 10, 10, 10, 20]
     for i, width in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
@@ -537,261 +776,6 @@ def export_excel(request):
     response['Content-Disposition'] = f'attachment; filename="fulfillment_orders_{now_str}.xlsx"'
     wb.save(response)
     return response
-
-
-# 플랫폼별 추가 컬럼 정의
-PLATFORM_EXTRA_COLUMNS = {
-    'coupang': ['배송유형', '벤더코드'],
-    'kurly': ['배송예정일', '온도대'],
-    'oliveyoung': ['매장코드', '진열예정일'],
-    'smartstore': ['판매채널'],
-    'offline': ['매장명', '배송방법'],
-    'export': ['수출국', '인코텀즈'],
-    'other': [],
-}
-
-# 플랫폼별 예시 데이터
-PLATFORM_EXAMPLE_DATA = {
-    'coupang': {
-        'base': ['(주)예시거래처', '쿠팡', 'CPG-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 100, 10, '', '2026-12-31', '2025-03-05', '홍길동', '서울시 강남구', '비고 예시'],
-        'extra': ['로켓배송', 'VD12345'],
-    },
-    'kurly': {
-        'base': ['(주)예시거래처', '컬리', 'KRL-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 50, 5, '', '2026-06-30', '2025-03-03', '김철수', '서울시 송파구', ''],
-        'extra': ['2025-03-05', '냉장'],
-    },
-    'oliveyoung': {
-        'base': ['(주)예시거래처', '올리브영', 'OY-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 200, 20, '', '2026-12-31', '2025-03-10', '이영희', '', ''],
-        'extra': ['OY-STORE-001', '2025-03-15'],
-    },
-    'smartstore': {
-        'base': ['(주)예시거래처', '스마트스토어', 'SS-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 30, 3, '', '2026-12-31', '', '박민수', '경기도 성남시', ''],
-        'extra': ['네이버'],
-    },
-    'offline': {
-        'base': ['(주)예시거래처', '오프라인마트', 'OFF-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 500, 50, '', '2026-12-31', '2025-03-07', '최수진', '서울시 마포구', ''],
-        'extra': ['이마트 홍대점', '직배'],
-    },
-    'export': {
-        'base': ['(주)예시거래처', '해외수출', 'EXP-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 1000, 100, '', '2026-12-31', '2025-04-01', '정대한', '', ''],
-        'extra': ['일본', 'FOB'],
-    },
-    'other': {
-        'base': ['(주)예시거래처', '기타', 'ETC-2025-001', '2025-03-01', '상품명 예시',
-                 '8801234567890', 100, 10, '', '2026-12-31', '', '담당자명', '', ''],
-        'extra': [],
-    },
-}
-
-
-@fulfillment_access_required
-@require_http_methods(["GET"])
-def download_template(request):
-    """플랫폼별 엑셀 업로드 양식 다운로드"""
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-    except ImportError:
-        return JsonResponse({'error': 'openpyxl 패키지가 필요합니다.'}, status=500)
-
-    platform = request.GET.get('platform', 'other')
-    if platform not in PLATFORM_EXTRA_COLUMNS:
-        platform = 'other'
-
-    # 플랫폼 표시명
-    platform_labels = dict(FulfillmentOrder.Platform.choices)
-    platform_label = platform_labels.get(platform, '기타')
-
-    # 공통 헤더
-    base_headers = [
-        '거래처', '플랫폼', '발주번호', '발주일', '상품명',
-        '바코드', '발주수량', '박스수량', '상태',
-        '소비기한', '입고일', '담당자', '주소지', '비고',
-    ]
-    extra_headers = PLATFORM_EXTRA_COLUMNS.get(platform, [])
-    all_headers = base_headers + extra_headers
-
-    # 엑셀 생성
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f'{platform_label} 양식'
-
-    # 헤더 스타일
-    header_font = Font(bold=True, color='FFFFFF', size=11)
-    header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid')
-    extra_fill = PatternFill(start_color='2980B9', end_color='2980B9', fill_type='solid')
-    header_alignment = Alignment(horizontal='center', vertical='center')
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin'),
-    )
-
-    # 헤더 행
-    for col, header in enumerate(all_headers, 1):
-        cell = ws.cell(row=1, column=col, value=header)
-        cell.font = header_font
-        cell.fill = extra_fill if col > len(base_headers) else header_fill
-        cell.alignment = header_alignment
-        cell.border = thin_border
-
-    # 예시 데이터 행
-    example = PLATFORM_EXAMPLE_DATA.get(platform, PLATFORM_EXAMPLE_DATA['other'])
-    example_data = example['base'] + example['extra']
-    example_font = Font(color='999999', italic=True, size=10)
-    for col, value in enumerate(example_data, 1):
-        cell = ws.cell(row=2, column=col, value=value)
-        cell.font = example_font
-        cell.border = thin_border
-        cell.alignment = Alignment(vertical='center')
-
-    # 컬럼 너비
-    base_widths = [15, 12, 15, 12, 30, 15, 10, 10, 10, 12, 12, 10, 30, 20]
-    extra_widths = [15] * len(extra_headers)
-    all_widths = base_widths + extra_widths
-    for i, width in enumerate(all_widths, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
-
-    # 응답
-    response = HttpResponse(
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-    now_str = timezone.now().strftime('%Y%m%d')
-    response['Content-Disposition'] = f'attachment; filename="fulfillment_template_{platform}_{now_str}.xlsx"'
-    wb.save(response)
-    return response
-
-
-@admin_required
-@require_http_methods(["POST"])
-def upload_orders_excel(request):
-    """엑셀 일괄 업로드 (관리자 전용)"""
-    try:
-        import openpyxl
-    except ImportError:
-        return JsonResponse({'error': 'openpyxl 패키지가 필요합니다.'}, status=500)
-
-    file = request.FILES.get('file')
-    if not file:
-        return JsonResponse({'error': '파일을 선택해주세요.'}, status=400)
-
-    if not file.name.endswith(('.xlsx', '.xls')):
-        return JsonResponse({'error': 'Excel 파일(.xlsx)만 업로드 가능합니다.'}, status=400)
-
-    try:
-        wb = openpyxl.load_workbook(file)
-        ws = wb.active
-    except Exception as e:
-        return JsonResponse({'error': f'파일을 읽을 수 없습니다: {str(e)}'}, status=400)
-
-    # 플랫폼 이름→코드 매핑
-    platform_map = {v: k for k, v in FulfillmentOrder.Platform.choices}
-
-    user = request.user
-    created_count = 0
-    errors = []
-
-    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
-        if not row or not row[0]:
-            continue
-
-        try:
-            # 거래처 매칭
-            client_name = str(row[0]).strip()
-            try:
-                client = Client.objects.get(company_name=client_name, is_active=True)
-            except Client.DoesNotExist:
-                errors.append(f'{row_idx}행: 거래처 "{client_name}"을 찾을 수 없습니다.')
-                continue
-
-            # 플랫폼 매칭
-            platform_name = str(row[1]).strip() if row[1] else ''
-            platform_code = platform_map.get(platform_name, '')
-            if not platform_code:
-                # 코드값으로도 시도
-                if platform_name.lower() in dict(FulfillmentOrder.Platform.choices):
-                    platform_code = platform_name.lower()
-                else:
-                    errors.append(f'{row_idx}행: 플랫폼 "{platform_name}"을 찾을 수 없습니다.')
-                    continue
-
-            # 발주번호
-            order_number = str(row[2]).strip() if row[2] else ''
-            if not order_number:
-                errors.append(f'{row_idx}행: 발주번호가 비어있습니다.')
-                continue
-
-            # 발주일
-            order_date = timezone.now().date()
-            if row[3]:
-                if isinstance(row[3], datetime):
-                    order_date = row[3].date()
-                else:
-                    try:
-                        order_date = datetime.strptime(str(row[3]).strip(), '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-
-            # 상품명
-            product_name = str(row[4]).strip() if len(row) > 4 and row[4] else ''
-            if not product_name:
-                errors.append(f'{row_idx}행: 상품명이 비어있습니다.')
-                continue
-
-            # 나머지 필드
-            barcode = str(row[5]).strip() if len(row) > 5 and row[5] else ''
-            order_quantity = int(row[6] or 0) if len(row) > 6 and row[6] else 0
-            box_quantity = int(row[7] or 0) if len(row) > 7 and row[7] else 0
-
-            # 입고일
-            receiving_date = None
-            if len(row) > 10 and row[10]:
-                if isinstance(row[10], datetime):
-                    receiving_date = row[10].date()
-                else:
-                    try:
-                        receiving_date = datetime.strptime(str(row[10]).strip(), '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-
-            FulfillmentOrder.objects.create(
-                client=client,
-                platform=platform_code,
-                order_number=order_number,
-                order_date=order_date,
-                product_name=product_name,
-                barcode=barcode,
-                order_quantity=order_quantity,
-                box_quantity=box_quantity,
-                expiry_date=str(row[9]).strip() if len(row) > 9 and row[9] else '',
-                receiving_date=receiving_date,
-                manager=str(row[11]).strip() if len(row) > 11 and row[11] else '',
-                address=str(row[12]).strip() if len(row) > 12 and row[12] else '',
-                memo=str(row[13]).strip() if len(row) > 13 and row[13] else '',
-                created_by=user,
-            )
-            created_count += 1
-
-        except Exception as e:
-            errors.append(f'{row_idx}행: {str(e)}')
-
-    result = {
-        'success': True,
-        'message': f'{created_count}건이 등록되었습니다.',
-        'created_count': created_count,
-    }
-    if errors:
-        result['errors'] = errors[:20]  # 최대 20개까지만
-        result['error_count'] = len(errors)
-
-    return JsonResponse(result)
 
 
 # ============================================================================

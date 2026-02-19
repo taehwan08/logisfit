@@ -237,6 +237,57 @@ class Client(models.Model):
         ).first()
 
 
+class Brand(models.Model):
+    """
+    브랜드 모델
+
+    거래처(Client) 하위에 속하는 브랜드를 관리합니다.
+    하나의 거래처는 여러 브랜드를 보유할 수 있습니다.
+    """
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        verbose_name='거래처',
+        related_name='brands',
+    )
+    name = models.CharField('브랜드명', max_length=200)
+    code = models.CharField(
+        '브랜드 코드',
+        max_length=50,
+        blank=True,
+        help_text='내부 관리용 코드 (선택)',
+    )
+    is_active = models.BooleanField('활성 상태', default=True)
+    memo = models.TextField('메모', blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='등록자',
+        related_name='created_brands',
+    )
+    created_at = models.DateTimeField('등록일시', auto_now_add=True)
+    updated_at = models.DateTimeField('수정일시', auto_now=True)
+
+    class Meta:
+        db_table = 'brands'
+        verbose_name = '브랜드'
+        verbose_name_plural = '브랜드 목록'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['client', 'name'],
+                name='uq_brand_client_name',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.client.company_name})"
+
+
 class PriceContract(models.Model):
     """
     단가 계약 모델

@@ -6,7 +6,15 @@ Django Admin에서 거래처, 단가 계약을 관리합니다.
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Client, PriceContract
+from .models import Client, Brand, PriceContract
+
+
+class BrandInline(admin.TabularInline):
+    """브랜드 인라인 (거래처 Admin에서 사용)"""
+    model = Brand
+    extra = 1
+    readonly_fields = ('created_at', 'created_by')
+    fields = ('name', 'code', 'is_active', 'memo', 'created_by', 'created_at')
 
 
 class PriceContractInline(admin.TabularInline):
@@ -27,7 +35,7 @@ class ClientAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'created_at', 'contract_start_date')
     search_fields = ('company_name', 'business_number', 'contact_person', 'contact_email')
     readonly_fields = ('created_at', 'updated_at', 'created_by')
-    inlines = [PriceContractInline]
+    inlines = [BrandInline, PriceContractInline]
 
     fieldsets = (
         ('기본 정보', {
@@ -66,6 +74,21 @@ class ClientAdmin(admin.ModelAdmin):
         if obj.is_contract_active:
             return format_html('<span style="color: green;">유효</span>')
         return format_html('<span style="color: orange;">만료</span>')
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Brand)
+class BrandAdmin(admin.ModelAdmin):
+    """브랜드 Admin"""
+    list_display = ('name', 'client', 'code', 'is_active', 'created_at')
+    list_filter = ('is_active', 'client')
+    search_fields = ('name', 'code', 'client__company_name')
+    autocomplete_fields = ('client',)
+    readonly_fields = ('created_at', 'updated_at', 'created_by')
 
     def save_model(self, request, obj, form, change):
         if not change:

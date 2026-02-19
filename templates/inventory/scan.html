@@ -884,8 +884,8 @@ function enableProductInput() {
 function applySingleProduct(product) {
     // 단일 상품 정보를 상품명 필드에 반영한다.
     const nameInput = document.getElementById('productNameInput');
-    // 관리명이 있으면 관리명 우선, 없으면 상품명
-    const displayText = product.display_name || product.name;
+    // 항상 상품명을 표시
+    const displayText = product.name;
     nameInput.value = displayText;
     nameInput.classList.add('auto-filled');
 
@@ -1180,7 +1180,7 @@ async function searchByInitial(initial, e) {
                 ? `${escapeHtml(p.name)} <span class="tr-meta">(${escapeHtml(p.display_name)})</span>`
                 : escapeHtml(p.name);
             return `
-                <div class="touch-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
+                <div class="touch-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.name)}')">
                     <div class="tr-name">${displayLabel}</div>
                     <div class="tr-meta"><i class="bi bi-upc me-1"></i>${escapeHtml(p.barcode)}</div>
                 </div>`;
@@ -1216,7 +1216,7 @@ async function searchProducts() {
                 ? `${escapeHtml(p.name)} <span class="tr-meta">(${escapeHtml(p.display_name)})</span>`
                 : escapeHtml(p.name);
             return `
-                <div class="touch-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
+                <div class="touch-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.name)}')">
                     <div class="tr-name">${displayLabel}</div>
                     <div class="tr-meta"><i class="bi bi-upc me-1"></i>${escapeHtml(p.barcode)}</div>
                 </div>`;
