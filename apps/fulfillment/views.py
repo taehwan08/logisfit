@@ -17,6 +17,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import FulfillmentOrder, FulfillmentComment
+from .slack import send_order_created_notification, send_bulk_orders_notification
 from apps.clients.models import Client, Brand
 
 
@@ -387,6 +388,9 @@ def create_order(request):
         created_by=user,
     )
 
+    # 슬랙 알림
+    send_order_created_notification(order)
+
     return JsonResponse({
         'success': True,
         'message': '주문이 등록되었습니다.',
@@ -513,6 +517,17 @@ def bulk_paste_orders(request):
     if errors:
         result['errors'] = errors[:20]
         result['error_count'] = len(errors)
+
+    # 슬랙 알림 (1건 이상 등록 시 요약 메시지 1건만 발송)
+    if created_count > 0:
+        send_bulk_orders_notification(
+            client=client,
+            brand=brand,
+            platform=platform,
+            created_count=created_count,
+            error_count=len(errors),
+            user=user,
+        )
 
     return JsonResponse(result)
 
