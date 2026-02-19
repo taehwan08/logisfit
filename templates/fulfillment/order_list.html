@@ -292,13 +292,11 @@
         <table class="table table-hover" id="ordersTable">
             <thead>
                 <tr>
+                    <th>등록일</th>
                     <th>발주번호</th>
-                    <th>발주유형</th>
-                    <th>발주확정</th>
                     <th>거래처</th>
                     <th>브랜드</th>
                     <th>플랫폼</th>
-                    <th>SKU ID</th>
                     <th>상품명</th>
                     <th>바코드</th>
                     <th>센터</th>
@@ -308,6 +306,7 @@
                     <th class="text-end">확정수량</th>
                     <th class="text-center" style="width:40px">확인</th>
                     <th class="text-center" style="width:40px">출고</th>
+                    <th>출고일시</th>
                     <th class="text-center" style="width:40px">전산</th>
                     {% if is_admin or is_worker %}
                     <th style="width:60px">작업</th>
@@ -624,17 +623,15 @@ function renderOrders(data) {
 
         html += `
         <tr>
+            <td class="text-muted" style="font-size:0.8rem;">${escapeHtml(order.created_at)}</td>
             <td>
                 <a href="javascript:void(0)" onclick="showDetail(${order.id})" class="text-decoration-none fw-semibold text-primary">
                     ${escapeHtml(order.order_number)}
                 </a>
             </td>
-            <td>${escapeHtml(order.order_type)}</td>
-            <td>${escapeHtml(order.order_confirmed)}</td>
             <td>${escapeHtml(order.client_name)}</td>
             <td>${escapeHtml(order.brand_name)}</td>
             <td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
-            <td>${escapeHtml(order.sku_id)}</td>
             <td class="text-truncate" style="max-width:180px;" title="${escapeHtml(order.product_name)}">
                 ${escapeHtml(order.product_name)}
             </td>
@@ -646,6 +643,7 @@ function renderOrders(data) {
             <td class="text-end">${order.confirmed_quantity.toLocaleString()}</td>
             <td class="text-center">${confirmCheck}</td>
             <td class="text-center">${shipCheck}</td>
+            <td class="text-muted" style="font-size:0.8rem;">${order.shipped_at || ''}</td>
             <td class="text-center">${syncCheck}</td>
             ${CAN_MANAGE ? `
             <td>
