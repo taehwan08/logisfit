@@ -45,6 +45,9 @@ urlpatterns = [
     # 재고 관리
     path('inventory/', include('apps.inventory.urls')),
 
+    # 출고 관리
+    path('fulfillment/', include('apps.fulfillment.urls')),
+
     # Phase 3 이후 추가될 URL들
     # path('works/', include('apps.works.urls')),
     # path('storage/', include('apps.storage.urls')),

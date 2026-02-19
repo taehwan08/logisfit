@@ -79,6 +79,18 @@
                 -->
             {% endif %}
 
+            {% if user.is_admin or user.is_superuser or user.is_worker or user.is_client %}
+                <!-- 출고 관리 메뉴 -->
+                <li class="sidebar-header-text">출고 관리</li>
+
+                <li class="sidebar-item">
+                    <a href="{% url 'fulfillment:order_list' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'fulfillment' %}active{% endif %}">
+                        <i class="bi bi-truck"></i>
+                        <span>출고 현황</span>
+                    </a>
+                </li>
+            {% endif %}
+
             {% if user.is_admin or user.is_superuser or user.is_worker %}
                 <!-- 재고 관리 메뉴 -->
                 <li class="sidebar-header-text">재고 관리</li>

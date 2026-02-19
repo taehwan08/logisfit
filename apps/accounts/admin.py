@@ -37,6 +37,9 @@ class UserAdmin(BaseUserAdmin):
         ('권한', {
             'fields': ('role', 'is_active', 'is_approved', 'is_staff', 'is_superuser'),
         }),
+        ('소속 거래처', {
+            'fields': ('clients',),
+        }),
         ('그룹 및 권한', {
             'fields': ('groups', 'user_permissions'),
             'classes': ('collapse',),
@@ -60,6 +63,9 @@ class UserAdmin(BaseUserAdmin):
 
     # 목록에서 직접 수정 가능한 필드
     list_editable = ['is_approved', 'is_active']
+
+    # 다대다 필드 UI
+    filter_horizontal = ('clients', 'groups', 'user_permissions')
 
     # 목록 액션
     actions = ['approve_users', 'deactivate_users']

@@ -57,6 +57,7 @@ LOCAL_APPS = [
     'apps.clients',
     'apps.inspection',
     'apps.inventory',
+    'apps.fulfillment',
     # Phase 3 이후 추가될 앱들
     # 'apps.works',
     # 'apps.storage',

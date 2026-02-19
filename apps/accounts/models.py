@@ -60,6 +60,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         help_text='관리자 승인 여부. 승인되지 않으면 로그인이 불가능합니다.',
     )
 
+    # 소속 거래처 (1계정 여러 고객사 가능)
+    clients = models.ManyToManyField(
+        'clients.Client',
+        blank=True,
+        verbose_name='소속 거래처',
+        related_name='users',
+    )
+
     # 타임스탬프
     created_at = models.DateTimeField('가입일', auto_now_add=True)
     updated_at = models.DateTimeField('수정일', auto_now=True)
