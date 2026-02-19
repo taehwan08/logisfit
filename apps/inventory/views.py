@@ -80,6 +80,25 @@ def products_page(request):
 # API: 상품 마스터
 # ============================================================================
 
+def _get_chosung_range(chosung_char):
+    """초성 문자에 해당하는 한글 유니코드 범위를 반환한다.
+
+    예: 'ㄱ' → ('가', '나' 직전), 'ㅎ' → ('하', '힣' 이후)
+    """
+    CHO_LIST = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+    idx = CHO_LIST.find(chosung_char)
+    if idx < 0:
+        return None, None
+
+    # 한글 유니코드: 0xAC00 + (초성idx * 21 * 28)
+    start = chr(0xAC00 + idx * 21 * 28)
+    if idx < len(CHO_LIST) - 1:
+        end = chr(0xAC00 + (idx + 1) * 21 * 28)
+    else:
+        end = chr(0xD7A4)  # '힣' + 1
+    return start, end
+
+
 @login_required
 @admin_required
 @require_GET
@@ -88,10 +107,12 @@ def get_products(request):
 
     Query params:
         search: 검색어 (바코드 or 상품명)
+        initial: 초성 또는 알파벳 (ㄱ~ㅎ, A~Z) — 해당 글자로 시작하는 상품 검색
     """
     from django.db.models import Q
 
     search = request.GET.get('search', '').strip()
+    initial = request.GET.get('initial', '').strip()
     products = Product.objects.all()
 
     if search:
@@ -100,8 +121,37 @@ def get_products(request):
             Q(name__icontains=search) |
             Q(display_name__icontains=search)
         )
+    elif initial:
+        # 초성 검색 (ㄱ~ㅎ)
+        CHO_LIST = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+        if initial in CHO_LIST:
+            start, end = _get_chosung_range(initial)
+            if start and end:
+                products = products.filter(
+                    Q(name__gte=start, name__lt=end) |
+                    Q(display_name__gte=start, display_name__lt=end)
+                )
+        # 알파벳 검색 (A~Z)
+        elif initial.isalpha() and len(initial) == 1:
+            upper = initial.upper()
+            lower = initial.lower()
+            products = products.filter(
+                Q(name__istartswith=upper) | Q(name__istartswith=lower) |
+                Q(display_name__istartswith=upper) | Q(display_name__istartswith=lower)
+            )
+        # 숫자 검색 (0~9) — initial='0'이면 0~9 전부 검색
+        elif initial == '0':
+            q = Q()
+            for d in '0123456789':
+                q |= Q(name__startswith=d) | Q(display_name__startswith=d)
+            products = products.filter(q)
+        elif initial.isdigit():
+            products = products.filter(
+                Q(name__startswith=initial) |
+                Q(display_name__startswith=initial)
+            )
 
-    products = products.order_by('name')[:500]
+    products = products.order_by('name')[:100]
 
     return JsonResponse({
         'products': [

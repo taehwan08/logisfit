@@ -152,6 +152,102 @@
     }
     .search-result-item .item-name { font-weight: 600; }
     .search-result-item .item-barcode { font-size: 0.78rem; color: #6c757d; }
+
+    /* 초성/알파벳 버튼 패널 */
+    .initial-panel {
+        margin-bottom: 0.75rem;
+    }
+    .initial-panel-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #6c757d;
+        margin-bottom: 0.35rem;
+    }
+    .initial-btn-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .initial-btn {
+        min-width: 36px;
+        height: 36px;
+        padding: 0 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: #fff;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .initial-btn:hover {
+        background: #fff3cd;
+        border-color: #ffc107;
+        transform: scale(1.05);
+    }
+    .initial-btn:active,
+    .initial-btn.active {
+        background: #ffc107;
+        border-color: #e0a800;
+        color: #fff;
+        transform: scale(0.97);
+    }
+    .initial-btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+        transform: none;
+    }
+    .initial-tab-btn {
+        min-width: 50px;
+        height: 32px;
+        padding: 0 10px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: #f8f9fa;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .initial-tab-btn.active {
+        background: #fd7e14;
+        border-color: #e0700c;
+        color: #fff;
+    }
+
+    /* 검색 결과 리스트 (터치 모드) */
+    .touch-result-area {
+        max-height: 300px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .touch-result-item {
+        cursor: pointer;
+        padding: 0.75rem 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        margin-bottom: 0.5rem;
+        transition: all 0.15s;
+        font-size: 0.95rem;
+    }
+    .touch-result-item:hover,
+    .touch-result-item:active {
+        background: #fff3cd;
+        border-color: #ffc107;
+    }
+    .touch-result-item .tr-name {
+        font-weight: 600;
+    }
+    .touch-result-item .tr-meta {
+        font-size: 0.78rem;
+        color: #6c757d;
+        margin-top: 2px;
+    }
 </style>
 {% endblock %}
 
@@ -264,25 +360,92 @@
     <div class="col-12">
         <div class="manual-register-area {% if not active_session %}disabled{% endif %}" id="manualRegisterArea">
             <h6 class="fw-bold mb-3">
-                <i class="bi bi-search text-warning me-2"></i>수동 등록 (상품명 검색)
+                <i class="bi bi-hand-index-thumb text-warning me-2"></i>수동 등록 (터치 검색)
                 <small class="text-muted fw-normal ms-2" id="manualInputHint">로케이션을 먼저 스캔해주세요</small>
             </h6>
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label small fw-medium">상품 검색</label>
-                    <div class="input-group">
-                        <input type="text" class="form-control scan-input" id="manualSearchInput"
-                               placeholder="상품명으로 검색" disabled>
-                        <button class="btn btn-warning px-3" id="manualSearchBtn" onclick="searchProducts()" disabled>
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                    <div id="searchResultArea" class="mt-2" style="display:none; max-height: 250px; overflow-y: auto;"></div>
+
+            <!-- 탭 전환: 초성 / 알파벳 / 텍스트 검색 -->
+            <div class="d-flex gap-2 mb-3">
+                <button class="initial-tab-btn active" id="tabChosung" onclick="switchInitialTab('chosung')" disabled>ㄱ-ㅎ</button>
+                <button class="initial-tab-btn" id="tabAlphabet" onclick="switchInitialTab('alphabet')" disabled>A-Z</button>
+                <button class="initial-tab-btn" id="tabText" onclick="switchInitialTab('text')" disabled>
+                    <i class="bi bi-keyboard me-1"></i>직접입력
+                </button>
+            </div>
+
+            <!-- 초성 패널 -->
+            <div class="initial-panel" id="chosungPanel">
+                <div class="initial-btn-group">
+                    <button class="initial-btn" onclick="searchByInitial('ㄱ', event)" disabled>ㄱ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㄴ', event)" disabled>ㄴ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㄷ', event)" disabled>ㄷ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㄹ', event)" disabled>ㄹ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅁ', event)" disabled>ㅁ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅂ', event)" disabled>ㅂ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅅ', event)" disabled>ㅅ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅇ', event)" disabled>ㅇ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅈ', event)" disabled>ㅈ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅊ', event)" disabled>ㅊ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅋ', event)" disabled>ㅋ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅌ', event)" disabled>ㅌ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅍ', event)" disabled>ㅍ</button>
+                    <button class="initial-btn" onclick="searchByInitial('ㅎ', event)" disabled>ㅎ</button>
                 </div>
+            </div>
+
+            <!-- 알파벳 패널 -->
+            <div class="initial-panel" id="alphabetPanel" style="display:none;">
+                <div class="initial-btn-group">
+                    <button class="initial-btn" onclick="searchByInitial('A', event)" disabled>A</button>
+                    <button class="initial-btn" onclick="searchByInitial('B', event)" disabled>B</button>
+                    <button class="initial-btn" onclick="searchByInitial('C', event)" disabled>C</button>
+                    <button class="initial-btn" onclick="searchByInitial('D', event)" disabled>D</button>
+                    <button class="initial-btn" onclick="searchByInitial('E', event)" disabled>E</button>
+                    <button class="initial-btn" onclick="searchByInitial('F', event)" disabled>F</button>
+                    <button class="initial-btn" onclick="searchByInitial('G', event)" disabled>G</button>
+                    <button class="initial-btn" onclick="searchByInitial('H', event)" disabled>H</button>
+                    <button class="initial-btn" onclick="searchByInitial('I', event)" disabled>I</button>
+                    <button class="initial-btn" onclick="searchByInitial('J', event)" disabled>J</button>
+                    <button class="initial-btn" onclick="searchByInitial('K', event)" disabled>K</button>
+                    <button class="initial-btn" onclick="searchByInitial('L', event)" disabled>L</button>
+                    <button class="initial-btn" onclick="searchByInitial('M', event)" disabled>M</button>
+                    <button class="initial-btn" onclick="searchByInitial('N', event)" disabled>N</button>
+                    <button class="initial-btn" onclick="searchByInitial('O', event)" disabled>O</button>
+                    <button class="initial-btn" onclick="searchByInitial('P', event)" disabled>P</button>
+                    <button class="initial-btn" onclick="searchByInitial('Q', event)" disabled>Q</button>
+                    <button class="initial-btn" onclick="searchByInitial('R', event)" disabled>R</button>
+                    <button class="initial-btn" onclick="searchByInitial('S', event)" disabled>S</button>
+                    <button class="initial-btn" onclick="searchByInitial('T', event)" disabled>T</button>
+                    <button class="initial-btn" onclick="searchByInitial('U', event)" disabled>U</button>
+                    <button class="initial-btn" onclick="searchByInitial('V', event)" disabled>V</button>
+                    <button class="initial-btn" onclick="searchByInitial('W', event)" disabled>W</button>
+                    <button class="initial-btn" onclick="searchByInitial('X', event)" disabled>X</button>
+                    <button class="initial-btn" onclick="searchByInitial('Y', event)" disabled>Y</button>
+                    <button class="initial-btn" onclick="searchByInitial('Z', event)" disabled>Z</button>
+                    <button class="initial-btn" onclick="searchByInitial('0', event)" disabled>0-9</button>
+                </div>
+            </div>
+
+            <!-- 텍스트 검색 패널 -->
+            <div class="initial-panel" id="textSearchPanel" style="display:none;">
+                <div class="input-group">
+                    <input type="text" class="form-control scan-input" id="manualSearchInput"
+                           placeholder="상품명으로 검색" disabled>
+                    <button class="btn btn-warning px-3" id="manualSearchBtn" onclick="searchProducts()" disabled>
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 검색 결과 -->
+            <div id="searchResultArea" class="touch-result-area mt-2" style="display:none;"></div>
+
+            <!-- 선택된 상품 + 유통기한/로트/수량/등록 -->
+            <div class="row g-3 mt-1">
                 <div class="col-md-6">
                     <label class="form-label small fw-medium">선택된 상품</label>
                     <input type="text" class="form-control scan-input" id="manualSelectedName"
-                           placeholder="선택된 상품" readonly disabled
+                           placeholder="위에서 상품을 선택하세요" readonly disabled
                            style="background: #e9ecef;">
                 </div>
                 <div class="col-md-3">
@@ -565,12 +728,15 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 수동 등록: 검색 Enter
-    document.getElementById('manualSearchInput').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchProducts();
-        }
-    });
+    const manualSearchEl = document.getElementById('manualSearchInput');
+    if (manualSearchEl) {
+        manualSearchEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchProducts();
+            }
+        });
+    }
 
     // 수동 등록: 유통기한 Enter → 로트번호로 이동
     document.getElementById('manualExpiryInput').addEventListener('keydown', function(e) {
@@ -668,8 +834,21 @@ function enableProductInput() {
     manualArea.classList.add('active');
     manualArea.classList.remove('disabled');
     document.getElementById('manualInputHint').textContent = '';
-    document.getElementById('manualSearchInput').disabled = false;
-    document.getElementById('manualSearchBtn').disabled = false;
+
+    // 탭 버튼 활성화
+    document.getElementById('tabChosung').disabled = false;
+    document.getElementById('tabAlphabet').disabled = false;
+    document.getElementById('tabText').disabled = false;
+
+    // 초성/알파벳 버튼 활성화
+    document.querySelectorAll('.initial-btn').forEach(btn => btn.disabled = false);
+
+    // 텍스트 검색
+    const manualSearchInput = document.getElementById('manualSearchInput');
+    if (manualSearchInput) manualSearchInput.disabled = false;
+    const manualSearchBtn = document.getElementById('manualSearchBtn');
+    if (manualSearchBtn) manualSearchBtn.disabled = false;
+
     document.getElementById('manualExpiryInput').disabled = false;
     document.getElementById('manualLotInput').disabled = false;
     document.getElementById('manualQuantityInput').disabled = false;
@@ -912,12 +1091,86 @@ async function deleteRecord(recordId) {
     }
 }
 
-// ========== 수동 등록 (상품명 검색) ==========
+// ========== 수동 등록 (상품명 검색 + 초성/알파벳 터치 검색) ==========
 let manualSelectedBarcode = '';
 let manualSelectedName = '';
+let currentInitialTab = 'chosung';
 
+// 탭 전환
+function switchInitialTab(tab) {
+    currentInitialTab = tab;
+
+    // 탭 버튼 활성 표시
+    document.getElementById('tabChosung').classList.toggle('active', tab === 'chosung');
+    document.getElementById('tabAlphabet').classList.toggle('active', tab === 'alphabet');
+    document.getElementById('tabText').classList.toggle('active', tab === 'text');
+
+    // 패널 표시/숨김
+    document.getElementById('chosungPanel').style.display = tab === 'chosung' ? '' : 'none';
+    document.getElementById('alphabetPanel').style.display = tab === 'alphabet' ? '' : 'none';
+    document.getElementById('textSearchPanel').style.display = tab === 'text' ? '' : 'none';
+
+    // 텍스트 탭이면 입력 포커스
+    if (tab === 'text') {
+        const input = document.getElementById('manualSearchInput');
+        if (input) input.focus();
+    }
+
+    // 이전 활성 버튼 초기화
+    document.querySelectorAll('.initial-btn.active').forEach(b => b.classList.remove('active'));
+    document.getElementById('searchResultArea').style.display = 'none';
+}
+
+// 초성/알파벳 버튼 클릭 → 검색
+async function searchByInitial(initial, e) {
+    // 활성 버튼 표시
+    document.querySelectorAll('.initial-btn.active').forEach(b => b.classList.remove('active'));
+    if (e && e.currentTarget) e.currentTarget.classList.add('active');
+
+    const resultArea = document.getElementById('searchResultArea');
+    resultArea.style.display = 'block';
+    resultArea.innerHTML = '<div class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm me-1"></div> 검색 중...</div>';
+
+    try {
+        // 0-9 버튼은 숫자 0~9 전부 검색
+        let url;
+        if (initial === '0') {
+            // 숫자로 시작하는 상품 — 0~9 각각 검색은 비효율적이므로 initial=0 으로 보내고
+            // 백엔드에서 name__regex='^[0-9]' 처리
+            url = `{% url "inventory:get_products" %}?initial=0`;
+        } else {
+            url = `{% url "inventory:get_products" %}?initial=${encodeURIComponent(initial)}`;
+        }
+
+        const resp = await fetch(url);
+        const data = await resp.json();
+        const products = data.products || [];
+
+        if (!products.length) {
+            resultArea.innerHTML = `<div class="text-center text-muted py-3">'${escapeHtml(initial)}' 로 시작하는 상품이 없습니다.</div>`;
+            return;
+        }
+
+        resultArea.innerHTML = products.map(p => {
+            const displayLabel = p.display_name && p.display_name !== p.name
+                ? `${escapeHtml(p.name)} <span class="tr-meta">(${escapeHtml(p.display_name)})</span>`
+                : escapeHtml(p.name);
+            return `
+                <div class="touch-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
+                    <div class="tr-name">${displayLabel}</div>
+                    <div class="tr-meta"><i class="bi bi-upc me-1"></i>${escapeHtml(p.barcode)}</div>
+                </div>`;
+        }).join('');
+    } catch (e) {
+        resultArea.innerHTML = '<div class="text-center text-danger py-3">검색 실패</div>';
+    }
+}
+
+// 텍스트 검색 (기존 기능 유지)
 async function searchProducts() {
-    const query = document.getElementById('manualSearchInput').value.trim();
+    const input = document.getElementById('manualSearchInput');
+    if (!input) return;
+    const query = input.value.trim();
     if (!query) return;
 
     const resultArea = document.getElementById('searchResultArea');
@@ -936,12 +1189,12 @@ async function searchProducts() {
 
         resultArea.innerHTML = products.slice(0, 20).map(p => {
             const displayLabel = p.display_name && p.display_name !== p.name
-                ? `${escapeHtml(p.name)} <span class="item-barcode">(${escapeHtml(p.display_name)})</span>`
+                ? `${escapeHtml(p.name)} <span class="tr-meta">(${escapeHtml(p.display_name)})</span>`
                 : escapeHtml(p.name);
             return `
-                <div class="search-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
-                    <div class="item-name">${displayLabel}</div>
-                    <div class="item-barcode"><i class="bi bi-upc me-1"></i>${escapeHtml(p.barcode)}</div>
+                <div class="touch-result-item" onclick="selectManualProduct('${escapeAttr(p.barcode)}', '${escapeAttr(p.display_name || p.name)}')">
+                    <div class="tr-name">${displayLabel}</div>
+                    <div class="tr-meta"><i class="bi bi-upc me-1"></i>${escapeHtml(p.barcode)}</div>
                 </div>`;
         }).join('');
     } catch (e) {
@@ -954,7 +1207,11 @@ function selectManualProduct(barcode, name) {
     manualSelectedName = name;
     document.getElementById('manualSelectedName').value = name;
     document.getElementById('searchResultArea').style.display = 'none';
-    document.getElementById('manualQuantityInput').focus();
+
+    // 활성 버튼 초기화
+    document.querySelectorAll('.initial-btn.active').forEach(b => b.classList.remove('active'));
+
+    document.getElementById('manualExpiryInput').focus();
 }
 
 async function manualRegister() {
@@ -992,7 +1249,8 @@ async function manualRegister() {
 
         if (data.success) {
             // 초기화
-            document.getElementById('manualSearchInput').value = '';
+            const manualSearchInput = document.getElementById('manualSearchInput');
+            if (manualSearchInput) manualSearchInput.value = '';
             document.getElementById('manualSelectedName').value = '';
             document.getElementById('manualExpiryInput').value = '';
             document.getElementById('manualLotInput').value = '';
@@ -1000,7 +1258,7 @@ async function manualRegister() {
             manualSelectedBarcode = '';
             manualSelectedName = '';
             document.getElementById('searchResultArea').style.display = 'none';
-            document.getElementById('manualSearchInput').focus();
+            document.querySelectorAll('.initial-btn.active').forEach(b => b.classList.remove('active'));
 
             loadLocationRecords();
         } else {
