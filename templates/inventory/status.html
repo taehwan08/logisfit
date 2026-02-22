@@ -70,6 +70,9 @@
     .group-table td {
         vertical-align: middle;
     }
+    .group-table .product-name {
+        white-space: nowrap;
+    }
 
     /* 통계 */
     .stat-item {
@@ -289,9 +292,11 @@ function renderByLocation(groups) {
                 <table class="table group-table">
                     <thead>
                         <tr>
-                            <th class="ps-3">상품바코드</th>
-                            <th>상품명</th>
+                            <th class="ps-3">상품명</th>
+                            <th>유통기한</th>
+                            <th>로트번호</th>
                             <th class="text-center">수량</th>
+                            <th>바코드</th>
                             <th>작업자</th>
                             <th>등록시간</th>
                         </tr>
@@ -299,9 +304,11 @@ function renderByLocation(groups) {
                     <tbody>
                         ${g.products.map(p => `
                         <tr>
-                            <td class="ps-3"><code>${escapeHtml(p.barcode || '-')}</code></td>
-                            <td>${escapeHtml(p.product_name || '-')}</td>
+                            <td class="ps-3 product-name">${escapeHtml(p.product_name || '-')}</td>
+                            <td>${escapeHtml(p.expiry_date || '-')}</td>
+                            <td>${escapeHtml(p.lot_number || '-')}</td>
                             <td class="text-center fw-bold">${p.quantity}</td>
+                            <td><code>${escapeHtml(p.barcode || '-')}</code></td>
                             <td>${escapeHtml(p.worker || '-')}</td>
                             <td class="small text-muted">${escapeHtml(p.created_at)}</td>
                         </tr>
@@ -345,6 +352,8 @@ function renderByProduct(groups) {
                         <tr>
                             <th class="ps-3">로케이션</th>
                             <th>로케이션명</th>
+                            <th>유통기한</th>
+                            <th>로트번호</th>
                             <th class="text-center">수량</th>
                             <th>작업자</th>
                             <th>등록시간</th>
@@ -355,6 +364,8 @@ function renderByProduct(groups) {
                         <tr>
                             <td class="ps-3"><code>${escapeHtml(l.location_barcode)}</code></td>
                             <td>${escapeHtml(l.location_name || '-')}</td>
+                            <td>${escapeHtml(l.expiry_date || '-')}</td>
+                            <td>${escapeHtml(l.lot_number || '-')}</td>
                             <td class="text-center fw-bold">${l.quantity}</td>
                             <td>${escapeHtml(l.worker || '-')}</td>
                             <td class="small text-muted">${escapeHtml(l.created_at)}</td>
