@@ -848,6 +848,98 @@ def _session_to_dict(session):
     }
 
 
+@login_required
+@require_GET
+def export_records_excel(request):
+    """재고 기록을 엑셀로 다운로드한다.
+
+    Query params:
+        session_id: 세션 ID (필수)
+        search: 검색어 (선택)
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    except ImportError:
+        return JsonResponse({'error': 'openpyxl 패키지가 필요합니다.'}, status=500)
+
+    from django.http import HttpResponse
+
+    session_id = request.GET.get('session_id')
+    if not session_id:
+        return JsonResponse({'error': 'session_id가 필요합니다.'}, status=400)
+
+    try:
+        session = InventorySession.objects.get(pk=session_id)
+    except InventorySession.DoesNotExist:
+        return JsonResponse({'error': '세션을 찾을 수 없습니다.'}, status=404)
+
+    search = request.GET.get('search', '').strip()
+
+    records = InventoryRecord.objects.filter(
+        session_id=session_id,
+    ).select_related('location').order_by('location__barcode', 'product_name', 'created_at')
+
+    if search:
+        records = records.filter(models_Q_search(search))
+
+    # 엑셀 생성
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = '재고 기록'
+
+    # 헤더 스타일
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid')
+    header_alignment = Alignment(horizontal='center', vertical='center')
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'),
+    )
+
+    # 헤더
+    headers = ['로케이션', '로케이션명', '상품명', '유통기한', '로트번호', '수량', '바코드', '작업자', '등록시간']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    # 데이터
+    for row_idx, r in enumerate(records, 2):
+        row_data = [
+            r.location.barcode if r.location else '',
+            r.location.name if r.location else '',
+            r.product_name,
+            r.expiry_date or '',
+            r.lot_number or '',
+            r.quantity,
+            r.barcode or '',
+            r.worker or '',
+            timezone.localtime(r.created_at).strftime('%Y-%m-%d %H:%M'),
+        ]
+        for col, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_idx, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical='center')
+
+    # 컬럼 너비 조정
+    col_widths = [15, 15, 30, 12, 15, 8, 18, 10, 16]
+    for i, width in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+
+    # 응답
+    now_str = timezone.now().strftime('%Y%m%d_%H%M')
+    session_name = session.name.replace(' ', '_') if session.name else session_id
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="inventory_{session_name}_{now_str}.xlsx"'
+    wb.save(response)
+    return response
+
+
 def _record_to_dict(record):
     """InventoryRecord 인스턴스를 dict로 변환한다."""
     return {

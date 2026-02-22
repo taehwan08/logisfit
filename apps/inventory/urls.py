@@ -34,4 +34,5 @@ urlpatterns = [
     path('api/records/', views.get_records, name='get_records'),
     path('api/records/location/', views.get_location_records, name='get_location_records'),
     path('api/records/<int:record_id>/delete/', views.delete_record, name='delete_record'),
+    path('api/records/export/', views.export_records_excel, name='export_records_excel'),
 ]
