@@ -214,9 +214,19 @@
                 <!-- 페이지네이션 -->
                 <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" id="paginationArea" style="display:none!important;">
                     <small class="text-muted" id="pageInfo"></small>
-                    <nav>
-                        <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
-                    </nav>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-flex align-items-center gap-1">
+                            <select class="form-select form-select-sm" id="pageSizeSelect" style="width:auto;" onchange="window.changePageSize(this.value)">
+                                <option value="20">20건</option>
+                                <option value="50">50건</option>
+                                <option value="100">100건</option>
+                                <option value="200">200건</option>
+                            </select>
+                        </div>
+                        <nav>
+                            <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
+                        </nav>
+                    </div>
                 </div>
             </div>
         </div>
@@ -408,13 +418,18 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     let currentPage = 1;
-    const PAGE_SIZE = 10;
+    let pageSize = 20;
+
+    window.changePageSize = function(val) {
+        pageSize = parseInt(val) || 10;
+        loadBatches(1);
+    };
 
     // 업로드 이력 로드
     async function loadBatches(page) {
         if (page) currentPage = page;
         try {
-            const params = new URLSearchParams({ page: currentPage, page_size: PAGE_SIZE });
+            const params = new URLSearchParams({ page: currentPage, page_size: pageSize });
             const response = await fetch(`{% url "inspection:get_upload_batches" %}?${params.toString()}`);
             const result = await response.json();
             const tbody = document.getElementById('batchesBody');
@@ -487,14 +502,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const pageInfo = document.getElementById('pageInfo');
         const pagination = document.getElementById('pagination');
 
-        if (data.total_pages <= 1) {
-            area.style.display = 'none';
-            return;
-        }
-
+        // 항상 표시 (드롭다운 포함)
         area.style.display = '';
         area.style.cssText = '';
+
+        // 드롭다운 값 동기화
+        document.getElementById('pageSizeSelect').value = pageSize;
+
         pageInfo.textContent = `총 ${data.total}건 (${data.page} / ${data.total_pages} 페이지)`;
+
+        if (data.total_pages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
 
         let html = `<li class="page-item ${!data.has_previous ? 'disabled' : ''}">
             <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page - 1})"><i class="bi bi-chevron-left"></i></a></li>`;
