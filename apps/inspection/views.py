@@ -768,16 +768,34 @@ def get_logs(request):
 
 @require_GET
 def get_upload_batches(request):
-    """업로드 이력 조회 (오피스팀용)"""
+    """업로드 이력 조회 (오피스팀용, 페이지네이션 지원)
+
+    Query params:
+        page: 페이지 번호 (기본: 1)
+        page_size: 페이지당 건수 (기본: 10, 최대: 100)
+    """
+    from django.core.paginator import Paginator
+
     batches = UploadBatch.objects.all()
 
-    total = batches.count()
-    batches = batches[:100]
+    page = request.GET.get('page', 1)
+    page_size = request.GET.get('page_size', 10)
+    try:
+        page = int(page)
+        page_size = min(int(page_size), 100)
+    except (ValueError, TypeError):
+        page = 1
+        page_size = 10
+
+    paginator = Paginator(batches, page_size)
+    try:
+        page_obj = paginator.page(page)
+    except Exception:
+        page_obj = paginator.page(1)
 
     result = []
-    for b in batches:
+    for b in page_obj:
         orders = b.orders.all()
-        order_count = orders.count()
         waiting = orders.filter(status='대기중').count()
         inspecting = orders.filter(status='검수중').count()
         completed = orders.filter(status='완료').count()
@@ -799,7 +817,11 @@ def get_upload_batches(request):
     return JsonResponse({
         'success': True,
         'batches': result,
-        'total': total,
+        'total': paginator.count,
+        'page': page_obj.number,
+        'total_pages': paginator.num_pages,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
     })
 
 

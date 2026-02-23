@@ -211,6 +211,13 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- 페이지네이션 -->
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" id="paginationArea" style="display:none!important;">
+                    <small class="text-muted" id="pageInfo"></small>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
+                    </nav>
+                </div>
             </div>
         </div>
     </div>
@@ -387,7 +394,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         uploadAlerts.innerHTML = alertsHtml;
         uploadResult.classList.add('show');
-        loadBatches();
+        loadBatches(1);
 
         setTimeout(() => {
             progressBar.classList.remove('show');
@@ -400,16 +407,22 @@ document.addEventListener('DOMContentLoaded', function() {
         renderFileList();
     });
 
+    let currentPage = 1;
+    const PAGE_SIZE = 10;
+
     // 업로드 이력 로드
-    async function loadBatches() {
+    async function loadBatches(page) {
+        if (page) currentPage = page;
         try {
-            const response = await fetch('{% url "inspection:get_upload_batches" %}');
+            const params = new URLSearchParams({ page: currentPage, page_size: PAGE_SIZE });
+            const response = await fetch(`{% url "inspection:get_upload_batches" %}?${params.toString()}`);
             const result = await response.json();
             const tbody = document.getElementById('batchesBody');
 
             if (!result.batches || result.batches.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
                 updateStats(0, 0, 0, 0);
+                document.getElementById('paginationArea').style.display = 'none';
                 return;
             }
 
@@ -462,10 +475,44 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                 </tr>`;
             }).join('');
+
+            renderPagination(result);
         } catch (error) {
             console.error('업로드 이력 로드 실패:', error);
         }
     }
+
+    function renderPagination(data) {
+        const area = document.getElementById('paginationArea');
+        const pageInfo = document.getElementById('pageInfo');
+        const pagination = document.getElementById('pagination');
+
+        if (data.total_pages <= 1) {
+            area.style.display = 'none';
+            return;
+        }
+
+        area.style.display = '';
+        area.style.cssText = '';
+        pageInfo.textContent = `총 ${data.total}건 (${data.page} / ${data.total_pages} 페이지)`;
+
+        let html = `<li class="page-item ${!data.has_previous ? 'disabled' : ''}">
+            <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page - 1})"><i class="bi bi-chevron-left"></i></a></li>`;
+
+        const startPage = Math.max(1, data.page - 2);
+        const endPage = Math.min(data.total_pages, data.page + 2);
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<li class="page-item ${i === data.page ? 'active' : ''}">
+                <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${i})">${i}</a></li>`;
+        }
+
+        html += `<li class="page-item ${!data.has_next ? 'disabled' : ''}">
+            <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page + 1})"><i class="bi bi-chevron-right"></i></a></li>`;
+
+        pagination.innerHTML = html;
+    }
+
+    window.goPage = function(page) { loadBatches(page); };
 
     function updateStats(total, waiting, inspecting, completed) {
         document.getElementById('statTotal').textContent = total;
@@ -502,7 +549,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // 초기 로드
-    loadBatches();
+    loadBatches(1);
 });
 </script>
 {% endblock %}
