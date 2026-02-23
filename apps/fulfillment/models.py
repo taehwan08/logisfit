@@ -322,3 +322,75 @@ class FulfillmentComment(models.Model):
     def __str__(self):
         author_name = self.author.name if self.author else '시스템'
         return f"[{self.order.order_number}] {author_name}: {self.content[:30]}"
+
+
+class PlatformColumnConfig(models.Model):
+    """
+    플랫폼별 커스텀 컬럼 설정
+
+    관리자가 플랫폼별로 커스텀 컬럼을 정의합니다.
+    이 설정에 따라 주문 등록 폼과 목록 테이블에 동적 컬럼이 표시됩니다.
+    값은 FulfillmentOrder.platform_data JSON에 key 기준으로 저장됩니다.
+    """
+
+    class ColumnType(models.TextChoices):
+        TEXT = 'text', '텍스트'
+        NUMBER = 'number', '숫자'
+        DATE = 'date', '날짜'
+
+    platform = models.CharField(
+        '플랫폼',
+        max_length=20,
+        choices=FulfillmentOrder.Platform.choices,
+    )
+    name = models.CharField(
+        '컬럼명',
+        max_length=100,
+        help_text='한글 표시명 (예: 배송유형)',
+    )
+    key = models.CharField(
+        '컬럼 키',
+        max_length=100,
+        help_text='내부 저장 키 (영문, 예: delivery_type)',
+    )
+    column_type = models.CharField(
+        '타입',
+        max_length=20,
+        choices=ColumnType.choices,
+        default=ColumnType.TEXT,
+    )
+    display_order = models.IntegerField(
+        '표시 순서',
+        default=0,
+    )
+    is_required = models.BooleanField(
+        '필수 여부',
+        default=False,
+    )
+    is_active = models.BooleanField(
+        '활성 상태',
+        default=True,
+    )
+    created_at = models.DateTimeField('등록일시', auto_now_add=True)
+    updated_at = models.DateTimeField('수정일시', auto_now=True)
+
+    class Meta:
+        db_table = 'fulfillment_platform_column_configs'
+        verbose_name = '플랫폼 컬럼 설정'
+        verbose_name_plural = '플랫폼 컬럼 설정 목록'
+        ordering = ['platform', 'display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['platform', 'key'],
+                name='uq_platform_column_key',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['platform', 'is_active'],
+                name='idx_platform_col_active',
+            ),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_platform_display()}] {self.name} ({self.key})"

@@ -16,7 +16,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import FulfillmentOrder, FulfillmentComment
+from .models import FulfillmentOrder, FulfillmentComment, PlatformColumnConfig
 from .slack import send_order_created_notification, send_bulk_orders_notification
 from apps.clients.models import Client, Brand
 
@@ -808,12 +808,23 @@ def export_excel(request):
         bottom=Side(style='thin'),
     )
 
+    # 플랫폼별 커스텀 컬럼 조회
+    platform_cols = []
+    if platform:
+        platform_cols = list(PlatformColumnConfig.objects.filter(
+            platform=platform, is_active=True
+        ).order_by('display_order'))
+
     # 헤더
     headers = [
         '거래처', '브랜드', '플랫폼', '발주번호', '발주유형', '발주확정',
         'SKU ID', '상품명', '바코드', '센터', '입고일', '발주일시',
         '발주수량', '확정수량', '상태', '비고',
     ]
+    # 플랫폼 커스텀 컬럼 헤더 추가
+    for pc in platform_cols:
+        headers.append(pc.name)
+
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -841,6 +852,12 @@ def export_excel(request):
             order.get_status_display(),
             order.memo,
         ]
+        # 플랫폼 커스텀 컬럼 데이터 추가
+        for pc in platform_cols:
+            row_data.append(
+                order.platform_data.get(pc.key, '') if order.platform_data else ''
+            )
+
         for col, value in enumerate(row_data, 1):
             cell = ws.cell(row=row_idx, column=col, value=value)
             cell.border = thin_border
@@ -848,6 +865,9 @@ def export_excel(request):
 
     # 컬럼 너비 조정
     col_widths = [15, 12, 12, 15, 10, 10, 15, 30, 15, 12, 12, 16, 10, 10, 10, 20]
+    # 플랫폼 커스텀 컬럼 너비 추가
+    for _ in platform_cols:
+        col_widths.append(15)
     for i, width in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
@@ -967,3 +987,225 @@ def delete_comment(request, order_id, comment_id):
         'success': True,
         'message': '댓글이 삭제되었습니다.',
     })
+
+
+# ============================================================================
+# 플랫폼 컬럼 설정 API
+# ============================================================================
+
+@fulfillment_access_required
+@require_http_methods(["GET"])
+def get_platform_columns(request):
+    """플랫폼별 커스텀 컬럼 목록 조회"""
+    platform = request.GET.get('platform', '')
+    if not platform:
+        return JsonResponse({'columns': []})
+
+    active_only = request.GET.get('active_only', 'true') == 'true'
+
+    qs = PlatformColumnConfig.objects.filter(platform=platform)
+    if active_only:
+        qs = qs.filter(is_active=True)
+
+    columns = []
+    for col in qs:
+        columns.append({
+            'id': col.id,
+            'platform': col.platform,
+            'name': col.name,
+            'key': col.key,
+            'column_type': col.column_type,
+            'display_order': col.display_order,
+            'is_required': col.is_required,
+            'is_active': col.is_active,
+        })
+
+    return JsonResponse({'columns': columns})
+
+
+@admin_required
+@require_http_methods(["POST"])
+def save_platform_columns(request):
+    """플랫폼 컬럼 설정 일괄 저장 (관리자 전용)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    platform = data.get('platform', '')
+    columns = data.get('columns', [])
+    delete_ids = data.get('delete_ids', [])
+
+    if not platform:
+        return JsonResponse({'error': '플랫폼을 선택해주세요.'}, status=400)
+
+    # 삭제
+    if delete_ids:
+        PlatformColumnConfig.objects.filter(
+            id__in=delete_ids, platform=platform
+        ).delete()
+
+    # 생성/수정
+    for idx, col_data in enumerate(columns):
+        col_id = col_data.get('id')
+        name = col_data.get('name', '').strip()
+        key = col_data.get('key', '').strip()
+
+        if not name or not key:
+            continue
+
+        defaults = {
+            'name': name,
+            'column_type': col_data.get('column_type', 'text'),
+            'display_order': col_data.get('display_order', idx),
+            'is_required': col_data.get('is_required', False),
+            'is_active': col_data.get('is_active', True),
+        }
+
+        if col_id:
+            PlatformColumnConfig.objects.filter(
+                id=col_id, platform=platform
+            ).update(**defaults, key=key)
+        else:
+            if not PlatformColumnConfig.objects.filter(
+                platform=platform, key=key
+            ).exists():
+                PlatformColumnConfig.objects.create(
+                    platform=platform, key=key, **defaults
+                )
+
+    return JsonResponse({
+        'success': True,
+        'message': '컬럼 설정이 저장되었습니다.',
+    })
+
+
+# ============================================================================
+# 주문 등록 페이지
+# ============================================================================
+
+@fulfillment_access_required
+def order_create_page(request):
+    """주문 등록 페이지 (독립 페이지)"""
+    user = request.user
+
+    if user.is_client:
+        clients = user.clients.filter(is_active=True)
+    else:
+        clients = Client.objects.filter(is_active=True).order_by('company_name')
+
+    context = {
+        'clients': clients,
+        'platforms': FulfillmentOrder.Platform.choices,
+        'is_admin': user.is_admin or user.is_superuser,
+        'is_client': user.is_client,
+        'is_worker': user.is_worker,
+    }
+    return render(request, 'fulfillment/order_create.html', context)
+
+
+@fulfillment_access_required
+@require_http_methods(["POST"])
+def bulk_create_orders(request):
+    """다건 주문 등록 (행 단위 테이블 입력)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    user = request.user
+    client_id = data.get('client_id')
+    brand_id = data.get('brand_id')
+    platform = data.get('platform', '')
+    orders_data = data.get('orders', [])
+
+    if not client_id:
+        return JsonResponse({'error': '거래처를 선택해주세요.'}, status=400)
+    if not platform:
+        return JsonResponse({'error': '플랫폼을 선택해주세요.'}, status=400)
+    if not orders_data:
+        return JsonResponse({'error': '등록할 주문이 없습니다.'}, status=400)
+
+    try:
+        client = Client.objects.get(id=client_id, is_active=True)
+    except Client.DoesNotExist:
+        return JsonResponse({'error': '유효하지 않은 거래처입니다.'}, status=400)
+
+    if user.is_client and not user.clients.filter(id=client_id).exists():
+        return JsonResponse({'error': '해당 거래처에 대한 권한이 없습니다.'}, status=403)
+
+    brand = None
+    if brand_id:
+        try:
+            brand = Brand.objects.get(id=brand_id, client=client, is_active=True)
+        except Brand.DoesNotExist:
+            pass
+
+    def safe_int(val, default=0):
+        try:
+            return int(str(val).strip().replace(',', '') or default)
+        except (ValueError, TypeError):
+            return default
+
+    created_count = 0
+    errors = []
+
+    for idx, row in enumerate(orders_data, 1):
+        order_number = (row.get('order_number') or '').strip()
+        product_name = (row.get('product_name') or '').strip()
+
+        if not order_number:
+            errors.append(f'{idx}행: 발주번호가 비어있습니다.')
+            continue
+        if not product_name:
+            errors.append(f'{idx}행: 상품명이 비어있습니다.')
+            continue
+
+        try:
+            FulfillmentOrder.objects.create(
+                client=client,
+                brand=brand,
+                platform=platform,
+                order_number=order_number,
+                order_type=(row.get('order_type') or '').strip(),
+                order_confirmed=(row.get('order_confirmed') or '').strip(),
+                sku_id=(row.get('sku_id') or '').strip(),
+                product_name=product_name,
+                barcode=(row.get('barcode') or '').strip(),
+                center=(row.get('center') or '').strip(),
+                receiving_date=(row.get('receiving_date') or '').strip(),
+                order_date=(row.get('order_date') or '').strip(),
+                order_quantity=safe_int(row.get('order_quantity')),
+                confirmed_quantity=safe_int(row.get('confirmed_quantity')),
+                manager=(row.get('manager') or '').strip(),
+                expiry_date=(row.get('expiry_date') or '').strip(),
+                box_quantity=safe_int(row.get('box_quantity')),
+                address=(row.get('address') or '').strip(),
+                memo=(row.get('memo') or '').strip(),
+                platform_data=row.get('platform_data') or {},
+                created_by=user,
+            )
+            created_count += 1
+        except Exception as e:
+            errors.append(f'{idx}행: {str(e)}')
+
+    result = {
+        'success': True,
+        'message': f'{created_count}건이 등록되었습니다.',
+        'created_count': created_count,
+    }
+    if errors:
+        result['errors'] = errors[:20]
+        result['error_count'] = len(errors)
+
+    if created_count > 0:
+        send_bulk_orders_notification(
+            client=client,
+            brand=brand,
+            platform=platform,
+            created_count=created_count,
+            error_count=len(errors),
+            user=user,
+        )
+
+    return JsonResponse(result)

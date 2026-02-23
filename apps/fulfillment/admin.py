@@ -2,7 +2,7 @@
 출고 관리 Django Admin 설정
 """
 from django.contrib import admin
-from .models import FulfillmentOrder, FulfillmentComment
+from .models import FulfillmentOrder, FulfillmentComment, PlatformColumnConfig
 
 
 @admin.register(FulfillmentOrder)
@@ -87,3 +87,14 @@ class FulfillmentCommentAdmin(admin.ModelAdmin):
     @admin.display(description='내용')
     def content_short(self, obj):
         return obj.content[:50] + '...' if len(obj.content) > 50 else obj.content
+
+
+@admin.register(PlatformColumnConfig)
+class PlatformColumnConfigAdmin(admin.ModelAdmin):
+    """플랫폼 컬럼 설정 관리자"""
+
+    list_display = ['platform', 'name', 'key', 'column_type', 'display_order', 'is_required', 'is_active']
+    list_filter = ['platform', 'column_type', 'is_active']
+    search_fields = ['name', 'key']
+    ordering = ['platform', 'display_order']
+    list_editable = ['display_order', 'is_required', 'is_active']
