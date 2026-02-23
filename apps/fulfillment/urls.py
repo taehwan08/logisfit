@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/orders/<int:order_id>/update/', views.update_order, name='update_order'),
     path('api/orders/<int:order_id>/delete/', views.delete_order, name='delete_order'),
     path('api/orders/<int:order_id>/status/', views.update_status, name='update_status'),
+    path('api/orders/bulk-status/', views.bulk_update_status, name='bulk_update_status'),
     path('api/orders/export/', views.export_excel, name='export_excel'),
 
     # 댓글 API

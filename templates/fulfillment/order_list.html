@@ -203,6 +203,50 @@
         font-size: 0.85rem;
     }
     .brand-item:last-child { border-bottom: none; }
+
+    /* 일괄처리 바 */
+    .bulk-action-bar {
+        display: none;
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #2c3e50;
+        color: #fff;
+        padding: 10px 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        z-index: 1000;
+        align-items: center;
+        gap: 16px;
+        font-size: 0.85rem;
+        animation: slideUp 0.25s ease-out;
+    }
+    .bulk-action-bar.show { display: flex; }
+    @keyframes slideUp {
+        from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+        to { transform: translateX(-50%) translateY(0); opacity: 1; }
+    }
+    .bulk-action-bar .bulk-count {
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+    .bulk-action-bar .btn {
+        font-size: 0.8rem;
+        padding: 4px 14px;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+    .bulk-action-bar .btn-bulk-cancel {
+        background: rgba(255,255,255,0.15);
+        color: #fff;
+        border: none;
+    }
+    .bulk-action-bar .btn-bulk-cancel:hover { background: rgba(255,255,255,0.25); }
+
+    /* 체크박스 스타일 */
+    .table .form-check-input { cursor: pointer; }
+    .table thead .form-check-input { margin-top: 0; }
 </style>
 {% endblock %}
 
@@ -292,6 +336,11 @@
         <table class="table table-hover" id="ordersTable">
             <thead>
                 <tr>
+                    {% if is_admin or is_worker %}
+                    <th class="text-center" style="width:36px;">
+                        <input class="form-check-input" type="checkbox" id="checkAll" onchange="toggleCheckAll(this)">
+                    </th>
+                    {% endif %}
                     <th>등록일</th>
                     <th>발주번호</th>
                     <th>거래처</th>
@@ -497,6 +546,17 @@
     </div>
 </div>
 
+<!-- 일괄처리 바 (관리자/작업자만) -->
+{% if is_admin or is_worker %}
+<div class="bulk-action-bar" id="bulkActionBar">
+    <span><i class="bi bi-check2-square me-1"></i><span class="bulk-count" id="bulkCount">0</span>건 선택</span>
+    <button class="btn btn-primary" onclick="bulkAction('confirm')"><i class="bi bi-check-lg me-1"></i>확인처리</button>
+    <button class="btn btn-warning" onclick="bulkAction('ship')"><i class="bi bi-truck me-1"></i>출고처리</button>
+    <button class="btn btn-success" onclick="bulkAction('sync')"><i class="bi bi-cloud-check me-1"></i>전산처리</button>
+    <button class="btn btn-bulk-cancel" onclick="clearSelection()"><i class="bi bi-x-lg me-1"></i>취소</button>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -609,6 +669,12 @@ function renderOrders(data) {
     emptyState.classList.add('d-none');
     paginationArea.style.cssText = '';
 
+    // 체크박스 초기화
+    const checkAll = document.getElementById('checkAll');
+    if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
+    const bulkBar = document.getElementById('bulkActionBar');
+    if (bulkBar) bulkBar.classList.remove('show');
+
     let html = '';
     data.orders.forEach(order => {
         const confirmCheck = getStatusCheckHtml(order, 'confirm',
@@ -623,6 +689,7 @@ function renderOrders(data) {
 
         html += `
         <tr>
+            ${CAN_MANAGE ? `<td class="text-center"><input class="form-check-input row-check" type="checkbox" value="${order.id}" onchange="updateBulkBar()"></td>` : ''}
             <td class="text-muted" style="font-size:0.8rem;">${escapeHtml(order.created_at)}</td>
             <td>
                 <a href="javascript:void(0)" onclick="showDetail(${order.id})" class="text-decoration-none fw-semibold text-primary">
@@ -1128,6 +1195,81 @@ function exportExcel() {
     if (search) params.append('search', search);
 
     window.location.href = `{% url 'fulfillment:export_excel' %}?${params.toString()}`;
+}
+
+// ============================================================================
+// 일괄처리 (체크박스)
+// ============================================================================
+function toggleCheckAll(el) {
+    const checks = document.querySelectorAll('.row-check');
+    checks.forEach(c => c.checked = el.checked);
+    updateBulkBar();
+}
+
+function updateBulkBar() {
+    const checks = document.querySelectorAll('.row-check:checked');
+    const bar = document.getElementById('bulkActionBar');
+    const countEl = document.getElementById('bulkCount');
+    if (!bar) return;
+
+    if (checks.length > 0) {
+        bar.classList.add('show');
+        countEl.textContent = checks.length;
+    } else {
+        bar.classList.remove('show');
+    }
+
+    // 전체 선택 체크박스 동기화
+    const allChecks = document.querySelectorAll('.row-check');
+    const checkAll = document.getElementById('checkAll');
+    if (checkAll) {
+        checkAll.checked = allChecks.length > 0 && checks.length === allChecks.length;
+        checkAll.indeterminate = checks.length > 0 && checks.length < allChecks.length;
+    }
+}
+
+function clearSelection() {
+    const checks = document.querySelectorAll('.row-check');
+    checks.forEach(c => c.checked = false);
+    const checkAll = document.getElementById('checkAll');
+    if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
+    updateBulkBar();
+}
+
+function bulkAction(action) {
+    const checks = document.querySelectorAll('.row-check:checked');
+    if (checks.length === 0) return;
+
+    const actionNames = { confirm: '확인완료', ship: '출고완료', sync: '전산반영' };
+    if (!confirm(`선택된 ${checks.length}건을 "${actionNames[action]}" 처리하시겠습니까?`)) return;
+
+    const orderIds = Array.from(checks).map(c => parseInt(c.value));
+
+    // 버튼 비활성화
+    const bar = document.getElementById('bulkActionBar');
+    const btns = bar.querySelectorAll('.btn');
+    btns.forEach(b => b.disabled = true);
+
+    fetch('{% url "fulfillment:bulk_update_status" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+        body: JSON.stringify({ order_ids: orderIds, action: action }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btns.forEach(b => b.disabled = false);
+        if (data.success) {
+            showToast(data.message, data.fail_count ? 'warning' : 'success');
+            clearSelection();
+            loadOrders();
+        } else {
+            showToast(data.error || '처리 실패', 'danger');
+        }
+    })
+    .catch(() => {
+        btns.forEach(b => b.disabled = false);
+        showToast('서버 오류', 'danger');
+    });
 }
 
 // ============================================================================

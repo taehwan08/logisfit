@@ -677,6 +677,74 @@ def update_status(request, order_id):
         return JsonResponse({'error': error_msgs[action]}, status=400)
 
 
+@admin_or_worker_required
+@require_http_methods(["POST"])
+def bulk_update_status(request):
+    """일괄 상태 변경 (관리자/작업자 전용) - 확인/출고/전산반영"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    order_ids = data.get('order_ids', [])
+    action = data.get('action', '')
+
+    if not order_ids:
+        return JsonResponse({'error': '선택된 주문이 없습니다.'}, status=400)
+
+    action_map = {
+        'confirm': {
+            'method': 'confirm',
+            'label': '확인완료',
+            'system_msg': '상태가 [확인완료]로 변경되었습니다.',
+        },
+        'ship': {
+            'method': 'ship',
+            'label': '출고완료',
+            'system_msg': '상태가 [출고완료]로 변경되었습니다.',
+        },
+        'sync': {
+            'method': 'sync',
+            'label': '전산반영',
+            'system_msg': '상태가 [전산반영]으로 변경되었습니다.',
+        },
+    }
+
+    if action not in action_map:
+        return JsonResponse({'error': '잘못된 액션입니다.'}, status=400)
+
+    cfg = action_map[action]
+    user = request.user
+    orders = FulfillmentOrder.objects.filter(id__in=order_ids)
+
+    success_count = 0
+    fail_count = 0
+
+    for order in orders:
+        method = getattr(order, cfg['method'])
+        if method(user):
+            FulfillmentComment.objects.create(
+                order=order,
+                author=user,
+                content=f"{cfg['system_msg']} ({user.name}) [일괄처리]",
+                is_system=True,
+            )
+            success_count += 1
+        else:
+            fail_count += 1
+
+    msg = f'{success_count}건 {cfg["label"]} 처리되었습니다.'
+    if fail_count:
+        msg += f' ({fail_count}건은 상태 조건 불일치로 제외)'
+
+    return JsonResponse({
+        'success': True,
+        'message': msg,
+        'success_count': success_count,
+        'fail_count': fail_count,
+    })
+
+
 @fulfillment_access_required
 @require_http_methods(["GET"])
 def export_excel(request):
