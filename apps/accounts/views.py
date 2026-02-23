@@ -5,7 +5,10 @@
 """
 import json
 import logging
+import random
+import secrets
 
+from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
@@ -17,14 +20,17 @@ from django.views.generic import (
 )
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.password_validation import validate_password
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
 
-from .models import User
+from .models import User, PasswordResetCode
 from .forms import (
     UserRegistrationForm, UserLoginForm, UserApprovalForm, UserProfileForm
 )
 from .slack import send_signup_notification, verify_slack_signature, process_slack_action
+from .email import send_password_reset_code
 
 logger = logging.getLogger(__name__)
 
@@ -314,3 +320,265 @@ class SlackInteractiveView(View):
             return HttpResponse(status=200)
 
         return JsonResponse(result)
+
+
+# ============================================================================
+# 비밀번호 리셋 (3단계 인증번호 방식)
+# ============================================================================
+
+def _generate_reset_code():
+    """6자리 숫자 인증번호를 생성합니다."""
+    code_length = getattr(settings, 'PASSWORD_RESET_CODE_LENGTH', 6)
+    return ''.join([str(random.randint(0, 9)) for _ in range(code_length)])
+
+
+class PasswordResetRequestView(View):
+    """
+    비밀번호 리셋 Step 1: 이메일 입력
+
+    이메일 주소를 입력하면 6자리 인증번호를 발송합니다.
+    보안: 이메일 존재 여부와 관계없이 동일한 응답을 반환합니다.
+    """
+    template_name = 'accounts/password_reset_request.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        return render(request, self.template_name)
+
+    def post(self, request):
+        email = request.POST.get('email', '').strip().lower()
+
+        if not email:
+            messages.error(request, '이메일 주소를 입력해주세요.')
+            return render(request, self.template_name)
+
+        # 세션에 이메일 저장 (Step 2에서 사용)
+        request.session['reset_email'] = email
+
+        # 사용자 존재 여부 확인 (응답은 동일하게)
+        try:
+            user = User.objects.get(email=email, is_active=True)
+
+            # 이전 미사용 코드 무효화
+            PasswordResetCode.objects.filter(
+                user=user, is_used=False
+            ).update(is_used=True)
+
+            # 새 인증번호 생성
+            code = _generate_reset_code()
+            PasswordResetCode.objects.create(user=user, code=code)
+
+            # 이메일 발송
+            try:
+                send_password_reset_code(email, code)
+            except Exception as e:
+                logger.error('비밀번호 리셋 이메일 발송 실패: %s', e)
+
+        except User.DoesNotExist:
+            # 보안: 이메일이 존재하지 않아도 동일하게 처리
+            pass
+
+        messages.success(
+            request,
+            '인증번호가 이메일로 전송되었습니다. 이메일을 확인해주세요.'
+        )
+        return redirect('accounts:password_reset_verify')
+
+
+class PasswordResetVerifyView(View):
+    """
+    비밀번호 리셋 Step 2: 인증번호 입력
+
+    이메일로 받은 6자리 인증번호를 입력합니다.
+    5회 초과 실패 시 인증번호가 무효화됩니다.
+    """
+    template_name = 'accounts/password_reset_verify.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('dashboard')
+        # 세션에 이메일이 없으면 Step 1로
+        if 'reset_email' not in request.session:
+            messages.warning(request, '먼저 이메일을 입력해주세요.')
+            return redirect('accounts:password_reset_request')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        email = request.session.get('reset_email', '')
+        expiry_minutes = getattr(settings, 'PASSWORD_RESET_CODE_EXPIRY_MINUTES', 10)
+        return render(request, self.template_name, {
+            'email': email,
+            'expiry_minutes': expiry_minutes,
+        })
+
+    def post(self, request):
+        email = request.session.get('reset_email', '')
+        code_input = request.POST.get('code', '').strip()
+        expiry_minutes = getattr(settings, 'PASSWORD_RESET_CODE_EXPIRY_MINUTES', 10)
+
+        if not code_input:
+            messages.error(request, '인증번호를 입력해주세요.')
+            return render(request, self.template_name, {
+                'email': email,
+                'expiry_minutes': expiry_minutes,
+            })
+
+        try:
+            user = User.objects.get(email=email, is_active=True)
+
+            # 가장 최근 유효한 인증번호 조회
+            reset_code = PasswordResetCode.objects.filter(
+                user=user, is_used=False
+            ).order_by('-created_at').first()
+
+            if not reset_code or not reset_code.is_valid():
+                messages.error(request, '유효한 인증번호가 없습니다. 다시 요청해주세요.')
+                return redirect('accounts:password_reset_request')
+
+            if reset_code.code != code_input:
+                reset_code.increment_attempt()
+
+                if reset_code.attempt_count >= 5:
+                    reset_code.mark_used()
+                    messages.error(
+                        request,
+                        '인증번호 입력 횟수를 초과했습니다. 다시 요청해주세요.'
+                    )
+                    return redirect('accounts:password_reset_request')
+
+                remaining = 5 - reset_code.attempt_count
+                messages.error(
+                    request,
+                    f'인증번호가 일치하지 않습니다. (남은 시도: {remaining}회)'
+                )
+                return render(request, self.template_name, {
+                    'email': email,
+                    'expiry_minutes': expiry_minutes,
+                })
+
+            # 인증 성공 → 세션에 토큰 저장
+            reset_token = secrets.token_urlsafe(32)
+            request.session['reset_token'] = reset_token
+            request.session['reset_code_id'] = reset_code.id
+
+            return redirect('accounts:password_reset_confirm')
+
+        except User.DoesNotExist:
+            messages.error(request, '유효한 인증번호가 없습니다. 다시 요청해주세요.')
+            return redirect('accounts:password_reset_request')
+
+
+class PasswordResetConfirmView(View):
+    """
+    비밀번호 리셋 Step 3: 새 비밀번호 설정
+
+    인증번호 확인 후 새 비밀번호를 설정합니다.
+    """
+    template_name = 'accounts/password_reset_confirm.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('dashboard')
+        # 세션 토큰 확인 (Step 2를 거치지 않으면 Step 1로)
+        if 'reset_token' not in request.session or 'reset_email' not in request.session:
+            messages.warning(request, '비밀번호 재설정 절차를 처음부터 진행해주세요.')
+            return redirect('accounts:password_reset_request')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        return render(request, self.template_name)
+
+    def post(self, request):
+        password1 = request.POST.get('new_password1', '')
+        password2 = request.POST.get('new_password2', '')
+
+        # 비밀번호 일치 확인
+        if password1 != password2:
+            messages.error(request, '비밀번호가 일치하지 않습니다.')
+            return render(request, self.template_name)
+
+        if not password1:
+            messages.error(request, '비밀번호를 입력해주세요.')
+            return render(request, self.template_name)
+
+        email = request.session.get('reset_email', '')
+        code_id = request.session.get('reset_code_id')
+
+        try:
+            user = User.objects.get(email=email, is_active=True)
+        except User.DoesNotExist:
+            messages.error(request, '사용자를 찾을 수 없습니다.')
+            return redirect('accounts:password_reset_request')
+
+        # Django 비밀번호 유효성 검사
+        try:
+            validate_password(password1, user)
+        except ValidationError as e:
+            for error in e.messages:
+                messages.error(request, error)
+            return render(request, self.template_name)
+
+        # 비밀번호 변경
+        user.set_password(password1)
+        user.save(update_fields=['password'])
+
+        # 인증번호 사용 처리
+        if code_id:
+            try:
+                reset_code = PasswordResetCode.objects.get(id=code_id)
+                reset_code.mark_used()
+            except PasswordResetCode.DoesNotExist:
+                pass
+
+        # 세션 정리
+        for key in ['reset_email', 'reset_token', 'reset_code_id']:
+            request.session.pop(key, None)
+
+        messages.success(
+            request,
+            '비밀번호가 성공적으로 변경되었습니다. 새 비밀번호로 로그인해주세요.'
+        )
+        return redirect('accounts:login')
+
+
+class PasswordResetResendView(View):
+    """인증번호 재발송"""
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request):
+        email = request.session.get('reset_email', '')
+
+        if not email:
+            return redirect('accounts:password_reset_request')
+
+        try:
+            user = User.objects.get(email=email, is_active=True)
+
+            # 이전 미사용 코드 무효화
+            PasswordResetCode.objects.filter(
+                user=user, is_used=False
+            ).update(is_used=True)
+
+            # 새 인증번호 생성
+            code = _generate_reset_code()
+            PasswordResetCode.objects.create(user=user, code=code)
+
+            # 이메일 발송
+            try:
+                send_password_reset_code(email, code)
+            except Exception as e:
+                logger.error('비밀번호 리셋 이메일 재발송 실패: %s', e)
+
+        except User.DoesNotExist:
+            pass
+
+        messages.success(request, '인증번호가 재전송되었습니다.')
+        return redirect('accounts:password_reset_verify')

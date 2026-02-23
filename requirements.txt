@@ -35,6 +35,9 @@ xlrd>=2.0
 # HTTP 요청 (Slack 연동 등)
 requests>=2.31
 
+# Resend 이메일 발송
+resend>=2.0
+
 # 폼 스타일링
 django-widget-tweaks>=1.4
 

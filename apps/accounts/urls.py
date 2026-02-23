@@ -15,6 +15,12 @@ urlpatterns = [
     path('logout/', views.CustomLogoutView.as_view(), name='logout'),
     path('register/', views.RegisterView.as_view(), name='register'),
 
+    # 비밀번호 리셋
+    path('password-reset/', views.PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('password-reset/verify/', views.PasswordResetVerifyView.as_view(), name='password_reset_verify'),
+    path('password-reset/confirm/', views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    path('password-reset/resend/', views.PasswordResetResendView.as_view(), name='password_reset_resend'),
+
     # 프로필
     path('profile/', views.ProfileView.as_view(), name='profile'),
 

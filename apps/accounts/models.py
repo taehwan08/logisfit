@@ -4,6 +4,9 @@
 커스텀 User 모델을 정의합니다.
 이메일 기반 인증과 관리자 승인 기능을 포함합니다.
 """
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils import timezone
@@ -119,3 +122,65 @@ class User(AbstractBaseUser, PermissionsMixin):
     def is_worker(self):
         """작업자 여부를 확인합니다."""
         return self.role == self.Role.WORKER
+
+
+class PasswordResetCode(models.Model):
+    """
+    비밀번호 리셋 인증번호 모델
+
+    이메일로 발송된 6자리 인증번호를 저장하고 유효성을 관리합니다.
+    """
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='password_reset_codes',
+        verbose_name='사용자',
+    )
+    code = models.CharField('인증번호', max_length=6)
+    is_used = models.BooleanField('사용 여부', default=False)
+    attempt_count = models.IntegerField('시도 횟수', default=0)
+    created_at = models.DateTimeField('생성일시', auto_now_add=True)
+    expires_at = models.DateTimeField('만료일시')
+
+    class Meta:
+        verbose_name = '비밀번호 리셋 인증번호'
+        verbose_name_plural = '비밀번호 리셋 인증번호'
+        db_table = 'accounts_password_reset_codes'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['user', 'is_used', 'expires_at'],
+                name='idx_reset_code_lookup',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.user.email} - {self.code} ({"사용됨" if self.is_used else "미사용"})'
+
+    def save(self, *args, **kwargs):
+        """만료 시간 자동 설정"""
+        if not self.expires_at:
+            expiry_minutes = getattr(settings, 'PASSWORD_RESET_CODE_EXPIRY_MINUTES', 10)
+            self.expires_at = timezone.now() + timedelta(minutes=expiry_minutes)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        """인증번호가 유효한지 확인합니다."""
+        if self.is_used:
+            return False
+        if timezone.now() > self.expires_at:
+            return False
+        if self.attempt_count >= 5:
+            return False
+        return True
+
+    def mark_used(self):
+        """인증번호를 사용 처리합니다."""
+        self.is_used = True
+        self.save(update_fields=['is_used'])
+
+    def increment_attempt(self):
+        """실패 시도 횟수를 증가시킵니다."""
+        self.attempt_count += 1
+        self.save(update_fields=['attempt_count'])
