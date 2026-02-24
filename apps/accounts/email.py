@@ -48,12 +48,14 @@ def send_email(to, subject, html_content):
             "html": html_content,
         }
 
+        logger.info('이메일 발송 시도: from=%s, to=%s, subject=%s', from_email, to, subject)
         result = resend.Emails.send(params)
-        logger.info('이메일 발송 성공: to=%s, subject=%s, id=%s', to, subject, result.get('id', ''))
+        email_id = result.get('id', '') if isinstance(result, dict) else getattr(result, 'id', '')
+        logger.info('이메일 발송 성공: to=%s, subject=%s, id=%s', to, subject, email_id)
         return True
 
     except Exception as e:
-        logger.error('이메일 발송 실패: to=%s, subject=%s, error=%s', to, subject, e)
+        logger.error('이메일 발송 실패: from=%s, to=%s, subject=%s, error=%s', from_email, to, subject, e, exc_info=True)
         return False
 
 
@@ -142,8 +144,11 @@ def send_shipment_notification(order):
     Returns:
         bool: 발송 성공 여부 (등록자 없거나 이메일 없으면 False)
     """
-    if not order.created_by or not order.created_by.email:
-        logger.warning('출고 알림 발송 스킵: 등록자 정보 없음 (주문 #%s)', order.order_number)
+    if not order.created_by:
+        logger.warning('출고 알림 발송 스킵: 등록자(created_by) 없음 (주문 #%s)', order.order_number)
+        return False
+    if not order.created_by.email:
+        logger.warning('출고 알림 발송 스킵: 등록자 이메일 없음 (주문 #%s, 등록자=%s)', order.order_number, order.created_by.name)
         return False
 
     to_email = order.created_by.email
@@ -178,7 +183,7 @@ def send_shipment_notification(order):
                         <tr>
                             <td style="padding:36px 32px 20px;">
                                 <div style="display:inline-block; background-color:#d1fae5; color:#065f46; font-size:13px; font-weight:600; padding:4px 12px; border-radius:20px; margin-bottom:16px;">
-                                    ✅ 출고완료
+                                    &#10004; 출고완료
                                 </div>
                                 <h2 style="margin:0 0 8px; color:#1e293b; font-size:18px; font-weight:600;">출고 완료 알림</h2>
                                 <p style="margin:0 0 24px; color:#64748b; font-size:14px; line-height:1.6;">

@@ -4,6 +4,7 @@
 B2B 출고 주문 목록, 등록, 수정, 삭제, 상태변경, 벌크 붙여넣기, 엑셀 다운로드 기능을 제공합니다.
 """
 import json
+import logging
 import re
 from datetime import datetime
 from functools import wraps
@@ -20,6 +21,8 @@ from .models import FulfillmentOrder, FulfillmentComment, PlatformColumnConfig
 from .slack import send_order_created_notification, send_bulk_orders_notification
 from apps.accounts.email import send_shipment_notification
 from apps.clients.models import Client, Brand
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -616,7 +619,9 @@ def delete_order(request, order_id):
 def update_status(request, order_id):
     """상태 변경 (관리자/작업자 전용) - 확인/출고/전산반영"""
     try:
-        order = FulfillmentOrder.objects.get(id=order_id)
+        order = FulfillmentOrder.objects.select_related(
+            'created_by', 'client', 'shipped_by',
+        ).get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
         return JsonResponse({'error': '주문을 찾을 수 없습니다.'}, status=404)
 
@@ -665,9 +670,16 @@ def update_status(request, order_id):
         # 출고완료 시 등록자에게 이메일 알림
         if action == 'ship':
             try:
-                send_shipment_notification(order)
-            except Exception:
-                pass  # 이메일 실패가 출고 처리를 막지 않도록
+                order.shipped_by = user
+                result = send_shipment_notification(order)
+                logger.info(
+                    '출고 알림 이메일 결과: order=#%s, created_by=%s, result=%s',
+                    order.order_number,
+                    order.created_by_id,
+                    result,
+                )
+            except Exception as e:
+                logger.error('출고 알림 이메일 발송 실패 (주문 #%s): %s', order.order_number, e, exc_info=True)
 
         time_val = getattr(order, cfg['time_field'])
         return JsonResponse({
@@ -724,7 +736,9 @@ def bulk_update_status(request):
 
     cfg = action_map[action]
     user = request.user
-    orders = FulfillmentOrder.objects.filter(id__in=order_ids)
+    orders = FulfillmentOrder.objects.select_related(
+        'created_by', 'client', 'shipped_by',
+    ).filter(id__in=order_ids)
 
     success_count = 0
     fail_count = 0
@@ -742,9 +756,16 @@ def bulk_update_status(request):
             # 출고완료 시 등록자에게 이메일 알림
             if action == 'ship':
                 try:
-                    send_shipment_notification(order)
-                except Exception:
-                    pass  # 이메일 실패가 출고 처리를 막지 않도록
+                    order.shipped_by = user
+                    result = send_shipment_notification(order)
+                    logger.info(
+                        '출고 알림 이메일 결과(일괄): order=#%s, created_by=%s, result=%s',
+                        order.order_number,
+                        order.created_by_id,
+                        result,
+                    )
+                except Exception as e:
+                    logger.error('출고 알림 이메일 발송 실패 (주문 #%s): %s', order.order_number, e, exc_info=True)
 
             success_count += 1
         else:
