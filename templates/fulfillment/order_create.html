@@ -33,6 +33,11 @@
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         overflow: hidden;
     }
+    .table-card.disabled-state {
+        opacity: 0.55;
+        pointer-events: none;
+        user-select: none;
+    }
 
     /* 액션 툴바 */
     .action-toolbar {
@@ -132,6 +137,28 @@
 
     /* 체크박스 */
     .create-table .form-check-input { cursor: pointer; }
+
+    /* 플랫폼 미선택 안내 */
+    .platform-required-guide {
+        text-align: center;
+        padding: 60px 20px;
+        color: #adb5bd;
+    }
+    .platform-required-guide i {
+        font-size: 3rem;
+        margin-bottom: 12px;
+        display: block;
+    }
+    .platform-required-guide .guide-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #6c757d;
+        margin-bottom: 6px;
+    }
+    .platform-required-guide .guide-desc {
+        font-size: 0.82rem;
+        color: #adb5bd;
+    }
 </style>
 {% endblock %}
 
@@ -174,8 +201,19 @@
     </div>
 </div>
 
-<!-- 테이블 카드 -->
-<div class="table-card">
+<!-- 플랫폼 미선택 시 안내 -->
+<div id="platformRequiredGuide">
+    <div class="table-card">
+        <div class="platform-required-guide">
+            <i class="bi bi-arrow-up-circle"></i>
+            <p class="guide-title">플랫폼을 먼저 선택해주세요</p>
+            <p class="guide-desc">플랫폼에 따라 입력 컬럼이 자동으로 설정됩니다.</p>
+        </div>
+    </div>
+</div>
+
+<!-- 테이블 카드 (플랫폼 선택 후 표시) -->
+<div class="table-card" id="tableCard" style="display:none;">
     <!-- 액션 툴바 -->
     <div class="action-toolbar">
         <div class="d-flex align-items-center gap-2">
@@ -188,16 +226,16 @@
             </span>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary btn-sm" onclick="showPasteModal()">
+            <button class="btn btn-outline-secondary btn-sm" id="btnPaste" onclick="showPasteModal()">
                 <i class="bi bi-clipboard me-1"></i>붙여넣기
             </button>
-            <button class="btn btn-outline-danger btn-sm" onclick="deleteSelectedRows()">
+            <button class="btn btn-outline-danger btn-sm" id="btnDelete" onclick="deleteSelectedRows()">
                 <i class="bi bi-trash me-1"></i>선택 삭제
             </button>
-            <button class="btn btn-outline-primary btn-sm" onclick="addRow()">
+            <button class="btn btn-outline-primary btn-sm" id="btnAddRow" onclick="addRow()">
                 <i class="bi bi-plus-lg me-1"></i>행 추가
             </button>
-            <button class="btn btn-primary btn-sm" onclick="submitOrders()">
+            <button class="btn btn-primary btn-sm" id="btnSubmit" onclick="submitOrders()">
                 <i class="bi bi-check-lg me-1"></i>일괄 등록
             </button>
         </div>
@@ -208,17 +246,7 @@
         <table class="create-table table table-bordered" id="createTable">
             <thead>
                 <tr id="tableHead">
-                    <th style="width:36px;">
-                        <input class="form-check-input" type="checkbox" id="checkAllCreate" onchange="toggleCheckAllCreate(this)">
-                    </th>
-                    <th style="width:30px;">#</th>
-                    <th class="required">발주번호</th>
-                    <th class="required">상품명</th>
-                    <th>바코드</th>
-                    <th>발주수량</th>
-                    <th>확정수량</th>
-                    <th>비고</th>
-                    <th style="width:36px;"></th>
+                    <!-- JS로 동적 구성 -->
                 </tr>
             </thead>
             <tbody id="createBody">
@@ -230,8 +258,7 @@
     <!-- 빈 상태 -->
     <div class="text-center py-5 text-muted" id="emptyGuide">
         <i class="bi bi-plus-square" style="font-size:2.5rem;"></i>
-        <p class="mt-2 mb-1">위의 <strong>행 추가</strong> 버튼을 클릭하거나, <strong>붙여넣기</strong>로 데이터를 추가하세요.</p>
-        <p class="mb-0" style="font-size:0.78rem; color:#adb5bd;">플랫폼을 선택하면 해당 플랫폼에 맞는 컬럼이 자동으로 설정됩니다.</p>
+        <p class="mt-2 mb-0">위의 <strong>행 추가</strong> 버튼을 클릭하거나, <strong>붙여넣기</strong>로 데이터를 추가하세요.</p>
     </div>
 </div>
 
@@ -247,7 +274,7 @@
                 <div class="alert alert-info py-2 mb-3" style="font-size:0.82rem;">
                     <i class="bi bi-info-circle me-1"></i>
                     플랫폼에서 복사한 표를 아래에 <strong>Ctrl+V</strong>로 붙여넣기 하세요.<br>
-                    <strong>컬럼 순서:</strong> <span id="pasteColumnGuide">플랫폼을 먼저 선택하세요.</span>
+                    <strong>컬럼 순서:</strong> <span id="pasteColumnGuide"></span>
                 </div>
                 <textarea class="form-control paste-area" id="pasteTextarea"
                           placeholder="여기에 표 내용을 붙여넣기 하세요...&#10;&#10;탭으로 구분된 데이터가 자동 인식됩니다."
@@ -276,11 +303,13 @@ const IS_WORKER = {{ is_worker|yesno:"true,false" }};
 const CSRF_TOKEN = '{{ csrf_token }}';
 
 let currentColumns = [];    // 현재 활성 컬럼 목록
+let platformSelected = false;
 let rowCounter = 0;
 
 // ============================================================================
 // 플랫폼별 기본 컬럼 프리셋
-// PlatformColumnConfig이 없을 때 사용하는 기본값
+// PlatformColumnConfig DB에 설정이 없을 때 사용하는 기본값
+// 관리자가 주문목록 > 컬럼 설정에서 커스터마이즈 가능
 // ============================================================================
 const PLATFORM_PRESETS = {
     // 쿠팡: 발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
@@ -347,15 +376,6 @@ const PLATFORM_PRESETS = {
     ],
 };
 
-// 플랫폼 미선택 시 기본 컬럼
-const DEFAULT_COLUMNS = [
-    { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-    { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-    { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-    { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-    { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-];
-
 // 공통 모델 필드 키 (platform_data에 저장하지 않는 필드)
 const MODEL_FIELDS = [
     'order_number', 'product_name', 'barcode', 'order_quantity', 'confirmed_quantity',
@@ -367,8 +387,6 @@ const MODEL_FIELDS = [
 // 초기화
 // ============================================================================
 document.addEventListener('DOMContentLoaded', function() {
-    currentColumns = [...DEFAULT_COLUMNS];
-
     if (IS_CLIENT) {
         const sel = document.getElementById('createClient');
         if (sel && sel.options.length > 1) {
@@ -399,10 +417,13 @@ function onClientChange() {
 
 function onPlatformChange() {
     const platform = document.getElementById('createPlatform').value;
+
     if (!platform) {
-        currentColumns = [...DEFAULT_COLUMNS];
-        rebuildTable();
-        updateColumnInfo();
+        // 플랫폼 해제 → 테이블 숨기고 안내 표시
+        platformSelected = false;
+        currentColumns = [];
+        document.getElementById('platformRequiredGuide').style.display = '';
+        document.getElementById('tableCard').style.display = 'none';
         return;
     }
 
@@ -425,8 +446,13 @@ function onPlatformChange() {
                 }));
             } else {
                 // DB에 없으면 프리셋 사용
-                currentColumns = [...(PLATFORM_PRESETS[platform] || DEFAULT_COLUMNS)];
+                currentColumns = [...(PLATFORM_PRESETS[platform] || PLATFORM_PRESETS.other)];
             }
+
+            // 테이블 활성화
+            platformSelected = true;
+            document.getElementById('platformRequiredGuide').style.display = 'none';
+            document.getElementById('tableCard').style.display = '';
 
             rebuildTable();
             updateColumnInfo();
@@ -450,8 +476,6 @@ function updateColumnInfo() {
     const guide = document.getElementById('pasteColumnGuide');
     if (currentColumns.length > 0) {
         guide.textContent = currentColumns.map(c => c.name).join(' | ');
-    } else {
-        guide.textContent = '플랫폼을 먼저 선택하세요.';
     }
 }
 
@@ -495,6 +519,11 @@ function rebuildTable() {
 }
 
 function addRow(prefillData) {
+    if (!platformSelected) {
+        showToast('플랫폼을 먼저 선택해주세요.', 'warning');
+        return;
+    }
+
     rowCounter++;
     const cols = currentColumns;
     const tbody = document.getElementById('createBody');
@@ -509,7 +538,6 @@ function addRow(prefillData) {
     cols.forEach(col => {
         let val = '';
         if (prefillData) {
-            // 정확한 키로 먼저 찾고, platformKey로도 시도
             val = prefillData[col.key] || '';
             if (!val && col.platformKey) {
                 val = prefillData[col.platformKey] || '';
@@ -638,14 +666,12 @@ function submitOrders() {
     // 주문 데이터 조립
     const orders = rowsData.map(data => {
         const order = {};
-
-        // 모든 키를 순회하며 모델 필드 vs platform_data 분리
         const pd = {};
+
         Object.keys(data).forEach(k => {
             if (k === 'memo') {
                 order.memo = data[k] || '';
             } else if (k.startsWith('pd_')) {
-                // 플랫폼 커스텀 필드 → platform_data
                 const realKey = k.substring(3);
                 if (data[k]) pd[realKey] = data[k];
             } else if (MODEL_FIELDS.includes(k)) {
@@ -658,7 +684,7 @@ function submitOrders() {
     });
 
     // 전송
-    const submitBtn = document.querySelector('[onclick="submitOrders()"]');
+    const submitBtn = document.getElementById('btnSubmit');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>등록 중...';
 
@@ -706,8 +732,12 @@ function submitOrders() {
 // 붙여넣기
 // ============================================================================
 function showPasteModal() {
+    if (!platformSelected) {
+        showToast('플랫폼을 먼저 선택해주세요.', 'warning');
+        return;
+    }
     document.getElementById('pasteTextarea').value = '';
-    updateColumnInfo(); // 가이드 텍스트 업데이트
+    updateColumnInfo();
     new bootstrap.Modal(document.getElementById('pasteModal')).show();
 }
 
