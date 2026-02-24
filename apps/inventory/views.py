@@ -930,7 +930,7 @@ def export_records_excel(request):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
     # 응답
-    now_str = timezone.now().strftime('%Y%m%d_%H%M')
+    now_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')
     session_name = session.name.replace(' ', '_') if session.name else session_id
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

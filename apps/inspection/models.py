@@ -2,6 +2,7 @@
 검수 시스템 모델
 """
 from django.db import models
+from django.utils import timezone
 
 
 class UploadBatch(models.Model):
@@ -21,7 +22,7 @@ class UploadBatch(models.Model):
         ordering = ['-uploaded_at']
 
     def __str__(self):
-        return f'{self.file_name} ({self.uploaded_at.strftime("%Y-%m-%d %H:%M")})'
+        return f'{self.file_name} ({timezone.localtime(self.uploaded_at).strftime("%Y-%m-%d %H:%M")})'
 
 
 class Order(models.Model):

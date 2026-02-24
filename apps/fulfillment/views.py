@@ -299,11 +299,11 @@ def get_orders(request):
             'address': order.address,
             'memo': order.memo,
             'platform_data': order.platform_data,
-            'confirmed_at': order.confirmed_at.strftime('%Y-%m-%d %H:%M') if order.confirmed_at else '',
-            'shipped_at': order.shipped_at.strftime('%Y-%m-%d %H:%M') if order.shipped_at else '',
-            'synced_at': order.synced_at.strftime('%Y-%m-%d %H:%M') if order.synced_at else '',
+            'confirmed_at': timezone.localtime(order.confirmed_at).strftime('%Y-%m-%d %H:%M') if order.confirmed_at else '',
+            'shipped_at': timezone.localtime(order.shipped_at).strftime('%Y-%m-%d %H:%M') if order.shipped_at else '',
+            'synced_at': timezone.localtime(order.synced_at).strftime('%Y-%m-%d %H:%M') if order.synced_at else '',
             'created_by': order.created_by.name if order.created_by else '',
-            'created_at': order.created_at.strftime('%Y-%m-%d %H:%M'),
+            'created_at': timezone.localtime(order.created_at).strftime('%Y-%m-%d %H:%M'),
         })
 
     return JsonResponse({
@@ -687,7 +687,7 @@ def update_status(request, order_id):
             'message': cfg['message'],
             'status': order.status,
             'status_display': order.get_status_display(),
-            cfg['time_field']: time_val.strftime('%Y-%m-%d %H:%M') if time_val else '',
+            cfg['time_field']: timezone.localtime(time_val).strftime('%Y-%m-%d %H:%M') if time_val else '',
         })
     else:
         error_msgs = {
@@ -913,7 +913,7 @@ def export_excel(request):
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    now_str = timezone.now().strftime('%Y%m%d_%H%M')
+    now_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')
     response['Content-Disposition'] = f'attachment; filename="fulfillment_orders_{now_str}.xlsx"'
     wb.save(response)
     return response
@@ -955,7 +955,7 @@ def get_comments(request, order_id):
             'author_id': c.author.id if c.author else None,
             'content': c.content,
             'is_system': c.is_system,
-            'created_at': c.created_at.strftime('%Y-%m-%d %H:%M'),
+            'created_at': timezone.localtime(c.created_at).strftime('%Y-%m-%d %H:%M'),
             'is_mine': c.author_id == request.user.id if c.author else False,
         })
 
@@ -1000,7 +1000,7 @@ def add_comment(request, order_id):
             'author_id': comment.author.id,
             'content': comment.content,
             'is_system': False,
-            'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M'),
+            'created_at': timezone.localtime(comment.created_at).strftime('%Y-%m-%d %H:%M'),
             'is_mine': True,
         },
     })

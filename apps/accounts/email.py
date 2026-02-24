@@ -7,6 +7,7 @@ RESEND_API_KEY가 설정되지 않으면 콘솔 로그로 fallback합니다.
 import logging
 
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ def send_shipment_notification(order):
 
     to_email = order.created_by.email
     platform_display = order.get_platform_display()
-    shipped_at = order.shipped_at.strftime('%Y-%m-%d %H:%M') if order.shipped_at else '-'
+    shipped_at = timezone.localtime(order.shipped_at).strftime('%Y-%m-%d %H:%M') if order.shipped_at else '-'
     shipped_by_name = order.shipped_by.name if order.shipped_by else '-'
     client_name = order.client.company_name if order.client else '-'
 
