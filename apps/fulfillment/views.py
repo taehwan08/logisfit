@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from .models import FulfillmentOrder, FulfillmentComment, PlatformColumnConfig
 from .slack import send_order_created_notification, send_bulk_orders_notification
+from apps.accounts.email import send_shipment_notification
 from apps.clients.models import Client, Brand
 
 
@@ -660,6 +661,14 @@ def update_status(request, order_id):
             content=f"{cfg['system_msg']} ({user.name})",
             is_system=True,
         )
+
+        # 출고완료 시 등록자에게 이메일 알림
+        if action == 'ship':
+            try:
+                send_shipment_notification(order)
+            except Exception:
+                pass  # 이메일 실패가 출고 처리를 막지 않도록
+
         time_val = getattr(order, cfg['time_field'])
         return JsonResponse({
             'success': True,
@@ -729,6 +738,14 @@ def bulk_update_status(request):
                 content=f"{cfg['system_msg']} ({user.name}) [일괄처리]",
                 is_system=True,
             )
+
+            # 출고완료 시 등록자에게 이메일 알림
+            if action == 'ship':
+                try:
+                    send_shipment_notification(order)
+                except Exception:
+                    pass  # 이메일 실패가 출고 처리를 막지 않도록
+
             success_count += 1
         else:
             fail_count += 1
