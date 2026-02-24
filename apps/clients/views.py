@@ -12,11 +12,15 @@ from django.views.generic import (
 )
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.utils import timezone
 
 from .models import Client, PriceContract
 from .forms import ClientForm, PriceContractForm, PriceContractBulkForm
+from apps.accounts.models import User
 
 
 class AdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -130,6 +134,18 @@ class ClientDetailView(LoginRequiredMixin, DetailView):
         # 전체 단가 계약 이력
         context['all_price_contracts'] = client.price_contracts.all()
 
+        # 연결된 사용자 (거래처 역할)
+        context['linked_users'] = client.users.filter(
+            role=User.Role.CLIENT, is_active=True
+        ).order_by('name')
+
+        # 연결 가능한 사용자 (거래처 역할이면서 아직 이 거래처에 연결 안 된 사용자)
+        context['available_users'] = User.objects.filter(
+            role=User.Role.CLIENT, is_active=True
+        ).exclude(
+            clients=client
+        ).order_by('name')
+
         return context
 
 
@@ -227,3 +243,82 @@ class PriceContractDeleteView(AdminRequiredMixin, View):
         contract.delete()
         messages.success(request, '단가 계약이 삭제되었습니다.')
         return redirect('clients:client_detail', pk=client_pk)
+
+
+# ============================================================================
+# 거래처-사용자 매칭 API
+# ============================================================================
+
+def _is_admin(user):
+    return user.is_authenticated and (user.is_admin or user.is_superuser)
+
+
+@login_required
+@require_http_methods(["POST"])
+def add_client_user(request, pk):
+    """거래처에 사용자 연결"""
+    if not _is_admin(request.user):
+        return JsonResponse({'error': '관리자 권한이 필요합니다.'}, status=403)
+
+    client = get_object_or_404(Client, pk=pk)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    user_id = data.get('user_id')
+    if not user_id:
+        return JsonResponse({'error': '사용자를 선택해주세요.'}, status=400)
+
+    try:
+        target_user = User.objects.get(id=user_id, role=User.Role.CLIENT, is_active=True)
+    except User.DoesNotExist:
+        return JsonResponse({'error': '해당 거래처 사용자를 찾을 수 없습니다.'}, status=404)
+
+    if client in target_user.clients.all():
+        return JsonResponse({'error': '이미 연결된 사용자입니다.'}, status=400)
+
+    target_user.clients.add(client)
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{target_user.name}님이 연결되었습니다.',
+        'user': {
+            'id': target_user.id,
+            'name': target_user.name,
+            'email': target_user.email,
+            'phone': target_user.phone or '-',
+        },
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def remove_client_user(request, pk):
+    """거래처에서 사용자 연결 해제"""
+    if not _is_admin(request.user):
+        return JsonResponse({'error': '관리자 권한이 필요합니다.'}, status=403)
+
+    client = get_object_or_404(Client, pk=pk)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    user_id = data.get('user_id')
+    if not user_id:
+        return JsonResponse({'error': '사용자를 선택해주세요.'}, status=400)
+
+    try:
+        target_user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': '사용자를 찾을 수 없습니다.'}, status=404)
+
+    target_user.clients.remove(client)
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{target_user.name}님이 연결 해제되었습니다.',
+    })

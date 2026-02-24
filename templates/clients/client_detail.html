@@ -110,6 +110,56 @@
                 </div>
             </div>
         </div>
+        <!-- 연결된 사용자 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-people me-2"></i>연결된 사용자</h6>
+                {% if user.is_admin or user.is_superuser %}
+                <div class="d-flex gap-2 align-items-center">
+                    <select id="availableUserSelect" class="form-select form-select-sm" style="width:auto; min-width:200px;">
+                        <option value="">-- 사용자 선택 --</option>
+                        {% for u in available_users %}
+                        <option value="{{ u.id }}">{{ u.name }} ({{ u.email }})</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-sm btn-primary" onclick="addUser()" style="white-space:nowrap;">
+                        <i class="bi bi-plus-lg me-1"></i>추가
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0" id="linkedUsersTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>이름</th>
+                            <th>이메일</th>
+                            <th>연락처</th>
+                            {% if user.is_admin or user.is_superuser %}<th style="width:80px;">동작</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linked_user in linked_users %}
+                        <tr id="user-row-{{ linked_user.id }}">
+                            <td>{{ linked_user.name }}</td>
+                            <td>{{ linked_user.email }}</td>
+                            <td>{{ linked_user.phone|default:'-' }}</td>
+                            {% if user.is_admin or user.is_superuser %}
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeUser({{ linked_user.id }}, '{{ linked_user.name }}')" title="연결 해제">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr id="emptyUserRow"><td colspan="4" class="text-center py-3 text-muted">연결된 사용자가 없습니다.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         {% if client.memo %}
         <div class="card mb-4">
             <div class="card-header"><h6 class="mb-0">메모</h6></div>
@@ -245,4 +295,107 @@
         <i class="bi bi-arrow-left me-1"></i>목록으로
     </a>
 </div>
+
+{% if user.is_admin or user.is_superuser %}
+<script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+const CLIENT_PK = {{ client.pk }};
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function addUser() {
+    const select = document.getElementById('availableUserSelect');
+    const userId = select.value;
+    if (!userId) {
+        alert('사용자를 선택해주세요.');
+        return;
+    }
+
+    fetch(`/clients/${CLIENT_PK}/users/add/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+        body: JSON.stringify({ user_id: parseInt(userId) }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const u = data.user;
+            // 빈 행 제거
+            const emptyRow = document.getElementById('emptyUserRow');
+            if (emptyRow) emptyRow.remove();
+
+            // 테이블에 행 추가
+            const tbody = document.querySelector('#linkedUsersTable tbody');
+            const tr = document.createElement('tr');
+            tr.id = `user-row-${u.id}`;
+            tr.innerHTML = `
+                <td>${escapeHtml(u.name)}</td>
+                <td>${escapeHtml(u.email)}</td>
+                <td>${escapeHtml(u.phone)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeUser(${u.id}, '${escapeHtml(u.name)}')" title="연결 해제">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+
+            // 셀렉트에서 해당 옵션 제거
+            select.querySelector(`option[value="${userId}"]`).remove();
+            select.value = '';
+
+            alert(data.message);
+        } else {
+            alert(data.error || '추가에 실패했습니다.');
+        }
+    })
+    .catch(() => alert('요청 중 오류가 발생했습니다.'));
+}
+
+function removeUser(userId, userName) {
+    if (!confirm(`${userName}님의 연결을 해제하시겠습니까?`)) return;
+
+    fetch(`/clients/${CLIENT_PK}/users/remove/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+        body: JSON.stringify({ user_id: userId }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // 행에서 사용자 정보 추출 후 제거
+            const row = document.getElementById(`user-row-${userId}`);
+            const name = row.cells[0].textContent;
+            const email = row.cells[1].textContent;
+            row.remove();
+
+            // 셀렉트에 옵션 복원
+            const select = document.getElementById('availableUserSelect');
+            const option = document.createElement('option');
+            option.value = userId;
+            option.textContent = `${name} (${email})`;
+            select.appendChild(option);
+
+            // 테이블이 비었으면 빈 행 추가
+            const tbody = document.querySelector('#linkedUsersTable tbody');
+            if (tbody.children.length === 0) {
+                const emptyTr = document.createElement('tr');
+                emptyTr.id = 'emptyUserRow';
+                emptyTr.innerHTML = '<td colspan="4" class="text-center py-3 text-muted">연결된 사용자가 없습니다.</td>';
+                tbody.appendChild(emptyTr);
+            }
+
+            alert(data.message);
+        } else {
+            alert(data.error || '해제에 실패했습니다.');
+        }
+    })
+    .catch(() => alert('요청 중 오류가 발생했습니다.'));
+}
+</script>
+{% endif %}
 {% endblock %}

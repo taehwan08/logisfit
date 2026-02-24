@@ -5,6 +5,7 @@ Resend API를 사용하여 이메일을 발송합니다.
 RESEND_API_KEY가 설정되지 않으면 콘솔 로그로 fallback합니다.
 """
 import logging
+import threading
 
 from django.conf import settings
 from django.utils import timezone
@@ -135,30 +136,20 @@ def send_password_reset_code(email, code):
     return send_email(email, subject, html_content)
 
 
-def send_shipment_notification(order):
+def _build_shipment_email(data):
     """
-    출고 완료 알림 이메일을 등록자에게 발송합니다.
+    출고 완료 알림 이메일 HTML을 생성합니다.
 
     Args:
-        order: FulfillmentOrder 인스턴스
+        data: dict — 이메일에 필요한 데이터
+            to_email, order_number, client_name, platform_display,
+            product_name, order_quantity, confirmed_quantity,
+            shipped_at, shipped_by_name
 
     Returns:
-        bool: 발송 성공 여부 (등록자 없거나 이메일 없으면 False)
+        tuple: (to_email, subject, html_content)
     """
-    if not order.created_by:
-        logger.warning('출고 알림 발송 스킵: 등록자(created_by) 없음 (주문 #%s)', order.order_number)
-        return False
-    if not order.created_by.email:
-        logger.warning('출고 알림 발송 스킵: 등록자 이메일 없음 (주문 #%s, 등록자=%s)', order.order_number, order.created_by.name)
-        return False
-
-    to_email = order.created_by.email
-    platform_display = order.get_platform_display()
-    shipped_at = timezone.localtime(order.shipped_at).strftime('%Y-%m-%d %H:%M') if order.shipped_at else '-'
-    shipped_by_name = order.shipped_by.name if order.shipped_by else '-'
-    client_name = order.client.company_name if order.client else '-'
-
-    subject = f'[LogisFit] 출고완료 알림 - {order.order_number}'
+    subject = f'[LogisFit] 출고완료 알림 - {data["order_number"]}'
 
     html_content = f"""
     <!DOCTYPE html>
@@ -195,36 +186,36 @@ def send_shipment_notification(order):
                                 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; margin-bottom:24px;">
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">발주번호</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; font-weight:500; border-bottom:1px solid #e2e8f0;">{order.order_number}</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; font-weight:500; border-bottom:1px solid #e2e8f0;">{data['order_number']}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">거래처</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{client_name}</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['client_name']}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">플랫폼</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{platform_display}</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['platform_display']}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">상품명</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{order.product_name}</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['product_name']}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">발주수량</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{order.order_quantity:,}개</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['order_quantity']}개</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">확정수량</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{order.confirmed_quantity:,}개</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['confirmed_quantity']}개</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; width:120px;">출고일시</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px;">{shipped_at}</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px;">{data['shipped_at']}</td>
                                     </tr>
                                 </table>
 
                                 <p style="margin:0; color:#94a3b8; font-size:13px; line-height:1.5;">
-                                    출고처리자: <strong style="color:#475569;">{shipped_by_name}</strong>
+                                    출고처리자: <strong style="color:#475569;">{data['shipped_by_name']}</strong>
                                 </p>
                             </td>
                         </tr>
@@ -245,4 +236,105 @@ def send_shipment_notification(order):
     </html>
     """
 
+    return data['to_email'], subject, html_content
+
+
+def _extract_shipment_data(order):
+    """
+    FulfillmentOrder에서 이메일에 필요한 데이터를 dict로 추출합니다.
+    DB 접근이 필요하므로 메인 스레드에서 호출해야 합니다.
+
+    Args:
+        order: FulfillmentOrder 인스턴스
+
+    Returns:
+        dict 또는 None (등록자 없거나 이메일 없으면)
+    """
+    if not order.created_by:
+        logger.warning('출고 알림 발송 스킵: 등록자(created_by) 없음 (주문 #%s)', order.order_number)
+        return None
+    if not order.created_by.email:
+        logger.warning('출고 알림 발송 스킵: 등록자 이메일 없음 (주문 #%s, 등록자=%s)', order.order_number, order.created_by.name)
+        return None
+
+    return {
+        'to_email': order.created_by.email,
+        'order_number': order.order_number,
+        'client_name': order.client.company_name if order.client else '-',
+        'platform_display': order.get_platform_display(),
+        'product_name': order.product_name,
+        'order_quantity': f'{order.order_quantity:,}',
+        'confirmed_quantity': f'{order.confirmed_quantity:,}',
+        'shipped_at': timezone.localtime(order.shipped_at).strftime('%Y-%m-%d %H:%M') if order.shipped_at else '-',
+        'shipped_by_name': order.shipped_by.name if order.shipped_by else '-',
+    }
+
+
+def send_shipment_notification(order):
+    """
+    출고 완료 알림 이메일을 등록자에게 발송합니다. (동기)
+
+    Args:
+        order: FulfillmentOrder 인스턴스
+
+    Returns:
+        bool: 발송 성공 여부
+    """
+    data = _extract_shipment_data(order)
+    if not data:
+        return False
+    to_email, subject, html_content = _build_shipment_email(data)
     return send_email(to_email, subject, html_content)
+
+
+def send_shipment_notification_async(order):
+    """
+    출고 완료 알림 이메일을 백그라운드 스레드에서 발송합니다. (비동기)
+    메인 스레드에서 데이터를 미리 추출한 뒤, 별도 스레드에서 Resend API를 호출합니다.
+
+    Args:
+        order: FulfillmentOrder 인스턴스
+    """
+    data = _extract_shipment_data(order)
+    if not data:
+        return
+
+    def _send():
+        try:
+            to_email, subject, html_content = _build_shipment_email(data)
+            send_email(to_email, subject, html_content)
+        except Exception as e:
+            logger.error('출고 알림 비동기 발송 실패 (주문 #%s): %s', data['order_number'], e, exc_info=True)
+
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+
+
+def send_shipment_notifications_async(orders):
+    """
+    여러 건의 출고 완료 알림 이메일을 하나의 백그라운드 스레드에서 순차 발송합니다.
+    메인 스레드에서 모든 데이터를 미리 추출한 뒤, 별도 스레드에서 일괄 발송합니다.
+
+    Args:
+        orders: FulfillmentOrder 인스턴스 리스트
+    """
+    email_data_list = []
+    for order in orders:
+        data = _extract_shipment_data(order)
+        if data:
+            email_data_list.append(data)
+
+    if not email_data_list:
+        return
+
+    def _send_all():
+        for data in email_data_list:
+            try:
+                to_email, subject, html_content = _build_shipment_email(data)
+                send_email(to_email, subject, html_content)
+            except Exception as e:
+                logger.error('출고 알림 비동기 발송 실패 (주문 #%s): %s', data['order_number'], e, exc_info=True)
+
+    logger.info('출고 알림 비동기 일괄 발송 시작: %d건', len(email_data_list))
+    thread = threading.Thread(target=_send_all, daemon=True)
+    thread.start()

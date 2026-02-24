@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from .models import FulfillmentOrder, FulfillmentComment, PlatformColumnConfig
 from .slack import send_order_created_notification, send_bulk_orders_notification
-from apps.accounts.email import send_shipment_notification
+from apps.accounts.email import send_shipment_notification_async, send_shipment_notifications_async
 from apps.clients.models import Client, Brand
 
 logger = logging.getLogger(__name__)
@@ -667,19 +667,10 @@ def update_status(request, order_id):
             is_system=True,
         )
 
-        # 출고완료 시 등록자에게 이메일 알림
+        # 출고완료 시 등록자에게 이메일 알림 (백그라운드)
         if action == 'ship':
-            try:
-                order.shipped_by = user
-                result = send_shipment_notification(order)
-                logger.info(
-                    '출고 알림 이메일 결과: order=#%s, created_by=%s, result=%s',
-                    order.order_number,
-                    order.created_by_id,
-                    result,
-                )
-            except Exception as e:
-                logger.error('출고 알림 이메일 발송 실패 (주문 #%s): %s', order.order_number, e, exc_info=True)
+            order.shipped_by = user
+            send_shipment_notification_async(order)
 
         time_val = getattr(order, cfg['time_field'])
         return JsonResponse({
@@ -742,6 +733,7 @@ def bulk_update_status(request):
 
     success_count = 0
     fail_count = 0
+    shipped_orders = []
 
     for order in orders:
         method = getattr(order, cfg['method'])
@@ -753,23 +745,17 @@ def bulk_update_status(request):
                 is_system=True,
             )
 
-            # 출고완료 시 등록자에게 이메일 알림
             if action == 'ship':
-                try:
-                    order.shipped_by = user
-                    result = send_shipment_notification(order)
-                    logger.info(
-                        '출고 알림 이메일 결과(일괄): order=#%s, created_by=%s, result=%s',
-                        order.order_number,
-                        order.created_by_id,
-                        result,
-                    )
-                except Exception as e:
-                    logger.error('출고 알림 이메일 발송 실패 (주문 #%s): %s', order.order_number, e, exc_info=True)
+                order.shipped_by = user
+                shipped_orders.append(order)
 
             success_count += 1
         else:
             fail_count += 1
+
+    # 출고완료 건 일괄 이메일 알림 (백그라운드)
+    if shipped_orders:
+        send_shipment_notifications_async(shipped_orders)
 
     msg = f'{success_count}건 {cfg["label"]} 처리되었습니다.'
     if fail_count:

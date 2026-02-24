@@ -26,4 +26,8 @@ urlpatterns = [
     # 단가 계약 (일괄 등록)
     path('<int:client_id>/price-contracts/bulk/',
          views.PriceContractBulkCreateView.as_view(), name='price_contract_bulk'),
+
+    # 거래처-사용자 매칭
+    path('<int:pk>/users/add/', views.add_client_user, name='add_client_user'),
+    path('<int:pk>/users/remove/', views.remove_client_user, name='remove_client_user'),
 ]

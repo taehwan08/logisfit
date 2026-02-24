@@ -36,7 +36,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  - 상품명: {order.product_name}')
         self.stdout.write(f'  - 상태: {order.get_status_display()}')
         self.stdout.write(f'  - 플랫폼: {order.get_platform_display()}')
-        self.stdout.write(f'  - 거래처: {order.client.name if order.client else "없음"}')
+        self.stdout.write(f'  - 거래처: {order.client.company_name if order.client else "없음"}')
         self.stdout.write(f'  - created_by: {order.created_by}')
         self.stdout.write(f'  - created_by_id: {order.created_by_id}')
         self.stdout.write(f'  - created_by.email: {order.created_by.email if order.created_by else "없음"}')

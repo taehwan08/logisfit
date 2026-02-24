@@ -59,6 +59,9 @@
     .table-card .table tbody tr:hover {
         background-color: #f8f9ff;
     }
+    .table-card .table tbody tr.row-synced {
+        background-color: #f8f9ff;
+    }
 
     /* 상태 체크 아이콘 */
     .status-check {
@@ -641,7 +644,7 @@ function renderOrders(data) {
             order.status === 'shipped' && CAN_MANAGE);
 
         html += `
-        <tr>
+        <tr class="${order.status === 'synced' ? 'row-synced' : ''}">
             ${CAN_MANAGE ? `<td class="text-center"><input class="form-check-input row-check" type="checkbox" value="${order.id}" onchange="updateBulkBar()"></td>` : ''}
             <td class="text-muted" style="font-size:0.8rem;">${escapeHtml(order.created_at)}</td>
             <td>
