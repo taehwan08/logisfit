@@ -155,7 +155,7 @@ def send_shipment_notification(order):
     platform_display = order.get_platform_display()
     shipped_at = order.shipped_at.strftime('%Y-%m-%d %H:%M') if order.shipped_at else '-'
     shipped_by_name = order.shipped_by.name if order.shipped_by else '-'
-    client_name = order.client.name if order.client else '-'
+    client_name = order.client.company_name if order.client else '-'
 
     subject = f'[LogisFit] 출고완료 알림 - {order.order_number}'
 
