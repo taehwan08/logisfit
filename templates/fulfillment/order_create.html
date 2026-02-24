@@ -45,6 +45,19 @@
     }
     .action-toolbar .btn { font-size: 0.82rem; }
 
+    /* 컬럼 뱃지 */
+    .column-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 500;
+        background: #e8f4fd;
+        color: #2980b9;
+    }
+
     /* 입력 테이블 */
     .create-table {
         margin-bottom: 0;
@@ -99,16 +112,6 @@
 
     /* 토스트 */
     .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
-
-    /* 안내 영역 */
-    .guide-area {
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 16px;
-        font-size: 0.82rem;
-        color: #495057;
-    }
 
     /* 붙여넣기 모달 */
     .paste-area {
@@ -175,9 +178,13 @@
 <div class="table-card">
     <!-- 액션 툴바 -->
     <div class="action-toolbar">
-        <div>
+        <div class="d-flex align-items-center gap-2">
             <span class="text-muted" style="font-size:0.82rem;">
                 등록할 주문: <strong id="rowCount">0</strong>건
+            </span>
+            <span class="column-badge" id="columnInfo" style="display:none;">
+                <i class="bi bi-layout-three-columns"></i>
+                <span id="columnInfoText"></span>
             </span>
         </div>
         <div class="d-flex gap-2">
@@ -210,7 +217,6 @@
                     <th>바코드</th>
                     <th>발주수량</th>
                     <th>확정수량</th>
-                    <!-- 동적 플랫폼 컬럼이 여기에 삽입 -->
                     <th>비고</th>
                     <th style="width:36px;"></th>
                 </tr>
@@ -224,7 +230,8 @@
     <!-- 빈 상태 -->
     <div class="text-center py-5 text-muted" id="emptyGuide">
         <i class="bi bi-plus-square" style="font-size:2.5rem;"></i>
-        <p class="mt-2 mb-0">위의 <strong>행 추가</strong> 버튼을 클릭하거나, <strong>붙여넣기</strong>로 데이터를 추가하세요.</p>
+        <p class="mt-2 mb-1">위의 <strong>행 추가</strong> 버튼을 클릭하거나, <strong>붙여넣기</strong>로 데이터를 추가하세요.</p>
+        <p class="mb-0" style="font-size:0.78rem; color:#adb5bd;">플랫폼을 선택하면 해당 플랫폼에 맞는 컬럼이 자동으로 설정됩니다.</p>
     </div>
 </div>
 
@@ -240,7 +247,7 @@
                 <div class="alert alert-info py-2 mb-3" style="font-size:0.82rem;">
                     <i class="bi bi-info-circle me-1"></i>
                     플랫폼에서 복사한 표를 아래에 <strong>Ctrl+V</strong>로 붙여넣기 하세요.<br>
-                    <strong>컬럼 순서:</strong> 발주번호 | 발주유형 | 발주확정 | SKU ID | 상품명 | 바코드 | 센터 | 입고일 | 발주일시 | 발주수량 | 확정수량
+                    <strong>컬럼 순서:</strong> <span id="pasteColumnGuide">플랫폼을 먼저 선택하세요.</span>
                 </div>
                 <textarea class="form-control paste-area" id="pasteTextarea"
                           placeholder="여기에 표 내용을 붙여넣기 하세요...&#10;&#10;탭으로 구분된 데이터가 자동 인식됩니다."
@@ -268,34 +275,100 @@ const IS_CLIENT = {{ is_client|yesno:"true,false" }};
 const IS_WORKER = {{ is_worker|yesno:"true,false" }};
 const CSRF_TOKEN = '{{ csrf_token }}';
 
-let platformColumns = [];   // 현재 플랫폼의 커스텀 컬럼
+let currentColumns = [];    // 현재 활성 컬럼 목록
 let rowCounter = 0;
 
-// 공통 컬럼 정의
-const COMMON_COLUMNS = [
-    { key: 'order_number', name: '발주번호', required: true, type: 'text', width: '120px' },
-    { key: 'product_name', name: '상품명', required: true, type: 'text', width: '200px' },
-    { key: 'barcode', name: '바코드', required: false, type: 'text', width: '120px' },
-    { key: 'order_quantity', name: '발주수량', required: false, type: 'number', width: '80px' },
-    { key: 'confirmed_quantity', name: '확정수량', required: false, type: 'number', width: '80px' },
+// ============================================================================
+// 플랫폼별 기본 컬럼 프리셋
+// PlatformColumnConfig이 없을 때 사용하는 기본값
+// ============================================================================
+const PLATFORM_PRESETS = {
+    // 쿠팡: 발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
+    coupang: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'order_type',         name: '발주유형',   required: false, type: 'text',   width: '90px' },
+        { key: 'order_confirmed',    name: '발주확정',   required: false, type: 'text',   width: '90px' },
+        { key: 'sku_id',             name: 'SKU ID',     required: false, type: 'text',   width: '100px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'center',             name: '센터',       required: false, type: 'text',   width: '100px' },
+        { key: 'receiving_date',     name: '입고일',     required: false, type: 'text',   width: '100px' },
+        { key: 'order_date',         name: '발주일시',   required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+    // 컬리
+    kurly: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+    // 올리브영
+    oliveyoung: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+    // 스마트스토어
+    smartstore: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+    // 오프라인마트
+    offline: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+    // 해외수출
+    export: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+    // 기타
+    other: [
+        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
+    ],
+};
+
+// 플랫폼 미선택 시 기본 컬럼
+const DEFAULT_COLUMNS = [
+    { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
+    { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
+    { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
+    { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
+    { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
 ];
 
-// 확장 공통 컬럼 (기본 숨김, 토글 가능)
-const EXTRA_COLUMNS = [
-    { key: 'order_type', name: '발주유형', required: false, type: 'text', width: '90px' },
-    { key: 'order_confirmed', name: '발주확정', required: false, type: 'text', width: '90px' },
-    { key: 'sku_id', name: 'SKU ID', required: false, type: 'text', width: '100px' },
-    { key: 'center', name: '센터', required: false, type: 'text', width: '100px' },
-    { key: 'receiving_date', name: '입고일', required: false, type: 'text', width: '100px' },
-    { key: 'order_date', name: '발주일시', required: false, type: 'text', width: '120px' },
+// 공통 모델 필드 키 (platform_data에 저장하지 않는 필드)
+const MODEL_FIELDS = [
+    'order_number', 'product_name', 'barcode', 'order_quantity', 'confirmed_quantity',
+    'order_type', 'order_confirmed', 'sku_id', 'center', 'receiving_date', 'order_date',
+    'manager', 'expiry_date', 'box_quantity', 'address', 'memo',
 ];
-
-let showExtraColumns = false;
 
 // ============================================================================
 // 초기화
 // ============================================================================
 document.addEventListener('DOMContentLoaded', function() {
+    currentColumns = [...DEFAULT_COLUMNS];
+
     if (IS_CLIENT) {
         const sel = document.getElementById('createClient');
         if (sel && sel.options.length > 1) {
@@ -327,44 +400,66 @@ function onClientChange() {
 function onPlatformChange() {
     const platform = document.getElementById('createPlatform').value;
     if (!platform) {
-        platformColumns = [];
+        currentColumns = [...DEFAULT_COLUMNS];
         rebuildTable();
+        updateColumnInfo();
         return;
     }
 
+    // API에서 PlatformColumnConfig 조회 시도
     fetch(`{% url 'fulfillment:get_platform_columns' %}?platform=${platform}`)
         .then(r => r.json())
         .then(data => {
-            platformColumns = data.columns || [];
+            const apiColumns = data.columns || [];
+
+            if (apiColumns.length > 0) {
+                // DB에 설정된 컬럼이 있으면 그것을 사용
+                currentColumns = apiColumns.map(pc => ({
+                    key: MODEL_FIELDS.includes(pc.key) ? pc.key : 'pd_' + pc.key,
+                    name: pc.name,
+                    required: pc.is_required,
+                    type: pc.column_type,
+                    width: '100px',
+                    isPlatformCol: !MODEL_FIELDS.includes(pc.key),
+                    platformKey: pc.key,
+                }));
+            } else {
+                // DB에 없으면 프리셋 사용
+                currentColumns = [...(PLATFORM_PRESETS[platform] || DEFAULT_COLUMNS)];
+            }
+
             rebuildTable();
+            updateColumnInfo();
         });
+}
+
+function updateColumnInfo() {
+    const badge = document.getElementById('columnInfo');
+    const text = document.getElementById('columnInfoText');
+    const platform = document.getElementById('createPlatform');
+
+    if (platform.value) {
+        const platformLabel = platform.options[platform.selectedIndex].text;
+        text.textContent = `${platformLabel} ${currentColumns.length}개 컬럼`;
+        badge.style.display = '';
+    } else {
+        badge.style.display = 'none';
+    }
+
+    // 붙여넣기 가이드 업데이트
+    const guide = document.getElementById('pasteColumnGuide');
+    if (currentColumns.length > 0) {
+        guide.textContent = currentColumns.map(c => c.name).join(' | ');
+    } else {
+        guide.textContent = '플랫폼을 먼저 선택하세요.';
+    }
 }
 
 // ============================================================================
 // 테이블 구성
 // ============================================================================
-function getAllColumns() {
-    let cols = [...COMMON_COLUMNS];
-    if (showExtraColumns) {
-        cols = cols.concat(EXTRA_COLUMNS);
-    }
-    // 플랫폼 커스텀 컬럼 추가
-    platformColumns.forEach(pc => {
-        cols.push({
-            key: 'pd_' + pc.key,
-            name: pc.name,
-            required: pc.is_required,
-            type: pc.column_type,
-            width: '100px',
-            isPlatformCol: true,
-            platformKey: pc.key,
-        });
-    });
-    return cols;
-}
-
 function rebuildTable() {
-    const cols = getAllColumns();
+    const cols = currentColumns;
     const thead = document.getElementById('tableHead');
 
     // 헤더 재구성
@@ -401,7 +496,7 @@ function rebuildTable() {
 
 function addRow(prefillData) {
     rowCounter++;
-    const cols = getAllColumns();
+    const cols = currentColumns;
     const tbody = document.getElementById('createBody');
     const rowId = rowCounter;
 
@@ -412,7 +507,14 @@ function addRow(prefillData) {
         <td class="row-num">${rowId}</td>`;
 
     cols.forEach(col => {
-        const val = prefillData ? (prefillData[col.key] || prefillData[col.platformKey] || '') : '';
+        let val = '';
+        if (prefillData) {
+            // 정확한 키로 먼저 찾고, platformKey로도 시도
+            val = prefillData[col.key] || '';
+            if (!val && col.platformKey) {
+                val = prefillData[col.platformKey] || '';
+            }
+        }
         const inputType = col.type === 'number' ? 'number' : 'text';
         html += `<td>
             <input class="form-control" type="${inputType}" data-key="${col.key}"
@@ -513,33 +615,45 @@ function submitOrders() {
 
     // 필수값 검증
     let hasError = false;
+    const requiredKeys = currentColumns.filter(c => c.required).map(c => c.key);
+
     document.querySelectorAll('#createBody tr').forEach((row, idx) => {
-        const orderNum = row.querySelector('input[data-key="order_number"]');
-        const prodName = row.querySelector('input[data-key="product_name"]');
-        if (orderNum && !orderNum.value.trim()) { orderNum.classList.add('is-invalid'); hasError = true; }
-        else if (orderNum) orderNum.classList.remove('is-invalid');
-        if (prodName && !prodName.value.trim()) { prodName.classList.add('is-invalid'); hasError = true; }
-        else if (prodName) prodName.classList.remove('is-invalid');
+        requiredKeys.forEach(key => {
+            const input = row.querySelector(`input[data-key="${key}"]`);
+            if (input && !input.value.trim()) {
+                input.classList.add('is-invalid');
+                hasError = true;
+            } else if (input) {
+                input.classList.remove('is-invalid');
+            }
+        });
     });
-    if (hasError) { showToast('발주번호와 상품명은 필수입니다.', 'warning'); return; }
+
+    if (hasError) {
+        const requiredNames = currentColumns.filter(c => c.required).map(c => c.name).join(', ');
+        showToast(`${requiredNames}은(는) 필수입니다.`, 'warning');
+        return;
+    }
 
     // 주문 데이터 조립
     const orders = rowsData.map(data => {
         const order = {};
-        // 공통 필드 매핑
-        const commonKeys = ['order_number', 'product_name', 'barcode', 'order_quantity',
-                            'confirmed_quantity', 'order_type', 'order_confirmed', 'sku_id',
-                            'center', 'receiving_date', 'order_date', 'memo'];
-        commonKeys.forEach(k => { order[k] = data[k] || ''; });
 
-        // 플랫폼 커스텀 필드 → platform_data
+        // 모든 키를 순회하며 모델 필드 vs platform_data 분리
         const pd = {};
-        platformColumns.forEach(pc => {
-            const val = data['pd_' + pc.key] || '';
-            if (val) pd[pc.key] = val;
+        Object.keys(data).forEach(k => {
+            if (k === 'memo') {
+                order.memo = data[k] || '';
+            } else if (k.startsWith('pd_')) {
+                // 플랫폼 커스텀 필드 → platform_data
+                const realKey = k.substring(3);
+                if (data[k]) pd[realKey] = data[k];
+            } else if (MODEL_FIELDS.includes(k)) {
+                order[k] = data[k] || '';
+            }
         });
-        order.platform_data = pd;
 
+        order.platform_data = pd;
         return order;
     });
 
@@ -573,7 +687,6 @@ function submitOrders() {
             }
 
             if (!data.error_count || data.created_count > 0) {
-                // 성공 시 목록 페이지로 이동
                 setTimeout(() => {
                     window.location.href = '{% url "fulfillment:order_list" %}';
                 }, 1000);
@@ -594,6 +707,7 @@ function submitOrders() {
 // ============================================================================
 function showPasteModal() {
     document.getElementById('pasteTextarea').value = '';
+    updateColumnInfo(); // 가이드 텍스트 업데이트
     new bootstrap.Modal(document.getElementById('pasteModal')).show();
 }
 
@@ -608,33 +722,17 @@ function applyPaste() {
         const cols = line.split('\t');
         if (!cols[0]?.trim()) return;
 
-        const data = {
-            order_number: (cols[0] || '').trim(),
-            order_type: (cols[1] || '').trim(),
-            order_confirmed: (cols[2] || '').trim(),
-            sku_id: (cols[3] || '').trim(),
-            product_name: (cols[4] || '').trim(),
-            barcode: (cols[5] || '').trim(),
-            center: (cols[6] || '').trim(),
-            receiving_date: (cols[7] || '').trim(),
-            order_date: (cols[8] || '').trim(),
-            order_quantity: (cols[9] || '').trim(),
-            confirmed_quantity: (cols[10] || '').trim(),
-        };
-
-        // 확장 컬럼 데이터가 있으면 확장 컬럼 표시
-        if (data.order_type || data.order_confirmed || data.sku_id ||
-            data.center || data.receiving_date || data.order_date) {
-            showExtraColumns = true;
-        }
+        // 현재 컬럼 순서에 맞춰 매핑
+        const data = {};
+        currentColumns.forEach((colDef, idx) => {
+            if (idx < cols.length) {
+                data[colDef.key] = (cols[idx] || '').trim();
+            }
+        });
 
         addRow(data);
         addedCount++;
     });
-
-    if (addedCount > 0 && showExtraColumns) {
-        rebuildTable();
-    }
 
     bootstrap.Modal.getInstance(document.getElementById('pasteModal')).hide();
     showToast(`${addedCount}건이 추가되었습니다.`, 'success');
