@@ -76,6 +76,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     updated_at = models.DateTimeField('수정일', auto_now=True)
     last_login = models.DateTimeField('마지막 로그인', blank=True, null=True)
 
+    # 세션 관리 (동시 로그인 방지)
+    session_key = models.CharField(
+        '세션 키',
+        max_length=40,
+        blank=True,
+        null=True,
+    )
+
     # 매니저
     objects = UserManager()
 

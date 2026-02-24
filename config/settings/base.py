@@ -81,6 +81,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apps.accounts.middleware.SingleSessionMiddleware',
 ]
 
 
@@ -203,6 +204,17 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = 'accounts:login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'accounts:login'
+
+
+# ============================================================================
+# 세션 설정
+# ============================================================================
+
+# 세션 만료 시간 (초 단위, 기본 1일 = 86400초, 12시간 = 43200초)
+SESSION_COOKIE_AGE = env.int('SESSION_COOKIE_AGE', default=43200)
+
+# 매 요청마다 세션 만료 시간 갱신 (슬라이딩 윈도우: 비활동 시간 기준)
+SESSION_SAVE_EVERY_REQUEST = True
 
 
 # ============================================================================
