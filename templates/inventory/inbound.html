@@ -214,23 +214,23 @@
             justify-content: space-between;
         }
 
-        /* 헤더: 타이틀 + 날짜 */
+        /* 헤더: 타이틀 + 날짜 (컴팩트) */
         .print-label-header {
             display: flex !important;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 3px solid #000;
-            padding-bottom: 4mm;
-            margin-bottom: 4mm;
+            border-bottom: 2px solid #000;
+            padding-bottom: 2mm;
+            margin-bottom: 2mm;
         }
         .print-label-header .label-title {
-            font-size: 28pt;
-            font-weight: 900;
+            font-size: 16pt;
+            font-weight: 800;
             color: #000;
-            letter-spacing: 3px;
+            letter-spacing: 2px;
         }
         .print-label-header .label-date {
-            font-size: 13pt;
+            font-size: 11pt;
             color: #333;
             font-weight: 500;
         }
@@ -248,7 +248,7 @@
             word-break: keep-all;
         }
 
-        /* 정보 테이블 */
+        /* 정보 테이블 2×2 */
         .print-info-table {
             width: 100%;
             border-collapse: collapse;
@@ -259,20 +259,20 @@
             border: 2px solid #000;
             text-align: center;
             vertical-align: middle;
-            padding: 3mm 2mm;
+            width: 50%;
         }
         .print-info-table th {
-            font-size: 16pt;
+            font-size: 15pt;
             font-weight: 700;
             background: #f0f0f0;
             color: #000;
-            height: 14mm;
+            padding: 2mm 2mm;
         }
         .print-info-table td {
-            font-size: 36pt;
+            font-size: 48pt;
             font-weight: 900;
             color: #000;
-            height: 24mm;
+            padding: 3mm 2mm;
         }
 
         /* 바코드 영역 */
@@ -430,22 +430,24 @@
             <div class="label-product-name" id="printProductName"></div>
         </div>
 
-        <!-- 정보 테이블 -->
+        <!-- 정보 테이블 2×2 -->
         <table class="print-info-table">
-            <thead>
-                <tr>
-                    <th>입고수량</th>
-                    <th>유통기한</th>
-                    <th>로트번호</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td id="printQuantity"></td>
-                    <td id="printExpiry"></td>
-                    <td id="printLot"></td>
-                </tr>
-            </tbody>
+            <tr>
+                <th>입고수량</th>
+                <th>유통기한</th>
+            </tr>
+            <tr>
+                <td id="printQuantity"></td>
+                <td id="printExpiry"></td>
+            </tr>
+            <tr>
+                <th>로트번호</th>
+                <th>바코드</th>
+            </tr>
+            <tr>
+                <td id="printLot"></td>
+                <td id="printBarcodeText"></td>
+            </tr>
         </table>
 
         <!-- 바코드 -->
@@ -699,6 +701,7 @@ function printLabel(idx) {
     document.getElementById('printQuantity').textContent = record.quantity ? record.quantity.toLocaleString() : '-';
     document.getElementById('printExpiry').textContent = record.expiry_date || '-';
     document.getElementById('printLot').textContent = record.lot_number || '-';
+    document.getElementById('printBarcodeText').textContent = record.product_barcode || '-';
     document.getElementById('printDate').textContent = '입고일: ' + (record.created_at || '');
 
     // 바코드 생성 (가로 A4에 맞게 크게)
