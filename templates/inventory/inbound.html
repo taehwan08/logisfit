@@ -155,6 +155,125 @@
     }
 
     /* ========================================
+       현품표 미리보기 모달
+       ======================================== */
+    .preview-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 10000;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+    .preview-overlay.show {
+        display: flex;
+    }
+    .preview-wrapper {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        max-width: 95vw;
+        max-height: 95vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .preview-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+        background: #f8f9fa;
+    }
+    .preview-toolbar .preview-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #333;
+    }
+    .preview-body {
+        padding: 20px;
+        overflow: auto;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        background: #e9ecef;
+    }
+    /* A4 가로 비율 축소판 */
+    .preview-page {
+        background: #fff;
+        width: 792px;   /* 297mm 축소 */
+        height: 562px;  /* 210mm 축소 */
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        padding: 22px 32px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+    .preview-page .pv-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid #000;
+        padding-bottom: 5px;
+        margin-bottom: 5px;
+    }
+    .preview-page .pv-header .pv-title {
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 2px;
+    }
+    .preview-page .pv-header .pv-date {
+        font-size: 10px;
+        color: #333;
+    }
+    .preview-page .pv-product {
+        text-align: center;
+        padding: 12px 0;
+    }
+    .preview-page .pv-product-name {
+        font-size: 42px;
+        font-weight: 900;
+        line-height: 1.15;
+        word-break: keep-all;
+    }
+    .preview-page .pv-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    .preview-page .pv-table th,
+    .preview-page .pv-table td {
+        border: 2px solid #000;
+        text-align: center;
+        vertical-align: middle;
+        width: 50%;
+    }
+    .preview-page .pv-table th {
+        font-size: 12px;
+        font-weight: 700;
+        background: #f0f0f0;
+        padding: 4px;
+    }
+    .preview-page .pv-table td {
+        font-size: 38px;
+        font-weight: 900;
+        padding: 6px 4px;
+    }
+    .preview-page .pv-table .pv-barcode-cell {
+        padding: 6px 30px;
+        font-size: 0;
+    }
+    .preview-page .pv-table .pv-barcode-cell svg {
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* ========================================
        현품표 인쇄 전용 스타일
        ======================================== */
 
@@ -188,6 +307,11 @@
 
         /* 카드들(입고 등록/입고 기록) 숨김 */
         .row.g-4 {
+            display: none !important;
+        }
+
+        /* 미리보기 모달 숨김 */
+        .preview-overlay {
             display: none !important;
         }
 
@@ -409,6 +533,46 @@
         </div>
     </div>
 
+</div>
+
+<!-- 현품표 미리보기 모달 -->
+<div id="previewOverlay" class="preview-overlay" onclick="closePreviewOnOverlay(event)">
+    <div class="preview-wrapper">
+        <div class="preview-toolbar">
+            <span class="preview-title"><i class="bi bi-eye me-1"></i>현품표 미리보기</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" onclick="printFromPreview()">
+                    <i class="bi bi-printer me-1"></i>인쇄
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="closePreview()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="preview-body">
+            <div class="preview-page">
+                <div class="pv-header">
+                    <div class="pv-title">현 품 표</div>
+                    <div class="pv-date" id="pvDate"></div>
+                </div>
+                <div class="pv-product">
+                    <div class="pv-product-name" id="pvProductName"></div>
+                </div>
+                <table class="pv-table">
+                    <tr><th>입고수량</th><th>바코드</th></tr>
+                    <tr>
+                        <td id="pvQuantity"></td>
+                        <td class="pv-barcode-cell"><svg id="pvBarcode"></svg></td>
+                    </tr>
+                    <tr><th>로트번호</th><th>유통기한</th></tr>
+                    <tr>
+                        <td id="pvLot"></td>
+                        <td id="pvExpiry"></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 현품표 인쇄용 (화면에서 숨김, 인쇄 시만 표시) -->
@@ -658,10 +822,14 @@ function loadRecords() {
                                 : ''
                         }
                     </td>
-                    <td class="text-center">
+                    <td class="text-center text-nowrap">
+                        <button class="btn btn-outline-info btn-print-label me-1"
+                                onclick="previewLabel(${idx})" title="미리보기">
+                            <i class="bi bi-eye"></i>
+                        </button>
                         <button class="btn btn-outline-secondary btn-print-label"
-                                onclick="printLabel(${idx})">
-                            <i class="bi bi-printer me-1"></i>인쇄
+                                onclick="printLabel(${idx})" title="인쇄">
+                            <i class="bi bi-printer"></i>
                         </button>
                     </td>
                 </tr>
@@ -676,6 +844,62 @@ function loadRecords() {
                 </tr>
             `;
         });
+}
+
+// ============================================================================
+// 현품표 미리보기
+// ============================================================================
+
+let previewIdx = null;
+
+function previewLabel(idx) {
+    const record = cachedRecords[idx];
+    if (!record) return;
+    previewIdx = idx;
+
+    document.getElementById('pvProductName').textContent = record.product_name || '';
+    document.getElementById('pvQuantity').textContent = record.quantity ? record.quantity.toLocaleString() : '-';
+    document.getElementById('pvExpiry').textContent = record.expiry_date || '-';
+    document.getElementById('pvLot').textContent = record.lot_number || '-';
+    document.getElementById('pvDate').textContent = '입고일: ' + (record.created_at || '');
+
+    const barcodeSvg = document.getElementById('pvBarcode');
+    const barcodeValue = record.product_barcode || '0000000000000';
+    try {
+        JsBarcode(barcodeSvg, barcodeValue, {
+            format: 'CODE128',
+            width: 2.5,
+            height: 80,
+            displayValue: true,
+            fontSize: 18,
+            font: 'monospace',
+            fontOptions: 'bold',
+            textMargin: 4,
+            margin: 5,
+        });
+    } catch (e) {
+        barcodeSvg.innerHTML = '';
+    }
+
+    document.getElementById('previewOverlay').classList.add('show');
+}
+
+function closePreview() {
+    document.getElementById('previewOverlay').classList.remove('show');
+    previewIdx = null;
+}
+
+function closePreviewOnOverlay(e) {
+    if (e.target === document.getElementById('previewOverlay')) {
+        closePreview();
+    }
+}
+
+function printFromPreview() {
+    if (previewIdx !== null) {
+        closePreview();
+        printLabel(previewIdx);
+    }
 }
 
 // ============================================================================
@@ -748,6 +972,11 @@ function showToast(message, type) {
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
+
+// ESC 키로 미리보기 닫기
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePreview();
+});
 
 // 페이지 로드 시 기록 조회
 document.addEventListener('DOMContentLoaded', loadRecords);
