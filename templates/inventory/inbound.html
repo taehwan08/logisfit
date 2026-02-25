@@ -275,19 +275,13 @@
             padding: 3mm 2mm;
         }
 
-        /* 바코드 영역 */
-        .print-barcode-row {
-            text-align: center;
-            padding: 3mm 0 0 0;
-            flex-grow: 1;
-            display: flex !important;
-            align-items: center;
-            justify-content: center;
+        /* 바코드 셀 */
+        .print-barcode-cell {
+            padding: 2mm !important;
         }
-        .print-barcode-row svg {
-            max-width: 260mm;
+        .print-barcode-cell svg {
+            max-width: 100%;
             height: auto;
-            max-height: 45mm;
         }
 
         @page {
@@ -446,14 +440,9 @@
             </tr>
             <tr>
                 <td id="printLot"></td>
-                <td id="printBarcodeText"></td>
+                <td class="print-barcode-cell"><svg id="printBarcode"></svg></td>
             </tr>
         </table>
-
-        <!-- 바코드 -->
-        <div class="print-barcode-row">
-            <svg id="printBarcode"></svg>
-        </div>
     </div>
 </div>
 
@@ -701,7 +690,6 @@ function printLabel(idx) {
     document.getElementById('printQuantity').textContent = record.quantity ? record.quantity.toLocaleString() : '-';
     document.getElementById('printExpiry').textContent = record.expiry_date || '-';
     document.getElementById('printLot').textContent = record.lot_number || '-';
-    document.getElementById('printBarcodeText').textContent = record.product_barcode || '-';
     document.getElementById('printDate').textContent = '입고일: ' + (record.created_at || '');
 
     // 바코드 생성 (가로 A4에 맞게 크게)
