@@ -1,0 +1,566 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}입고관리{% endblock %}
+{% block page_title %}입고관리{% endblock %}
+
+{% block extra_css %}
+<style>
+    .inbound-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    /* 상품 검색 */
+    .product-search-wrap {
+        position: relative;
+    }
+    .product-search-wrap .form-control {
+        border-radius: 10px;
+    }
+    .product-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1050;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 0 0 10px 10px;
+        max-height: 250px;
+        overflow-y: auto;
+        display: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .product-dropdown.show {
+        display: block;
+    }
+    .product-dropdown-item {
+        padding: 0.6rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.9rem;
+    }
+    .product-dropdown-item:hover {
+        background: #f0f6ff;
+    }
+    .product-dropdown-item .barcode {
+        font-size: 0.78rem;
+        color: #6c757d;
+    }
+
+    /* 선택된 상품 */
+    .selected-product {
+        display: none;
+        background: #f0f6ff;
+        border: 1px solid #b6d4fe;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+    }
+    .selected-product.show {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .selected-product .product-info {
+        font-weight: 500;
+    }
+    .selected-product .product-info .barcode {
+        font-size: 0.82rem;
+        color: #6c757d;
+        margin-left: 0.5rem;
+    }
+
+    /* 입력 폼 */
+    .inbound-form .form-control {
+        border-radius: 10px;
+    }
+    .inbound-form .form-label {
+        font-weight: 500;
+        font-size: 0.88rem;
+        color: #495057;
+    }
+
+    /* 필터 탭 */
+    .filter-tabs {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .filter-tab {
+        padding: 0.35rem 1rem;
+        border-radius: 20px;
+        border: 1px solid #dee2e6;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: #495057;
+        transition: all 0.2s;
+    }
+    .filter-tab:hover {
+        border-color: #0d6efd;
+        color: #0d6efd;
+    }
+    .filter-tab.active {
+        background: #0d6efd;
+        color: #fff;
+        border-color: #0d6efd;
+    }
+
+    /* 테이블 */
+    .inbound-table th {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #6c757d;
+        border-bottom: 2px solid #dee2e6;
+        white-space: nowrap;
+    }
+    .inbound-table td {
+        font-size: 0.88rem;
+        vertical-align: middle;
+    }
+
+    /* 상태 배지 */
+    .badge-pending {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    .badge-completed {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+
+    /* 완료 버튼 */
+    .btn-complete {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 8px;
+    }
+
+    .empty-state {
+        padding: 3rem;
+        text-align: center;
+        color: #adb5bd;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    /* 통계 */
+    .stat-badge {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+    <!-- 입고 등록 카드 -->
+    <div class="col-12">
+        <div class="card inbound-card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-box-arrow-in-down me-2"></i>입고 등록</h5>
+            </div>
+            <div class="card-body">
+                <div class="inbound-form">
+                    <!-- 상품 검색 -->
+                    <div class="mb-3">
+                        <label class="form-label">상품 검색 <span class="text-danger">*</span></label>
+                        <div class="product-search-wrap">
+                            <input type="text" id="productSearch" class="form-control"
+                                   placeholder="상품명 또는 바코드를 입력하세요" autocomplete="off">
+                            <div id="productDropdown" class="product-dropdown"></div>
+                        </div>
+                        <div id="selectedProduct" class="selected-product mt-2">
+                            <div class="product-info">
+                                <span id="selectedProductName"></span>
+                                <span class="barcode" id="selectedProductBarcode"></span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearProduct()">
+                                <i class="bi bi-x"></i> 취소
+                            </button>
+                        </div>
+                        <input type="hidden" id="selectedProductId" value="">
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-3 col-6">
+                            <label class="form-label">입고수량 <span class="text-danger">*</span></label>
+                            <input type="number" id="inboundQuantity" class="form-control"
+                                   min="1" placeholder="수량">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label">유통기한</label>
+                            <input type="text" id="inboundExpiry" class="form-control"
+                                   placeholder="예: 2026-12-31">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label">로트번호</label>
+                            <input type="text" id="inboundLot" class="form-control"
+                                   placeholder="로트번호">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label">메모</label>
+                            <input type="text" id="inboundMemo" class="form-control"
+                                   placeholder="메모 (선택)">
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-end">
+                        <button type="button" class="btn btn-primary px-4" onclick="createInbound()" id="btnCreateInbound">
+                            <i class="bi bi-plus-lg me-1"></i> 입고 등록
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 입고 기록 카드 -->
+    <div class="col-12">
+        <div class="card inbound-card">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-3">
+                        <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>입고 기록</h5>
+                        <span class="stat-badge text-primary" id="recordCount">0</span>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        <div class="filter-tabs">
+                            <button class="filter-tab active" data-status="" onclick="setFilter(this)">전체</button>
+                            <button class="filter-tab" data-status="pending" onclick="setFilter(this)">대기</button>
+                            <button class="filter-tab" data-status="completed" onclick="setFilter(this)">전산등록완료</button>
+                        </div>
+                        <input type="text" id="recordSearch" class="form-control form-control-sm"
+                               style="width: 200px; border-radius: 10px;"
+                               placeholder="상품명/바코드 검색" oninput="debounceLoadRecords()">
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 inbound-table">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">상품명</th>
+                                <th>바코드</th>
+                                <th class="text-center">수량</th>
+                                <th>유통기한</th>
+                                <th>로트번호</th>
+                                <th class="text-center">상태</th>
+                                <th>등록자</th>
+                                <th>등록일시</th>
+                                <th>전산처리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsBody">
+                            <tr>
+                                <td colspan="9" class="empty-state">
+                                    <i class="bi bi-inbox d-block"></i>
+                                    입고 기록이 없습니다.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+const isAdmin = {{ user.is_admin|yesno:"true,false" }} || {{ user.is_superuser|yesno:"true,false" }};
+
+let selectedProductId = null;
+let currentFilter = '';
+let searchTimer = null;
+
+// ============================================================================
+// 상품 검색
+// ============================================================================
+
+const productSearchInput = document.getElementById('productSearch');
+const productDropdown = document.getElementById('productDropdown');
+let searchTimeout = null;
+
+productSearchInput.addEventListener('input', function() {
+    const query = this.value.trim();
+    clearTimeout(searchTimeout);
+
+    if (query.length < 1) {
+        productDropdown.classList.remove('show');
+        return;
+    }
+
+    searchTimeout = setTimeout(() => {
+        fetch(`/inventory/api/products/?search=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.products && data.products.length > 0) {
+                    productDropdown.innerHTML = data.products.map(p => `
+                        <div class="product-dropdown-item" onclick="selectProduct(${p.id}, '${escapeHtml(p.name)}', '${escapeHtml(p.barcode)}')">
+                            <div>${escapeHtml(p.display_name || p.name)}</div>
+                            <div class="barcode">${escapeHtml(p.barcode)}</div>
+                        </div>
+                    `).join('');
+                    productDropdown.classList.add('show');
+                } else {
+                    productDropdown.innerHTML = '<div class="product-dropdown-item text-muted">검색 결과가 없습니다.</div>';
+                    productDropdown.classList.add('show');
+                }
+            })
+            .catch(() => {
+                productDropdown.classList.remove('show');
+            });
+    }, 300);
+});
+
+// 외부 클릭 시 드롭다운 닫기
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.product-search-wrap')) {
+        productDropdown.classList.remove('show');
+    }
+});
+
+function selectProduct(id, name, barcode) {
+    selectedProductId = id;
+    document.getElementById('selectedProductId').value = id;
+    document.getElementById('selectedProductName').textContent = name;
+    document.getElementById('selectedProductBarcode').textContent = barcode;
+    document.getElementById('selectedProduct').classList.add('show');
+    productSearchInput.value = '';
+    productSearchInput.style.display = 'none';
+    productDropdown.classList.remove('show');
+}
+
+function clearProduct() {
+    selectedProductId = null;
+    document.getElementById('selectedProductId').value = '';
+    document.getElementById('selectedProduct').classList.remove('show');
+    productSearchInput.style.display = '';
+    productSearchInput.value = '';
+    productSearchInput.focus();
+}
+
+// ============================================================================
+// 입고 등록
+// ============================================================================
+
+function createInbound() {
+    if (!selectedProductId) {
+        alert('상품을 선택해주세요.');
+        return;
+    }
+
+    const quantity = document.getElementById('inboundQuantity').value;
+    if (!quantity || parseInt(quantity) < 1) {
+        alert('입고 수량을 입력해주세요.');
+        return;
+    }
+
+    const btn = document.getElementById('btnCreateInbound');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 등록 중...';
+
+    fetch('/inventory/api/inbound/create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({
+            product_id: selectedProductId,
+            quantity: parseInt(quantity),
+            expiry_date: document.getElementById('inboundExpiry').value.trim(),
+            lot_number: document.getElementById('inboundLot').value.trim(),
+            memo: document.getElementById('inboundMemo').value.trim(),
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // 입력 초기화
+            clearProduct();
+            document.getElementById('inboundQuantity').value = '';
+            document.getElementById('inboundExpiry').value = '';
+            document.getElementById('inboundLot').value = '';
+            document.getElementById('inboundMemo').value = '';
+            loadRecords();
+            showToast(data.message, 'success');
+        } else {
+            alert(data.error || '등록에 실패했습니다.');
+        }
+    })
+    .catch(() => {
+        alert('네트워크 오류가 발생했습니다.');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-lg me-1"></i> 입고 등록';
+    });
+}
+
+// ============================================================================
+// 입고 기록 조회
+// ============================================================================
+
+function setFilter(btn) {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.status;
+    loadRecords();
+}
+
+function debounceLoadRecords() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadRecords, 300);
+}
+
+function loadRecords() {
+    const search = document.getElementById('recordSearch').value.trim();
+    let url = `/inventory/api/inbound/?status=${encodeURIComponent(currentFilter)}`;
+    if (search) {
+        url += `&search=${encodeURIComponent(search)}`;
+    }
+
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('recordsBody');
+            document.getElementById('recordCount').textContent = data.records.length + '건';
+
+            if (data.records.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="empty-state">
+                            <i class="bi bi-inbox d-block"></i>
+                            입고 기록이 없습니다.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.records.map(r => `
+                <tr>
+                    <td class="ps-3">
+                        <div class="fw-medium">${escapeHtml(r.product_name)}</div>
+                        ${r.product_display_name && r.product_display_name !== r.product_name
+                            ? `<small class="text-muted">${escapeHtml(r.product_display_name)}</small>`
+                            : ''}
+                        ${r.memo ? `<div class="text-muted" style="font-size:0.78rem;"><i class="bi bi-chat-text me-1"></i>${escapeHtml(r.memo)}</div>` : ''}
+                    </td>
+                    <td><code style="font-size:0.82rem;">${escapeHtml(r.product_barcode)}</code></td>
+                    <td class="text-center fw-bold">${r.quantity.toLocaleString()}</td>
+                    <td>${escapeHtml(r.expiry_date || '-')}</td>
+                    <td>${escapeHtml(r.lot_number || '-')}</td>
+                    <td class="text-center">
+                        <span class="badge ${r.status === 'completed' ? 'badge-completed' : 'badge-pending'}">
+                            ${escapeHtml(r.status_display)}
+                        </span>
+                    </td>
+                    <td>${escapeHtml(r.registered_by)}</td>
+                    <td style="font-size:0.82rem;">${escapeHtml(r.created_at)}</td>
+                    <td>
+                        ${r.status === 'pending' && isAdmin
+                            ? `<button class="btn btn-sm btn-outline-success btn-complete" onclick="completeInbound(${r.id}, this)">
+                                 <i class="bi bi-check-lg me-1"></i>전산 등록 완료
+                               </button>`
+                            : r.status === 'completed'
+                                ? `<div style="font-size:0.82rem;">
+                                     <div>${escapeHtml(r.completed_by)}</div>
+                                     <div class="text-muted">${escapeHtml(r.completed_at)}</div>
+                                   </div>`
+                                : ''
+                        }
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(() => {
+            document.getElementById('recordsBody').innerHTML = `
+                <tr>
+                    <td colspan="9" class="text-center text-danger py-4">
+                        데이터를 불러오는데 실패했습니다.
+                    </td>
+                </tr>
+            `;
+        });
+}
+
+// ============================================================================
+// 전산 등록 완료
+// ============================================================================
+
+function completeInbound(recordId, btn) {
+    if (!confirm('전산 등록을 완료 처리하시겠습니까?')) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    fetch(`/inventory/api/inbound/${recordId}/complete/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            loadRecords();
+            showToast(data.message, 'success');
+        } else {
+            alert(data.error || '처리에 실패했습니다.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>전산 등록 완료';
+        }
+    })
+    .catch(() => {
+        alert('네트워크 오류가 발생했습니다.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>전산 등록 완료';
+    });
+}
+
+// ============================================================================
+// 유틸리티
+// ============================================================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type) {
+    // 기존 토스트 제거
+    const old = document.querySelector('.inbound-toast');
+    if (old) old.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `inbound-toast alert alert-${type === 'success' ? 'success' : 'danger'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 280px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+    toast.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+            ${escapeHtml(message)}
+        </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// 페이지 로드 시 기록 조회
+document.addEventListener('DOMContentLoaded', loadRecords);
+</script>
+{% endblock %}

@@ -35,4 +35,10 @@ urlpatterns = [
     path('api/records/location/', views.get_location_records, name='get_location_records'),
     path('api/records/<int:record_id>/delete/', views.delete_record, name='delete_record'),
     path('api/records/export/', views.export_records_excel, name='export_records_excel'),
+
+    # 입고 관리
+    path('inbound/', views.inbound_page, name='inbound_page'),
+    path('api/inbound/', views.get_inbound_records, name='get_inbound_records'),
+    path('api/inbound/create/', views.create_inbound, name='create_inbound'),
+    path('api/inbound/<int:record_id>/complete/', views.complete_inbound, name='complete_inbound'),
 ]

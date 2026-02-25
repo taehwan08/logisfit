@@ -108,3 +108,47 @@ class InventoryRecord(models.Model):
 
     def __str__(self):
         return f'{self.location.barcode} - {self.barcode} ({self.quantity}개)'
+
+
+class InboundRecord(models.Model):
+    """입고 기록
+
+    상품 입고 시 수량, 유통기한, 로트번호를 기록합니다.
+    등록 후 슬랙 알림이 전송되며, 관리자가 전산 등록 완료 처리합니다.
+    """
+    STATUS_CHOICES = [
+        ('pending', '대기'),
+        ('completed', '전산등록완료'),
+    ]
+
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='inbound_records', verbose_name='상품'
+    )
+    quantity = models.IntegerField('입고수량')
+    expiry_date = models.CharField('유통기한', max_length=20, blank=True, default='')
+    lot_number = models.CharField('로트번호', max_length=50, blank=True, default='')
+    status = models.CharField('상태', max_length=20, choices=STATUS_CHOICES, default='pending')
+    memo = models.TextField('메모', blank=True, default='')
+
+    registered_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True,
+        related_name='inbound_registered', verbose_name='등록자'
+    )
+    completed_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='inbound_completed', verbose_name='전산처리자'
+    )
+    completed_at = models.DateTimeField('전산처리일시', null=True, blank=True)
+
+    created_at = models.DateTimeField('등록일시', auto_now_add=True)
+    updated_at = models.DateTimeField('수정일시', auto_now=True)
+
+    class Meta:
+        db_table = 'inbound_records'
+        ordering = ['-created_at']
+        verbose_name = '입고 기록'
+        verbose_name_plural = '입고 기록 목록'
+
+    def __str__(self):
+        return f'{self.product.name} ({self.quantity}개) - {self.get_status_display()}'

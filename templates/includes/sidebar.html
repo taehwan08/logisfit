@@ -125,6 +125,12 @@
                         <span>상품 관리</span>
                     </a>
                 </li>
+                <li class="sidebar-item">
+                    <a href="{% url 'inventory:inbound_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'inbound_page' %}active{% endif %}">
+                        <i class="bi bi-box-arrow-in-down"></i>
+                        <span>입고관리</span>
+                    </a>
+                </li>
             {% endif %}
 
             {% if user.is_admin or user.is_superuser %}

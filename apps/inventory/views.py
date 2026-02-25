@@ -13,7 +13,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import Product, Location, InventorySession, InventoryRecord
+from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord
+from .slack import send_inbound_notification_async
 
 logger = logging.getLogger(__name__)
 
@@ -954,3 +955,180 @@ def _record_to_dict(record):
         'location_name': record.location.name if hasattr(record, 'location') and record.location else '',
         'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
     }
+
+
+# ============================================================================
+# 입고 관리 Views
+# ============================================================================
+
+@login_required
+@staff_required
+def inbound_page(request):
+    """입고관리 페이지"""
+    return render(request, 'inventory/inbound.html')
+
+
+@login_required
+@staff_required
+@require_GET
+def get_inbound_records(request):
+    """입고 기록 목록을 조회한다.
+
+    Query params:
+        status: 상태 필터 ('pending', 'completed', 빈값=전체)
+        search: 검색어 (상품명/바코드)
+    """
+    from django.db.models import Q
+
+    records = InboundRecord.objects.select_related(
+        'product', 'registered_by', 'completed_by'
+    )
+
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter in ('pending', 'completed'):
+        records = records.filter(status=status_filter)
+
+    search = request.GET.get('search', '').strip()
+    if search:
+        records = records.filter(
+            Q(product__name__icontains=search) |
+            Q(product__barcode__icontains=search) |
+            Q(product__display_name__icontains=search) |
+            Q(lot_number__icontains=search)
+        )
+
+    records = records.order_by('-created_at')[:200]
+
+    return JsonResponse({
+        'records': [
+            {
+                'id': r.pk,
+                'product_name': r.product.name,
+                'product_barcode': r.product.barcode,
+                'product_display_name': r.product.display_name,
+                'quantity': r.quantity,
+                'expiry_date': r.expiry_date,
+                'lot_number': r.lot_number,
+                'status': r.status,
+                'status_display': r.get_status_display(),
+                'memo': r.memo,
+                'registered_by': r.registered_by.name if r.registered_by else '-',
+                'completed_by': r.completed_by.name if r.completed_by else '',
+                'completed_at': (
+                    timezone.localtime(r.completed_at).strftime('%Y-%m-%d %H:%M')
+                    if r.completed_at else ''
+                ),
+                'created_at': timezone.localtime(r.created_at).strftime('%Y-%m-%d %H:%M'),
+            }
+            for r in records
+        ],
+    })
+
+
+@csrf_exempt
+@login_required
+@staff_required
+@require_POST
+def create_inbound(request):
+    """입고를 등록한다.
+
+    JSON body:
+        product_id: 상품 ID (필수)
+        quantity: 입고 수량 (필수)
+        expiry_date: 유통기한
+        lot_number: 로트번호
+        memo: 메모
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    product_id = data.get('product_id')
+    quantity = data.get('quantity')
+    expiry_date = data.get('expiry_date', '').strip()
+    lot_number = data.get('lot_number', '').strip()
+    memo = data.get('memo', '').strip()
+
+    if not product_id:
+        return JsonResponse({'error': '상품을 선택해주세요.'}, status=400)
+
+    if not quantity:
+        return JsonResponse({'error': '입고 수량을 입력해주세요.'}, status=400)
+
+    try:
+        quantity = int(quantity)
+        if quantity < 1:
+            return JsonResponse({'error': '입고 수량은 1 이상이어야 합니다.'}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': '올바른 수량을 입력해주세요.'}, status=400)
+
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': '상품을 찾을 수 없습니다.'}, status=404)
+
+    record = InboundRecord.objects.create(
+        product=product,
+        quantity=quantity,
+        expiry_date=expiry_date,
+        lot_number=lot_number,
+        memo=memo,
+        registered_by=request.user,
+    )
+
+    # 슬랙 알림 (비동기)
+    try:
+        send_inbound_notification_async(record)
+    except Exception as e:
+        logger.error('입고 슬랙 알림 실패: %s', e, exc_info=True)
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{product.name} {quantity:,}개 입고가 등록되었습니다.',
+        'record': {
+            'id': record.pk,
+            'product_name': product.name,
+            'product_barcode': product.barcode,
+            'quantity': record.quantity,
+            'expiry_date': record.expiry_date,
+            'lot_number': record.lot_number,
+            'status': record.status,
+            'status_display': record.get_status_display(),
+            'memo': record.memo,
+            'registered_by': request.user.name,
+            'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
+        },
+    })
+
+
+@csrf_exempt
+@login_required
+@staff_required
+@require_POST
+def complete_inbound(request, record_id):
+    """입고 기록의 전산 등록을 완료 처리한다."""
+    try:
+        record = InboundRecord.objects.select_related('product').get(pk=record_id)
+    except InboundRecord.DoesNotExist:
+        return JsonResponse({'error': '입고 기록을 찾을 수 없습니다.'}, status=404)
+
+    if record.status == 'completed':
+        return JsonResponse({'error': '이미 전산 등록 완료된 기록입니다.'}, status=400)
+
+    record.status = 'completed'
+    record.completed_by = request.user
+    record.completed_at = timezone.now()
+    record.save(update_fields=['status', 'completed_by', 'completed_at', 'updated_at'])
+
+    return JsonResponse({
+        'success': True,
+        'message': '전산 등록이 완료되었습니다.',
+        'record': {
+            'id': record.pk,
+            'status': record.status,
+            'status_display': record.get_status_display(),
+            'completed_by': request.user.name,
+            'completed_at': timezone.localtime(record.completed_at).strftime('%Y-%m-%d %H:%M'),
+        },
+    })
