@@ -268,7 +268,15 @@ PASSWORD_RESET_CODE_EXPIRY_MINUTES = 10
 # Slack 연동 설정
 # ============================================================================
 
+# 기본 웹훅 (채널별 웹훅이 없을 때 fallback)
 SLACK_WEBHOOK_URL = env('SLACK_WEBHOOK_URL', default='')
+
+# 채널별 웹훅 URL (미설정 시 SLACK_WEBHOOK_URL 사용)
+SLACK_WEBHOOK_SIGNUP = env('SLACK_WEBHOOK_SIGNUP', default='')          # 회원가입 승인
+SLACK_WEBHOOK_INSPECTION = env('SLACK_WEBHOOK_INSPECTION', default='')  # 검수 완료
+SLACK_WEBHOOK_FULFILLMENT = env('SLACK_WEBHOOK_FULFILLMENT', default='')  # 출고 관리
+SLACK_WEBHOOK_INBOUND = env('SLACK_WEBHOOK_INBOUND', default='')        # 입고 관리
+
 SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
 SITE_URL = env('SITE_URL', default='http://localhost:8000')
 

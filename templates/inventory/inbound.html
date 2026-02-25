@@ -146,6 +146,135 @@
         font-size: 1rem;
         font-weight: 700;
     }
+
+    /* 인쇄 버튼 */
+    .btn-print-label {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.82rem;
+        border-radius: 6px;
+    }
+
+    /* ========================================
+       현품표 인쇄 전용 스타일
+       ======================================== */
+
+    /* 화면에서는 숨김 */
+    #printLabelContainer {
+        display: none;
+    }
+
+    @media print {
+        /* 사이드바, 네비바, 푸터, 메시지 등 전부 숨김 */
+        .wrapper > .sidebar,
+        .main-content > nav,
+        .main-content > .alert,
+        .main-content > footer,
+        #messages-container,
+        .sidebar,
+        .navbar,
+        footer {
+            display: none !important;
+        }
+
+        /* 메인 콘텐츠 영역 리셋 */
+        .wrapper,
+        .main-content,
+        .main-content > main {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        /* 카드들(입고 등록/입고 기록) 숨김 */
+        .row.g-4 {
+            display: none !important;
+        }
+
+        /* 현품표만 표시 */
+        #printLabelContainer {
+            display: block !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 210mm;
+            height: 297mm;
+            margin: 0;
+            padding: 10mm;
+            box-sizing: border-box;
+            background: #fff;
+            z-index: 99999;
+        }
+
+        .print-label {
+            width: 100%;
+            height: 100%;
+            display: flex !important;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            gap: 8mm;
+        }
+
+        .print-label .label-title {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #333;
+            letter-spacing: 1px;
+        }
+
+        .print-label .label-product-name {
+            font-size: 48pt;
+            font-weight: 900;
+            line-height: 1.1;
+            color: #000;
+            word-break: keep-all;
+            max-width: 180mm;
+        }
+
+        .print-label .label-barcode-area {
+            margin: 5mm 0;
+        }
+        .print-label .label-barcode-area svg {
+            max-width: 170mm;
+            height: auto;
+        }
+
+        .print-label .label-info-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 6mm 20mm;
+            width: 170mm;
+            margin-top: 5mm;
+        }
+        .print-label .label-info-item {
+            text-align: center;
+        }
+        .print-label .label-info-item .info-key {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 2mm;
+        }
+        .print-label .label-info-item .info-value {
+            font-size: 32pt;
+            font-weight: 900;
+            color: #000;
+            line-height: 1.2;
+        }
+
+        .print-label .label-date {
+            font-size: 12pt;
+            color: #777;
+            margin-top: 3mm;
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 0;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -248,11 +377,12 @@
                                 <th>등록자</th>
                                 <th>등록일시</th>
                                 <th>전산처리</th>
+                                <th class="text-center">현품표</th>
                             </tr>
                         </thead>
                         <tbody id="recordsBody">
                             <tr>
-                                <td colspan="9" class="empty-state">
+                                <td colspan="10" class="empty-state">
                                     <i class="bi bi-inbox d-block"></i>
                                     입고 기록이 없습니다.
                                 </td>
@@ -265,15 +395,49 @@
     </div>
 
 </div>
+
+<!-- 현품표 인쇄용 (화면에서 숨김, 인쇄 시만 표시) -->
+<div id="printLabelContainer">
+    <div class="print-label">
+        <div class="label-title">현 품 표</div>
+        <div class="label-product-name" id="printProductName"></div>
+        <div class="label-barcode-area">
+            <svg id="printBarcode"></svg>
+        </div>
+        <div class="label-info-grid">
+            <div class="label-info-item">
+                <div class="info-key">입고수량</div>
+                <div class="info-value" id="printQuantity"></div>
+            </div>
+            <div class="label-info-item">
+                <div class="info-key">유통기한</div>
+                <div class="info-value" id="printExpiry"></div>
+            </div>
+            <div class="label-info-item">
+                <div class="info-key">로트번호</div>
+                <div class="info-value" id="printLot"></div>
+            </div>
+            <div class="label-info-item">
+                <div class="info-key">바코드</div>
+                <div class="info-value" id="printBarcodeText"></div>
+            </div>
+        </div>
+        <div class="label-date" id="printDate"></div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
+<!-- JsBarcode CDN -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script>
 const csrfToken = '{{ csrf_token }}';
 
 let selectedProductId = null;
 let currentFilter = '';
 let searchTimer = null;
+let cachedRecords = [];  // 현품표 인쇄용 레코드 캐시
 
 // ============================================================================
 // 상품 검색
@@ -428,11 +592,12 @@ function loadRecords() {
         .then(data => {
             const tbody = document.getElementById('recordsBody');
             document.getElementById('recordCount').textContent = data.records.length + '건';
+            cachedRecords = data.records;  // 인쇄용 캐시
 
             if (data.records.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="9" class="empty-state">
+                        <td colspan="10" class="empty-state">
                             <i class="bi bi-inbox d-block"></i>
                             입고 기록이 없습니다.
                         </td>
@@ -441,7 +606,7 @@ function loadRecords() {
                 return;
             }
 
-            tbody.innerHTML = data.records.map(r => `
+            tbody.innerHTML = data.records.map((r, idx) => `
                 <tr>
                     <td class="ps-3">
                         <div class="fw-medium">${escapeHtml(r.product_name)}</div>
@@ -472,18 +637,68 @@ function loadRecords() {
                                 : ''
                         }
                     </td>
+                    <td class="text-center">
+                        <button class="btn btn-outline-secondary btn-print-label"
+                                onclick="printLabel(${idx})">
+                            <i class="bi bi-printer me-1"></i>인쇄
+                        </button>
+                    </td>
                 </tr>
             `).join('');
         })
         .catch(() => {
             document.getElementById('recordsBody').innerHTML = `
                 <tr>
-                    <td colspan="9" class="text-center text-danger py-4">
+                    <td colspan="10" class="text-center text-danger py-4">
                         데이터를 불러오는데 실패했습니다.
                     </td>
                 </tr>
             `;
         });
+}
+
+// ============================================================================
+// 현품표 인쇄
+// ============================================================================
+
+function printLabel(idx) {
+    const record = cachedRecords[idx];
+    if (!record) return;
+
+    // 현품표 데이터 채우기
+    document.getElementById('printProductName').textContent = record.product_name || '';
+    document.getElementById('printQuantity').textContent = record.quantity ? record.quantity.toLocaleString() : '-';
+    document.getElementById('printExpiry').textContent = record.expiry_date || '-';
+    document.getElementById('printLot').textContent = record.lot_number || '-';
+    document.getElementById('printBarcodeText').textContent = record.product_barcode || '-';
+    document.getElementById('printDate').textContent = '입고일시: ' + (record.created_at || '');
+
+    // 바코드 생성
+    const barcodeSvg = document.getElementById('printBarcode');
+    const barcodeValue = record.product_barcode || '0000000000000';
+
+    try {
+        JsBarcode(barcodeSvg, barcodeValue, {
+            format: 'CODE128',
+            width: 3,
+            height: 120,
+            displayValue: true,
+            fontSize: 28,
+            font: 'monospace',
+            fontOptions: 'bold',
+            textMargin: 8,
+            margin: 10,
+        });
+    } catch (e) {
+        // 바코드 생성 실패 시 텍스트로 대체
+        barcodeSvg.innerHTML = '';
+        console.warn('바코드 생성 실패:', e);
+    }
+
+    // 인쇄 실행
+    setTimeout(() => {
+        window.print();
+    }, 200);
 }
 
 // ============================================================================

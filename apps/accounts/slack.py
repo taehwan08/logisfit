@@ -26,9 +26,9 @@ def send_signup_notification(user):
     Block Kit 형식으로 사용자 정보와 승인/거절 버튼을 포함한다.
     SLACK_WEBHOOK_URL이 설정되지 않으면 아무 동작도 하지 않는다.
     """
-    webhook_url = getattr(settings, 'SLACK_WEBHOOK_URL', '')
+    webhook_url = getattr(settings, 'SLACK_WEBHOOK_SIGNUP', '') or getattr(settings, 'SLACK_WEBHOOK_URL', '')
     if not webhook_url:
-        logger.debug('SLACK_WEBHOOK_URL이 설정되지 않아 알림을 건너뜁니다.')
+        logger.debug('SLACK_WEBHOOK_SIGNUP이 설정되지 않아 알림을 건너뜁니다.')
         return
 
     site_url = getattr(settings, 'SITE_URL', '').rstrip('/')

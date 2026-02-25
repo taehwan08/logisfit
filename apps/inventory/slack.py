@@ -51,7 +51,7 @@ def _send_inbound_slack(data):
     Args:
         data: _extract_inbound_data()에서 반환된 dict
     """
-    webhook_url = getattr(settings, 'SLACK_WEBHOOK_URL', '')
+    webhook_url = getattr(settings, 'SLACK_WEBHOOK_INBOUND', '') or getattr(settings, 'SLACK_WEBHOOK_URL', '')
     if not webhook_url:
         return
 

@@ -25,7 +25,7 @@ def send_order_created_notification(order):
     Args:
         order: FulfillmentOrder 인스턴스
     """
-    webhook_url = getattr(settings, 'SLACK_WEBHOOK_URL', '')
+    webhook_url = getattr(settings, 'SLACK_WEBHOOK_FULFILLMENT', '') or getattr(settings, 'SLACK_WEBHOOK_URL', '')
     if not webhook_url:
         return
 
@@ -114,7 +114,7 @@ def send_bulk_orders_notification(client, brand, platform, created_count, error_
         error_count: 에러 건수
         user: 등록자 User 인스턴스
     """
-    webhook_url = getattr(settings, 'SLACK_WEBHOOK_URL', '')
+    webhook_url = getattr(settings, 'SLACK_WEBHOOK_FULFILLMENT', '') or getattr(settings, 'SLACK_WEBHOOK_URL', '')
     if not webhook_url:
         return
 

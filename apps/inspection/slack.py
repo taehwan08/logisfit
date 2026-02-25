@@ -18,7 +18,7 @@ def send_batch_complete_notification(batch):
     Args:
         batch: UploadBatch 인스턴스
     """
-    webhook_url = getattr(settings, 'SLACK_WEBHOOK_URL', '')
+    webhook_url = getattr(settings, 'SLACK_WEBHOOK_INSPECTION', '') or getattr(settings, 'SLACK_WEBHOOK_URL', '')
     if not webhook_url:
         return
 
