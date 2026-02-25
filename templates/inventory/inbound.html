@@ -191,16 +191,16 @@
             display: none !important;
         }
 
-        /* 현품표만 표시 */
+        /* 현품표만 표시 — A4 가로 */
         #printLabelContainer {
             display: block !important;
             position: fixed;
             top: 0;
             left: 0;
-            width: 210mm;
-            height: 297mm;
+            width: 297mm;
+            height: 210mm;
             margin: 0;
-            padding: 10mm;
+            padding: 8mm 12mm;
             box-sizing: border-box;
             background: #fff;
             z-index: 99999;
@@ -211,67 +211,87 @@
             height: 100%;
             display: flex !important;
             flex-direction: column;
-            justify-content: center;
+            justify-content: space-between;
+        }
+
+        /* 헤더: 타이틀 + 날짜 */
+        .print-label-header {
+            display: flex !important;
+            justify-content: space-between;
             align-items: center;
-            text-align: center;
-            gap: 8mm;
+            border-bottom: 3px solid #000;
+            padding-bottom: 4mm;
+            margin-bottom: 4mm;
         }
-
-        .print-label .label-title {
-            font-size: 18pt;
-            font-weight: 700;
-            color: #333;
-            letter-spacing: 1px;
-        }
-
-        .print-label .label-product-name {
-            font-size: 48pt;
+        .print-label-header .label-title {
+            font-size: 28pt;
             font-weight: 900;
-            line-height: 1.1;
+            color: #000;
+            letter-spacing: 3px;
+        }
+        .print-label-header .label-date {
+            font-size: 13pt;
+            color: #333;
+            font-weight: 500;
+        }
+
+        /* 상품명 — 최대 크기 */
+        .print-product-row {
+            text-align: center;
+            padding: 5mm 0;
+        }
+        .print-product-row .label-product-name {
+            font-size: 56pt;
+            font-weight: 900;
+            line-height: 1.15;
             color: #000;
             word-break: keep-all;
-            max-width: 180mm;
         }
 
-        .print-label .label-barcode-area {
-            margin: 5mm 0;
+        /* 정보 테이블 */
+        .print-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
         }
-        .print-label .label-barcode-area svg {
-            max-width: 170mm;
-            height: auto;
-        }
-
-        .print-label .label-info-grid {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr;
-            gap: 6mm 20mm;
-            width: 170mm;
-            margin-top: 5mm;
-        }
-        .print-label .label-info-item {
+        .print-info-table th,
+        .print-info-table td {
+            border: 2px solid #000;
             text-align: center;
+            vertical-align: middle;
+            padding: 3mm 2mm;
         }
-        .print-label .label-info-item .info-key {
-            font-size: 14pt;
-            font-weight: 600;
-            color: #555;
-            margin-bottom: 2mm;
+        .print-info-table th {
+            font-size: 16pt;
+            font-weight: 700;
+            background: #f0f0f0;
+            color: #000;
+            height: 14mm;
         }
-        .print-label .label-info-item .info-value {
-            font-size: 32pt;
+        .print-info-table td {
+            font-size: 36pt;
             font-weight: 900;
             color: #000;
-            line-height: 1.2;
+            height: 24mm;
         }
 
-        .print-label .label-date {
-            font-size: 12pt;
-            color: #777;
-            margin-top: 3mm;
+        /* 바코드 영역 */
+        .print-barcode-row {
+            text-align: center;
+            padding: 3mm 0 0 0;
+            flex-grow: 1;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+        }
+        .print-barcode-row svg {
+            max-width: 260mm;
+            height: auto;
+            max-height: 45mm;
         }
 
         @page {
-            size: A4 portrait;
+            size: A4 landscape;
             margin: 0;
         }
     }
@@ -399,30 +419,39 @@
 <!-- 현품표 인쇄용 (화면에서 숨김, 인쇄 시만 표시) -->
 <div id="printLabelContainer">
     <div class="print-label">
-        <div class="label-title">현 품 표</div>
-        <div class="label-product-name" id="printProductName"></div>
-        <div class="label-barcode-area">
+        <!-- 헤더 -->
+        <div class="print-label-header">
+            <div class="label-title">현 품 표</div>
+            <div class="label-date" id="printDate"></div>
+        </div>
+
+        <!-- 상품명 -->
+        <div class="print-product-row">
+            <div class="label-product-name" id="printProductName"></div>
+        </div>
+
+        <!-- 정보 테이블 -->
+        <table class="print-info-table">
+            <thead>
+                <tr>
+                    <th>입고수량</th>
+                    <th>유통기한</th>
+                    <th>로트번호</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td id="printQuantity"></td>
+                    <td id="printExpiry"></td>
+                    <td id="printLot"></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- 바코드 -->
+        <div class="print-barcode-row">
             <svg id="printBarcode"></svg>
         </div>
-        <div class="label-info-grid">
-            <div class="label-info-item">
-                <div class="info-key">입고수량</div>
-                <div class="info-value" id="printQuantity"></div>
-            </div>
-            <div class="label-info-item">
-                <div class="info-key">유통기한</div>
-                <div class="info-value" id="printExpiry"></div>
-            </div>
-            <div class="label-info-item">
-                <div class="info-key">로트번호</div>
-                <div class="info-value" id="printLot"></div>
-            </div>
-            <div class="label-info-item">
-                <div class="info-key">바코드</div>
-                <div class="info-value" id="printBarcodeText"></div>
-            </div>
-        </div>
-        <div class="label-date" id="printDate"></div>
     </div>
 </div>
 
@@ -670,27 +699,25 @@ function printLabel(idx) {
     document.getElementById('printQuantity').textContent = record.quantity ? record.quantity.toLocaleString() : '-';
     document.getElementById('printExpiry').textContent = record.expiry_date || '-';
     document.getElementById('printLot').textContent = record.lot_number || '-';
-    document.getElementById('printBarcodeText').textContent = record.product_barcode || '-';
-    document.getElementById('printDate').textContent = '입고일시: ' + (record.created_at || '');
+    document.getElementById('printDate').textContent = '입고일: ' + (record.created_at || '');
 
-    // 바코드 생성
+    // 바코드 생성 (가로 A4에 맞게 크게)
     const barcodeSvg = document.getElementById('printBarcode');
     const barcodeValue = record.product_barcode || '0000000000000';
 
     try {
         JsBarcode(barcodeSvg, barcodeValue, {
             format: 'CODE128',
-            width: 3,
-            height: 120,
+            width: 4,
+            height: 140,
             displayValue: true,
-            fontSize: 28,
+            fontSize: 32,
             font: 'monospace',
             fontOptions: 'bold',
-            textMargin: 8,
-            margin: 10,
+            textMargin: 6,
+            margin: 5,
         });
     } catch (e) {
-        // 바코드 생성 실패 시 텍스트로 대체
         barcodeSvg.innerHTML = '';
         console.warn('바코드 생성 실패:', e);
     }
