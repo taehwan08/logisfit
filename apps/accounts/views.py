@@ -319,9 +319,13 @@ class SlackInteractiveView(View):
     """
     Slack Interactive 콜백 뷰
 
-    슬랙에서 승인/거절 버튼을 클릭하면 이 엔드포인트로 요청이 옵니다.
+    슬랙에서 버튼을 클릭하면 이 엔드포인트로 요청이 옵니다.
+    action_id에 따라 적절한 핸들러로 라우팅합니다.
     Slack Signing Secret으로 요청을 검증한 뒤 처리합니다.
     """
+
+    # action_id → 모듈 핸들러 매핑
+    INBOUND_ACTIONS = {'complete_inbound', 'open_inbound_page'}
 
     def post(self, request):
         # 슬랙 서명 검증
@@ -334,7 +338,15 @@ class SlackInteractiveView(View):
         except (json.JSONDecodeError, TypeError):
             return JsonResponse({'error': 'Invalid payload'}, status=400)
 
-        result = process_slack_action(payload)
+        # action_id에 따라 적절한 핸들러로 라우팅
+        actions = payload.get('actions', [])
+        action_id = actions[0].get('action_id', '') if actions else ''
+
+        if action_id in self.INBOUND_ACTIONS:
+            from apps.inventory.slack import process_inbound_slack_action
+            result = process_inbound_slack_action(payload)
+        else:
+            result = process_slack_action(payload)
 
         if result is None:
             # 링크 버튼 등 별도 응답 불필요

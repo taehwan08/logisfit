@@ -1302,35 +1302,3 @@ def create_inbound(request):
             'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
         },
     })
-
-
-@csrf_exempt
-@login_required
-@staff_required
-@require_POST
-def complete_inbound(request, record_id):
-    """입고 기록의 전산 등록을 완료 처리한다."""
-    try:
-        record = InboundRecord.objects.select_related('product').get(pk=record_id)
-    except InboundRecord.DoesNotExist:
-        return JsonResponse({'error': '입고 기록을 찾을 수 없습니다.'}, status=404)
-
-    if record.status == 'completed':
-        return JsonResponse({'error': '이미 전산 등록 완료된 기록입니다.'}, status=400)
-
-    record.status = 'completed'
-    record.completed_by = request.user
-    record.completed_at = timezone.now()
-    record.save(update_fields=['status', 'completed_by', 'completed_at', 'updated_at'])
-
-    return JsonResponse({
-        'success': True,
-        'message': '전산 등록이 완료되었습니다.',
-        'record': {
-            'id': record.pk,
-            'status': record.status,
-            'status_display': record.get_status_display(),
-            'completed_by': request.user.name,
-            'completed_at': timezone.localtime(record.completed_at).strftime('%Y-%m-%d %H:%M'),
-        },
-    })

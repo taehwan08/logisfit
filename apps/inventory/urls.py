@@ -44,5 +44,4 @@ urlpatterns = [
     path('inbound/', views.inbound_page, name='inbound_page'),
     path('api/inbound/', views.get_inbound_records, name='get_inbound_records'),
     path('api/inbound/create/', views.create_inbound, name='create_inbound'),
-    path('api/inbound/<int:record_id>/complete/', views.complete_inbound, name='complete_inbound'),
 ]

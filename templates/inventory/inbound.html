@@ -131,13 +131,6 @@
         color: #0f5132;
     }
 
-    /* 완료 버튼 */
-    .btn-complete {
-        font-size: 0.8rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: 8px;
-    }
-
     .empty-state {
         padding: 3rem;
         text-align: center;
@@ -277,7 +270,6 @@
 {% block extra_js %}
 <script>
 const csrfToken = '{{ csrf_token }}';
-const isAdmin = {{ user.is_admin|yesno:"true,false" }} || {{ user.is_superuser|yesno:"true,false" }};
 
 let selectedProductId = null;
 let currentFilter = '';
@@ -470,15 +462,13 @@ function loadRecords() {
                     <td>${escapeHtml(r.registered_by)}</td>
                     <td style="font-size:0.82rem;">${escapeHtml(r.created_at)}</td>
                     <td>
-                        ${r.status === 'pending' && isAdmin
-                            ? `<button class="btn btn-sm btn-outline-success btn-complete" onclick="completeInbound(${r.id}, this)">
-                                 <i class="bi bi-check-lg me-1"></i>전산 등록 완료
-                               </button>`
-                            : r.status === 'completed'
-                                ? `<div style="font-size:0.82rem;">
-                                     <div>${escapeHtml(r.completed_by)}</div>
-                                     <div class="text-muted">${escapeHtml(r.completed_at)}</div>
-                                   </div>`
+                        ${r.status === 'completed' && r.completed_by
+                            ? `<div style="font-size:0.82rem;">
+                                 <div>${escapeHtml(r.completed_by)}</div>
+                                 <div class="text-muted">${escapeHtml(r.completed_at)}</div>
+                               </div>`
+                            : r.status === 'pending'
+                                ? `<span class="text-muted" style="font-size:0.82rem;">슬랙에서 처리</span>`
                                 : ''
                         }
                     </td>
@@ -494,41 +484,6 @@ function loadRecords() {
                 </tr>
             `;
         });
-}
-
-// ============================================================================
-// 전산 등록 완료
-// ============================================================================
-
-function completeInbound(recordId, btn) {
-    if (!confirm('전산 등록을 완료 처리하시겠습니까?')) return;
-
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-
-    fetch(`/inventory/api/inbound/${recordId}/complete/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken,
-        },
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            loadRecords();
-            showToast(data.message, 'success');
-        } else {
-            alert(data.error || '처리에 실패했습니다.');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>전산 등록 완료';
-        }
-    })
-    .catch(() => {
-        alert('네트워크 오류가 발생했습니다.');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>전산 등록 완료';
-    });
 }
 
 // ============================================================================
