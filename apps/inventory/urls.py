@@ -30,6 +30,10 @@ urlpatterns = [
     path('api/scan/location/', views.scan_location, name='scan_location'),
     path('api/scan/product/', views.scan_product, name='scan_product'),
 
+    # 재고 스캔 엑셀 업로드 (관리자 전용)
+    path('scan/upload/', views.scan_upload_page, name='scan_upload_page'),
+    path('api/scan/upload/', views.upload_scan_excel, name='upload_scan_excel'),
+
     # API: 기록
     path('api/records/', views.get_records, name='get_records'),
     path('api/records/location/', views.get_location_records, name='get_location_records'),

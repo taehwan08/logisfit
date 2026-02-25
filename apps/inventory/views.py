@@ -958,6 +958,208 @@ def _record_to_dict(record):
 
 
 # ============================================================================
+# 재고 스캔 엑셀 업로드 (관리자 전용)
+# ============================================================================
+
+@login_required
+@admin_required
+def scan_upload_page(request):
+    """재고 스캔 엑셀 업로드 페이지 (관리자 전용)"""
+    sessions = InventorySession.objects.all().order_by('-started_at')
+    return render(request, 'inventory/scan_upload.html', {
+        'sessions': sessions,
+    })
+
+
+@csrf_exempt
+@login_required
+@admin_required
+@require_POST
+def upload_scan_excel(request):
+    """엑셀 파일로 재고 스캔 기록을 일괄 등록한다 (관리자 전용).
+
+    엑셀 컬럼: 로케이션, 상품명, 바코드, 유통기한, 로트번호, 수량
+    동일 세션+로케이션+바코드+상품명+유통기한+로트번호 조합이 이미 있으면 수량을 합산한다.
+    """
+    import openpyxl
+    import xlrd
+
+    session_id = request.POST.get('session_id')
+    if not session_id:
+        return JsonResponse({'error': '세션을 선택해주세요.'}, status=400)
+
+    try:
+        session = InventorySession.objects.get(pk=session_id)
+    except InventorySession.DoesNotExist:
+        return JsonResponse({'error': '세션을 찾을 수 없습니다.'}, status=404)
+
+    excel_file = request.FILES.get('file')
+    if not excel_file:
+        return JsonResponse({'error': '파일을 선택해주세요.'}, status=400)
+
+    filename = excel_file.name.lower()
+    if not filename.endswith(('.xlsx', '.xls')):
+        return JsonResponse({'error': '엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.'}, status=400)
+
+    try:
+        # 엑셀 파싱
+        if filename.endswith('.xlsx'):
+            wb = openpyxl.load_workbook(excel_file, read_only=True)
+            ws = wb.active
+            headers = [str(cell.value or '').strip() for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            rows = list(ws.iter_rows(min_row=2, values_only=True))
+            wb.close()
+        else:
+            content = excel_file.read()
+            wb = xlrd.open_workbook(file_contents=content)
+            ws = wb.sheet_by_index(0)
+            headers = [str(ws.cell_value(0, col)).strip() for col in range(ws.ncols)]
+            rows = []
+            for row_idx in range(1, ws.nrows):
+                rows.append(tuple(ws.cell_value(row_idx, col) for col in range(ws.ncols)))
+
+        # 헤더에서 컬럼 인덱스 찾기
+        location_idx = _find_column_index(headers, ['로케이션', '로케이션바코드', 'location', 'Location', 'LOCATION', '선반', '구역'])
+        name_idx = _find_column_index(headers, ['상품명', '품명', '제품명', '이름', 'name', 'product_name', '상품이름'])
+        barcode_idx = _find_column_index(headers, ['바코드', '바코드번호', 'barcode', 'BarCode', 'BARCODE'])
+        expiry_idx = _find_column_index(headers, ['유통기한', '소비기한', '기한', 'expiry', 'expiry_date', 'exp'])
+        lot_idx = _find_column_index(headers, ['로트번호', '로트', 'lot', 'lot_number', 'LOT'])
+        qty_idx = _find_column_index(headers, ['수량', '숫자', '개수', 'quantity', 'qty', 'QTY'])
+
+        if location_idx is None:
+            return JsonResponse({'error': '로케이션 컬럼을 찾을 수 없습니다. 헤더에 "로케이션" 또는 "location"이 포함되어야 합니다.'}, status=400)
+        if name_idx is None and barcode_idx is None:
+            return JsonResponse({'error': '상품명 또는 바코드 컬럼이 필요합니다.'}, status=400)
+        if qty_idx is None:
+            return JsonResponse({'error': '수량 컬럼을 찾을 수 없습니다. 헤더에 "수량" 또는 "quantity"가 포함되어야 합니다.'}, status=400)
+
+        worker_name = request.user.name if hasattr(request.user, 'name') else str(request.user)
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+
+        # 로케이션 캐시
+        location_cache = {}
+
+        for row_num, row in enumerate(rows, start=2):
+            try:
+                # 로케이션
+                location_val = str(row[location_idx] or '').strip() if location_idx < len(row) else ''
+                if not location_val:
+                    skipped_count += 1
+                    continue
+
+                # 바코드 (숫자→정수 변환)
+                barcode_val = ''
+                if barcode_idx is not None and barcode_idx < len(row):
+                    barcode_val = str(row[barcode_idx] or '').strip()
+                    if barcode_val and '.' in barcode_val:
+                        try:
+                            barcode_val = str(int(float(barcode_val)))
+                        except (ValueError, OverflowError):
+                            pass
+
+                # 상품명
+                name_val = ''
+                if name_idx is not None and name_idx < len(row):
+                    name_val = str(row[name_idx] or '').strip()
+
+                # 바코드로 상품명 자동 보완
+                if barcode_val and not name_val:
+                    master_products = Product.objects.filter(barcode=barcode_val)
+                    cnt = master_products.count()
+                    if cnt == 1:
+                        p = master_products.first()
+                        name_val = p.display_name or p.name
+                    elif cnt > 1:
+                        p = master_products.first()
+                        name_val = p.display_name or p.name
+
+                if not name_val and not barcode_val:
+                    skipped_count += 1
+                    continue
+
+                # 수량
+                qty_val = row[qty_idx] if qty_idx < len(row) else 0
+                try:
+                    qty_val = int(float(str(qty_val or 0)))
+                    if qty_val < 1:
+                        qty_val = 1
+                except (ValueError, TypeError):
+                    qty_val = 1
+
+                # 유통기한
+                expiry_val = ''
+                if expiry_idx is not None and expiry_idx < len(row):
+                    expiry_val = str(row[expiry_idx] or '').strip()
+
+                # 로트번호
+                lot_val = ''
+                if lot_idx is not None and lot_idx < len(row):
+                    lot_val = str(row[lot_idx] or '').strip()
+
+                # 로케이션 가져오기/생성 (캐시 사용)
+                if location_val not in location_cache:
+                    loc, _ = Location.objects.get_or_create(
+                        barcode=location_val,
+                        defaults={'name': '', 'zone': ''},
+                    )
+                    location_cache[location_val] = loc
+                location = location_cache[location_val]
+
+                # 동일 조합이면 수량 합산
+                existing = InventoryRecord.objects.filter(
+                    session=session,
+                    location=location,
+                    barcode=barcode_val,
+                    product_name=name_val,
+                    expiry_date=expiry_val,
+                    lot_number=lot_val,
+                ).first()
+
+                if existing:
+                    existing.quantity += qty_val
+                    existing.worker = worker_name
+                    existing.save(update_fields=['quantity', 'worker'])
+                    updated_count += 1
+                else:
+                    InventoryRecord.objects.create(
+                        session=session,
+                        location=location,
+                        barcode=barcode_val,
+                        product_name=name_val,
+                        quantity=qty_val,
+                        expiry_date=expiry_val,
+                        lot_number=lot_val,
+                        worker=worker_name,
+                    )
+                    created_count += 1
+
+            except Exception as e:
+                errors.append(f'{row_num}행: {str(e)}')
+                skipped_count += 1
+
+        result_msg = f'신규 {created_count}건, 수량합산 {updated_count}건'
+        if skipped_count:
+            result_msg += f', 스킵 {skipped_count}건'
+
+        return JsonResponse({
+            'success': True,
+            'message': result_msg,
+            'created': created_count,
+            'updated': updated_count,
+            'skipped': skipped_count,
+            'errors': errors[:10],
+        })
+
+    except Exception as e:
+        logger.error('재고 스캔 엑셀 업로드 실패: %s', e, exc_info=True)
+        return JsonResponse({'error': f'파일 처리 중 오류: {str(e)}'}, status=500)
+
+
+# ============================================================================
 # 입고 관리 Views
 # ============================================================================
 

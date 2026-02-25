@@ -113,6 +113,14 @@
                         <span>재고 스캔</span>
                     </a>
                 </li>
+                {% if user.is_admin or user.is_superuser %}
+                <li class="sidebar-item">
+                    <a href="{% url 'inventory:scan_upload_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'scan_upload_page' %}active{% endif %}">
+                        <i class="bi bi-file-earmark-arrow-up"></i>
+                        <span>스캔 업로드</span>
+                    </a>
+                </li>
+                {% endif %}
                 <li class="sidebar-item">
                     <a href="{% url 'inventory:status_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'status_page' %}active{% endif %}">
                         <i class="bi bi-bar-chart-line"></i>
