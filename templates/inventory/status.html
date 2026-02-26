@@ -98,6 +98,108 @@
         font-size: 3rem;
         margin-bottom: 1rem;
     }
+
+    /* 트리맵 */
+    .treemap-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .treemap-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+    }
+    .treemap-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: #495057;
+    }
+    .treemap-legend-swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        flex-shrink: 0;
+    }
+    .treemap-container {
+        width: 100%;
+        height: 500px;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+        position: relative;
+        background: #fafafa;
+    }
+    .treemap-container svg {
+        width: 100%;
+        height: 100%;
+    }
+    .treemap-cell {
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+    .treemap-cell:hover {
+        opacity: 0.85;
+    }
+    .treemap-cell.selected rect {
+        stroke: #000 !important;
+        stroke-width: 3px !important;
+    }
+    .treemap-cell text {
+        pointer-events: none;
+        font-family: 'Noto Sans KR', sans-serif;
+    }
+    .treemap-tooltip {
+        position: fixed;
+        background: rgba(33, 37, 41, 0.95);
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        pointer-events: none;
+        z-index: 9999;
+        max-width: 280px;
+        line-height: 1.5;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        display: none;
+    }
+    .treemap-tooltip .tt-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin-bottom: 4px;
+    }
+    .treemap-tooltip .tt-zone {
+        color: #adb5bd;
+        font-size: 0.75rem;
+    }
+    .treemap-tooltip .tt-qty {
+        font-weight: 700;
+        color: #69b4ff;
+    }
+    .treemap-tooltip .tt-products {
+        margin-top: 6px;
+        border-top: 1px solid rgba(255,255,255,0.15);
+        padding-top: 6px;
+    }
+    .treemap-detail {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .treemap-detail-header {
+        background: #f8f9fa;
+        padding: 0.75rem 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .treemap-detail-header .detail-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
 </style>
 {% endblock %}
 
@@ -165,6 +267,11 @@
                             <i class="bi bi-box-seam me-1"></i>상품별
                         </button>
                     </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="treemap" onclick="switchTab('treemap')">
+                            <i class="bi bi-grid-1x2 me-1"></i>시각화
+                        </button>
+                    </li>
                 </ul>
                 <button class="btn btn-outline-success btn-sm mb-2" id="exportBtn" onclick="exportExcel()" disabled>
                     <i class="bi bi-file-earmark-excel me-1"></i>엑셀 다운로드
@@ -182,10 +289,13 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- D3.js for treemap visualization -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 const csrfToken = '{{ csrf_token }}';
 let currentTab = 'location';
 let currentData = { groups: [] };
+let treemapLocationData = null;  // 시각화 탭용 location 데이터 캐시
 
 document.addEventListener('DOMContentLoaded', function() {
     // URL에서 session_id 파라미터 확인
@@ -215,6 +325,13 @@ function switchTab(tab) {
     document.querySelectorAll('#viewTabs .nav-link').forEach(el => {
         el.classList.toggle('active', el.dataset.tab === tab);
     });
+
+    // 시각화 탭에서 캐시된 location 데이터가 있으면 바로 렌더링
+    if (tab === 'treemap' && treemapLocationData) {
+        renderTreemap(treemapLocationData);
+        updateStats(treemapLocationData);
+        return;
+    }
     loadRecords();
 }
 
@@ -231,9 +348,11 @@ async function loadRecords() {
     }
 
     const search = document.getElementById('searchInput').value.trim();
+    // 시각화 탭은 항상 location 기준으로 데이터 가져오기
+    const groupBy = currentTab === 'treemap' ? 'location' : currentTab;
     const params = new URLSearchParams({
         session_id: sessionId,
-        group_by: currentTab,
+        group_by: groupBy,
     });
     if (search) params.append('search', search);
 
@@ -248,7 +367,10 @@ async function loadRecords() {
         const data = await resp.json();
         currentData = data;
 
-        if (currentTab === 'location') {
+        if (currentTab === 'treemap') {
+            treemapLocationData = data.groups || [];
+            renderTreemap(treemapLocationData);
+        } else if (currentTab === 'location') {
             renderByLocation(data.groups || []);
         } else {
             renderByProduct(data.groups || []);
@@ -404,7 +526,7 @@ function updateStats(groups) {
         return;
     }
 
-    if (currentTab === 'location') {
+    if (currentTab === 'location' || currentTab === 'treemap') {
         const locationCount = groups.length;
         let productCount = 0;
         let totalQty = 0;
@@ -437,6 +559,282 @@ function exportExcel() {
     if (search) params.append('search', search);
     window.location.href = `{% url "inventory:export_records_excel" %}?${params.toString()}`;
 }
+
+// ============================================================================
+// 트리맵 시각화
+// ============================================================================
+
+const ZONE_COLORS = d3.schemeTableau10;
+let selectedCell = null;
+
+function buildTreemapData(groups) {
+    // zone별로 그룹핑
+    const zoneMap = {};
+    groups.forEach(g => {
+        const zone = g.location.zone || '미지정';
+        if (!zoneMap[zone]) zoneMap[zone] = [];
+        zoneMap[zone].push({
+            name: g.location.barcode,
+            locationName: g.location.name || '',
+            locationId: g.location.id,
+            zone: zone,
+            value: g.total_quantity || 1,  // 0이면 트리맵에서 안 보이므로 최소 1
+            products: g.products,
+            productCount: g.products.length,
+        });
+    });
+
+    return {
+        name: '전체',
+        children: Object.keys(zoneMap).sort().map(zone => ({
+            name: zone,
+            children: zoneMap[zone],
+        })),
+    };
+}
+
+function renderTreemap(groups) {
+    const container = document.getElementById('dataContainer');
+
+    if (!groups || !groups.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-inbox d-block"></i>
+                <p class="mb-0">등록된 재고 기록이 없습니다.</p>
+            </div>`;
+        return;
+    }
+
+    const hierarchyData = buildTreemapData(groups);
+    const zones = hierarchyData.children.map(c => c.name);
+    const colorScale = d3.scaleOrdinal().domain(zones).range(ZONE_COLORS);
+
+    // 레이아웃 생성
+    container.innerHTML = `
+        <div class="treemap-wrapper">
+            <div class="treemap-legend" id="treemapLegend"></div>
+            <div class="treemap-container" id="treemapChart"></div>
+            <div id="treemapDetail"></div>
+        </div>
+        <div class="treemap-tooltip" id="treemapTooltip"></div>
+    `;
+
+    // 범례 렌더링
+    const legendEl = document.getElementById('treemapLegend');
+    legendEl.innerHTML = zones.map(z => `
+        <div class="treemap-legend-item">
+            <div class="treemap-legend-swatch" style="background:${colorScale(z)}"></div>
+            <span>${escapeHtml(z)}</span>
+        </div>
+    `).join('');
+
+    // SVG 트리맵 렌더링
+    const chartEl = document.getElementById('treemapChart');
+    const width = chartEl.clientWidth;
+    const height = chartEl.clientHeight;
+
+    const root = d3.hierarchy(hierarchyData)
+        .sum(d => d.value)
+        .sort((a, b) => b.value - a.value);
+
+    d3.treemap()
+        .size([width, height])
+        .paddingOuter(4)
+        .paddingInner(2)
+        .paddingTop(20)
+        .round(true)(root);
+
+    const svg = d3.select('#treemapChart')
+        .append('svg')
+        .attr('viewBox', `0 0 ${width} ${height}`)
+        .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    const tooltip = document.getElementById('treemapTooltip');
+
+    // Zone 그룹 (배경 + 라벨)
+    const zoneGroups = svg.selectAll('.zone-group')
+        .data(root.children || [])
+        .join('g')
+        .attr('class', 'zone-group');
+
+    zoneGroups.append('rect')
+        .attr('x', d => d.x0)
+        .attr('y', d => d.y0)
+        .attr('width', d => d.x0 === d.x1 ? 0 : d.x1 - d.x0)
+        .attr('height', d => d.y0 === d.y1 ? 0 : d.y1 - d.y0)
+        .attr('fill', d => {
+            const c = d3.color(colorScale(d.data.name));
+            c.opacity = 0.12;
+            return c.toString();
+        })
+        .attr('stroke', d => colorScale(d.data.name))
+        .attr('stroke-width', 1.5)
+        .attr('rx', 4);
+
+    zoneGroups.append('text')
+        .attr('x', d => d.x0 + 6)
+        .attr('y', d => d.y0 + 14)
+        .text(d => d.data.name)
+        .attr('fill', d => d3.color(colorScale(d.data.name)).darker(0.5))
+        .attr('font-size', '11px')
+        .attr('font-weight', '700');
+
+    // 로케이션 셀 (리프 노드)
+    const leaves = root.leaves();
+
+    const cells = svg.selectAll('.treemap-cell')
+        .data(leaves)
+        .join('g')
+        .attr('class', 'treemap-cell')
+        .attr('transform', d => `translate(${d.x0},${d.y0})`);
+
+    cells.append('rect')
+        .attr('width', d => Math.max(0, d.x1 - d.x0))
+        .attr('height', d => Math.max(0, d.y1 - d.y0))
+        .attr('fill', d => colorScale(d.parent.data.name))
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1.5)
+        .attr('rx', 3)
+        .attr('opacity', 0.8);
+
+    // 라벨: 로케이션 바코드
+    cells.each(function(d) {
+        const cellW = d.x1 - d.x0;
+        const cellH = d.y1 - d.y0;
+        const g = d3.select(this);
+
+        if (cellW > 45 && cellH > 28) {
+            g.append('text')
+                .attr('x', cellW / 2)
+                .attr('y', cellH / 2 - 5)
+                .attr('text-anchor', 'middle')
+                .attr('fill', '#fff')
+                .attr('font-size', cellW > 90 ? '12px' : '10px')
+                .attr('font-weight', '700')
+                .text(d.data.name.length > 10 ? d.data.name.substring(0, 10) + '..' : d.data.name);
+
+            g.append('text')
+                .attr('x', cellW / 2)
+                .attr('y', cellH / 2 + 11)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'rgba(255,255,255,0.85)')
+                .attr('font-size', cellW > 90 ? '11px' : '9px')
+                .attr('font-weight', '600')
+                .text(d.data.value.toLocaleString() + '개');
+        } else if (cellW > 25 && cellH > 18) {
+            g.append('text')
+                .attr('x', cellW / 2)
+                .attr('y', cellH / 2 + 4)
+                .attr('text-anchor', 'middle')
+                .attr('fill', '#fff')
+                .attr('font-size', '9px')
+                .attr('font-weight', '700')
+                .text(d.data.value.toLocaleString());
+        }
+    });
+
+    // 호버 툴팁
+    cells.on('mousemove', function(event, d) {
+        const productLines = (d.data.products || []).slice(0, 5).map(p =>
+            `<div>${escapeHtml(p.product_name || p.barcode)} — ${p.quantity}개</div>`
+        ).join('');
+        const moreCount = (d.data.products || []).length - 5;
+
+        tooltip.innerHTML = `
+            <div class="tt-title">${escapeHtml(d.data.name)}</div>
+            ${d.data.locationName ? `<div class="tt-zone">${escapeHtml(d.data.locationName)}</div>` : ''}
+            <div class="tt-zone">구역: ${escapeHtml(d.data.zone)}</div>
+            <div style="margin-top:4px;">총 <span class="tt-qty">${d.data.value.toLocaleString()}개</span> · ${d.data.productCount}종</div>
+            ${productLines ? `<div class="tt-products">${productLines}${moreCount > 0 ? `<div class="text-muted">외 ${moreCount}건...</div>` : ''}</div>` : ''}
+        `;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.clientX + 14) + 'px';
+        tooltip.style.top = (event.clientY - 10) + 'px';
+    })
+    .on('mouseleave', function() {
+        tooltip.style.display = 'none';
+    });
+
+    // 클릭 → 상세 패널
+    cells.on('click', function(event, d) {
+        event.stopPropagation();
+        // 선택 상태 토글
+        svg.selectAll('.treemap-cell').classed('selected', false);
+        d3.select(this).classed('selected', true);
+        selectedCell = d.data;
+        renderTreemapDetail(d.data);
+    });
+
+    // 빈 영역 클릭 → 상세 닫기
+    svg.on('click', function() {
+        svg.selectAll('.treemap-cell').classed('selected', false);
+        selectedCell = null;
+        document.getElementById('treemapDetail').innerHTML = '';
+    });
+}
+
+function renderTreemapDetail(data) {
+    const detailEl = document.getElementById('treemapDetail');
+    if (!data || !data.products || !data.products.length) {
+        detailEl.innerHTML = '';
+        return;
+    }
+
+    detailEl.innerHTML = `
+        <div class="treemap-detail">
+            <div class="treemap-detail-header">
+                <div class="detail-title">
+                    <i class="bi bi-geo-alt text-primary me-2"></i>
+                    <code>${escapeHtml(data.name)}</code>
+                    ${data.locationName ? `<span class="text-muted ms-2">${escapeHtml(data.locationName)}</span>` : ''}
+                    <span class="text-muted ms-2">(${escapeHtml(data.zone)})</span>
+                </div>
+                <div>
+                    <span class="badge bg-primary">${data.productCount}종</span>
+                    <span class="badge bg-success ms-1">${data.value.toLocaleString()}개</span>
+                </div>
+            </div>
+            <table class="table group-table mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">상품명</th>
+                        <th>유통기한</th>
+                        <th>로트번호</th>
+                        <th class="text-center">수량</th>
+                        <th>바코드</th>
+                        <th>작업자</th>
+                        <th>등록시간</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.products.map(p => `
+                    <tr>
+                        <td class="ps-3 product-name">${escapeHtml(p.product_name || '-')}</td>
+                        <td>${escapeHtml(p.expiry_date || '-')}</td>
+                        <td>${escapeHtml(p.lot_number || '-')}</td>
+                        <td class="text-center fw-bold">${p.quantity}</td>
+                        <td><code>${escapeHtml(p.barcode || '-')}</code></td>
+                        <td>${escapeHtml(p.worker || '-')}</td>
+                        <td class="small text-muted">${escapeHtml(p.created_at)}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// 윈도우 리사이즈 시 트리맵 다시 렌더링
+let resizeTimer = null;
+window.addEventListener('resize', function() {
+    if (currentTab !== 'treemap' || !treemapLocationData) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => renderTreemap(treemapLocationData), 300);
+});
+
+// ============================================================================
+// 유틸리티
+// ============================================================================
 
 function escapeHtml(str) {
     if (!str) return '';
