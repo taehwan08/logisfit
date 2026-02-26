@@ -130,7 +130,6 @@ class InboundRecord(models.Model):
     lot_number = models.CharField('로트번호', max_length=50, blank=True, default='')
     status = models.CharField('상태', max_length=20, choices=STATUS_CHOICES, default='pending')
     memo = models.TextField('메모', blank=True, default='')
-    image = models.ImageField('입고 이미지', upload_to='inbound/%Y/%m/', blank=True, default='')
 
     registered_by = models.ForeignKey(
         'accounts.User', on_delete=models.SET_NULL, null=True,
@@ -153,3 +152,26 @@ class InboundRecord(models.Model):
 
     def __str__(self):
         return f'{self.product.name} ({self.quantity}개) - {self.get_status_display()}'
+
+
+class InboundImage(models.Model):
+    """입고 이미지
+
+    입고 기록에 첨부된 이미지입니다.
+    하나의 입고 기록에 여러 장의 이미지를 첨부할 수 있습니다.
+    """
+    inbound_record = models.ForeignKey(
+        InboundRecord, on_delete=models.CASCADE,
+        related_name='images', verbose_name='입고 기록'
+    )
+    image = models.ImageField('이미지', upload_to='inbound/%Y/%m/')
+    created_at = models.DateTimeField('등록일시', auto_now_add=True)
+
+    class Meta:
+        db_table = 'inbound_images'
+        ordering = ['created_at']
+        verbose_name = '입고 이미지'
+        verbose_name_plural = '입고 이미지 목록'
+
+    def __str__(self):
+        return f'입고이미지 #{self.pk} (입고기록 #{self.inbound_record_id})'

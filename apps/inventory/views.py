@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord
+from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord, InboundImage
 from .slack import send_inbound_notification_async
 
 logger = logging.getLogger(__name__)
@@ -1184,7 +1184,7 @@ def get_inbound_records(request):
 
     records = InboundRecord.objects.select_related(
         'product', 'registered_by', 'completed_by'
-    )
+    ).prefetch_related('images')
 
     status_filter = request.GET.get('status', '').strip()
     if status_filter in ('pending', 'completed'):
@@ -1221,7 +1221,11 @@ def get_inbound_records(request):
                     if r.completed_at else ''
                 ),
                 'created_at': timezone.localtime(r.created_at).strftime('%Y-%m-%d %H:%M'),
-                'image_url': r.image.url if r.image else '',
+                'images': [
+                    {'id': img.pk, 'url': img.image.url}
+                    for img in r.images.all()
+                ],
+                'has_images': r.images.all().exists(),
             }
             for r in records
         ],
@@ -1241,18 +1245,18 @@ def create_inbound(request):
         expiry_date: 유통기한
         lot_number: 로트번호
         memo: 메모
-        image: 입고 이미지 (선택)
+        images: 입고 이미지 (다중 파일, 선택)
     """
     content_type = request.content_type or ''
     if 'multipart/form-data' in content_type:
         data = request.POST
-        image = request.FILES.get('image')
+        images = request.FILES.getlist('images')
     else:
         try:
             data = json.loads(request.body)
         except (json.JSONDecodeError, ValueError):
             return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
-        image = None
+        images = []
 
     product_id = data.get('product_id')
     quantity = data.get('quantity')
@@ -1285,8 +1289,14 @@ def create_inbound(request):
         lot_number=lot_number,
         memo=memo,
         registered_by=request.user,
-        image=image or '',
     )
+
+    # 다중 이미지 저장
+    for img_file in images:
+        InboundImage.objects.create(
+            inbound_record=record,
+            image=img_file,
+        )
 
     # 슬랙 알림 (비동기)
     try:
@@ -1309,6 +1319,10 @@ def create_inbound(request):
             'memo': record.memo,
             'registered_by': request.user.name,
             'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
-            'image_url': record.image.url if record.image else '',
+            'images': [
+                {'id': img.pk, 'url': img.image.url}
+                for img in record.images.all()
+            ],
+            'has_images': record.images.exists(),
         },
     })

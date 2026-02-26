@@ -147,40 +147,127 @@
         font-weight: 700;
     }
 
-    /* 입고 이미지 썸네일 */
-    .inbound-thumb {
-        width: 40px;
-        height: 40px;
-        object-fit: cover;
-        border-radius: 6px;
-        border: 1px solid #dee2e6;
+    /* 상품명 이미지 아이콘 */
+    .product-name-link {
         cursor: pointer;
-        flex-shrink: 0;
-        transition: opacity 0.2s;
+        color: #0d6efd;
+        transition: color 0.2s;
     }
-    .inbound-thumb:hover {
+    .product-name-link:hover {
+        color: #0a58ca;
+        text-decoration: underline;
+    }
+    .product-name-link .bi-camera {
+        font-size: 0.75rem;
+        margin-left: 4px;
         opacity: 0.7;
     }
 
-    /* 이미지 확대 모달 */
-    .image-overlay {
+    /* 이미지 갤러리 모달 */
+    .gallery-overlay {
         display: none;
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.8);
+        background: rgba(0,0,0,0.85);
         z-index: 10001;
         justify-content: center;
         align-items: center;
-        cursor: pointer;
+        flex-direction: column;
     }
-    .image-overlay.show {
+    .gallery-overlay.show {
         display: flex;
     }
-    .image-overlay img {
-        max-width: 90vw;
-        max-height: 90vh;
+    .gallery-overlay img {
+        max-width: 88vw;
+        max-height: 80vh;
         border-radius: 8px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        object-fit: contain;
+    }
+    .gallery-close {
+        position: absolute;
+        top: 16px;
+        right: 20px;
+        background: rgba(255,255,255,0.15);
+        border: none;
+        color: #fff;
+        font-size: 1.5rem;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .gallery-close:hover {
+        background: rgba(255,255,255,0.3);
+    }
+    .gallery-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255,255,255,0.15);
+        border: none;
+        color: #fff;
+        font-size: 1.5rem;
+        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .gallery-nav:hover {
+        background: rgba(255,255,255,0.3);
+    }
+    .gallery-nav.prev { left: 16px; }
+    .gallery-nav.next { right: 16px; }
+    .gallery-counter {
+        color: #fff;
+        font-size: 0.9rem;
+        margin-top: 12px;
+        opacity: 0.8;
+    }
+
+    /* 다중 이미지 미리보기 */
+    .image-preview-list {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+    .image-preview-item {
+        position: relative;
+        width: 60px;
+        height: 60px;
+    }
+    .image-preview-item img {
+        width: 60px;
+        height: 60px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+    }
+    .image-preview-item .remove-btn {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: #dc3545;
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        font-size: 0.65rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        line-height: 1;
     }
 
     /* 인쇄 버튼 */
@@ -510,22 +597,20 @@
                         </div>
                     </div>
 
-                    <!-- 이미지 업로드 -->
+                    <!-- 이미지 업로드 (다중) -->
                     <div class="mt-3">
                         <label class="form-label">입고 이미지</label>
                         <div class="d-flex align-items-center gap-3">
-                            <label class="btn btn-outline-secondary btn-sm" for="inboundImage" style="cursor:pointer;">
+                            <label class="btn btn-outline-secondary btn-sm" for="inboundImages" style="cursor:pointer;">
                                 <i class="bi bi-camera me-1"></i>사진 선택
                             </label>
-                            <input type="file" id="inboundImage" accept="image/*" style="display:none;" onchange="previewImage(this)">
+                            <input type="file" id="inboundImages" accept="image/*" multiple style="display:none;" onchange="previewImages(this)">
                             <span id="imageFileName" class="text-muted" style="font-size:0.82rem;">선택된 파일 없음</span>
-                            <button type="button" id="btnRemoveImage" class="btn btn-outline-danger btn-sm" style="display:none;" onclick="removeImage()">
-                                <i class="bi bi-x"></i>
+                            <button type="button" id="btnRemoveImages" class="btn btn-outline-danger btn-sm" style="display:none;" onclick="removeAllImages()">
+                                <i class="bi bi-x me-1"></i>전체 삭제
                             </button>
                         </div>
-                        <div id="imagePreview" class="mt-2" style="display:none;">
-                            <img id="imagePreviewImg" src="" alt="미리보기" style="max-height:120px; border-radius:8px; border:1px solid #dee2e6;">
-                        </div>
+                        <div id="imagePreviewList" class="image-preview-list"></div>
                     </div>
 
                     <div class="mt-3 text-end">
@@ -592,9 +677,13 @@
 
 </div>
 
-<!-- 이미지 확대 모달 -->
-<div id="imageOverlay" class="image-overlay" onclick="closeImageOverlay()">
-    <img id="imageOverlayImg" src="" alt="입고 이미지">
+<!-- 이미지 갤러리 모달 -->
+<div id="galleryOverlay" class="gallery-overlay">
+    <button class="gallery-close" onclick="closeGallery()" title="닫기"><i class="bi bi-x-lg"></i></button>
+    <button class="gallery-nav prev" onclick="galleryPrev()" id="galleryPrevBtn"><i class="bi bi-chevron-left"></i></button>
+    <img id="galleryImg" src="" alt="입고 이미지">
+    <button class="gallery-nav next" onclick="galleryNext()" id="galleryNextBtn"><i class="bi bi-chevron-right"></i></button>
+    <div class="gallery-counter" id="galleryCounter"></div>
 </div>
 
 <!-- 현품표 미리보기 모달 -->
@@ -780,9 +869,10 @@ function createInbound() {
     formData.append('lot_number', document.getElementById('inboundLot').value.trim());
     formData.append('memo', document.getElementById('inboundMemo').value.trim());
 
-    const imageFile = document.getElementById('inboundImage').files[0];
-    if (imageFile) {
-        formData.append('image', imageFile);
+    // 다중 이미지 첨부
+    const imageFiles = document.getElementById('inboundImages').files;
+    for (let i = 0; i < imageFiles.length; i++) {
+        formData.append('images', imageFiles[i]);
     }
 
     fetch('/inventory/api/inbound/create/', {
@@ -801,7 +891,7 @@ function createInbound() {
             document.getElementById('inboundExpiry').value = '';
             document.getElementById('inboundLot').value = '';
             document.getElementById('inboundMemo').value = '';
-            removeImage();
+            removeAllImages();
             loadRecords();
             showToast(data.message, 'success');
         } else {
@@ -862,17 +952,15 @@ function loadRecords() {
             tbody.innerHTML = data.records.map((r, idx) => `
                 <tr>
                     <td class="ps-3">
-                        <div class="d-flex align-items-start gap-2">
-                            ${r.image_url
-                                ? `<img src="${escapeHtml(r.image_url)}" alt="" class="inbound-thumb" onclick="showImage('${escapeHtml(r.image_url)}')" title="클릭하여 크게 보기">`
-                                : ''}
-                            <div>
-                                <div class="fw-medium">${escapeHtml(r.product_name)}</div>
-                                ${r.product_display_name && r.product_display_name !== r.product_name
-                                    ? `<small class="text-muted">${escapeHtml(r.product_display_name)}</small>`
-                                    : ''}
-                                ${r.memo ? `<div class="text-muted" style="font-size:0.78rem;"><i class="bi bi-chat-text me-1"></i>${escapeHtml(r.memo)}</div>` : ''}
+                        <div>
+                            <div class="fw-medium ${r.has_images ? 'product-name-link' : ''}"
+                                 ${r.has_images ? `onclick="openGallery(${idx})" title="사진 보기"` : ''}>
+                                ${escapeHtml(r.product_name)}${r.has_images ? '<i class="bi bi-camera"></i>' : ''}
                             </div>
+                            ${r.product_display_name && r.product_display_name !== r.product_name
+                                ? `<small class="text-muted">${escapeHtml(r.product_display_name)}</small>`
+                                : ''}
+                            ${r.memo ? `<div class="text-muted" style="font-size:0.78rem;"><i class="bi bi-chat-text me-1"></i>${escapeHtml(r.memo)}</div>` : ''}
                         </div>
                     </td>
                     <td><code style="font-size:0.82rem;">${escapeHtml(r.product_barcode)}</code></td>
@@ -1020,39 +1108,94 @@ function printLabel(idx) {
 }
 
 // ============================================================================
-// 이미지 관련
+// 다중 이미지 미리보기 (업로드 폼)
 // ============================================================================
 
-function previewImage(input) {
-    const file = input.files[0];
-    if (file) {
-        document.getElementById('imageFileName').textContent = file.name;
-        document.getElementById('btnRemoveImage').style.display = '';
+function previewImages(input) {
+    const files = input.files;
+    const previewList = document.getElementById('imagePreviewList');
+    previewList.innerHTML = '';
+
+    if (files.length === 0) {
+        document.getElementById('imageFileName').textContent = '선택된 파일 없음';
+        document.getElementById('btnRemoveImages').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('imageFileName').textContent = `${files.length}개 파일 선택됨`;
+    document.getElementById('btnRemoveImages').style.display = '';
+
+    Array.from(files).forEach((file, i) => {
         const reader = new FileReader();
         reader.onload = function(e) {
-            document.getElementById('imagePreviewImg').src = e.target.result;
-            document.getElementById('imagePreview').style.display = '';
+            const item = document.createElement('div');
+            item.className = 'image-preview-item';
+            item.innerHTML = `<img src="${e.target.result}" alt="미리보기">`;
+            previewList.appendChild(item);
         };
         reader.readAsDataURL(file);
-    }
+    });
 }
 
-function removeImage() {
-    document.getElementById('inboundImage').value = '';
+function removeAllImages() {
+    document.getElementById('inboundImages').value = '';
     document.getElementById('imageFileName').textContent = '선택된 파일 없음';
-    document.getElementById('btnRemoveImage').style.display = 'none';
-    document.getElementById('imagePreview').style.display = 'none';
-    document.getElementById('imagePreviewImg').src = '';
+    document.getElementById('btnRemoveImages').style.display = 'none';
+    document.getElementById('imagePreviewList').innerHTML = '';
 }
 
-function showImage(url) {
-    document.getElementById('imageOverlayImg').src = url;
-    document.getElementById('imageOverlay').classList.add('show');
+// ============================================================================
+// 이미지 갤러리 모달
+// ============================================================================
+
+let galleryImages = [];
+let galleryIndex = 0;
+
+function openGallery(recordIdx) {
+    const record = cachedRecords[recordIdx];
+    if (!record || !record.images || record.images.length === 0) return;
+
+    galleryImages = record.images;
+    galleryIndex = 0;
+    updateGallery();
+    document.getElementById('galleryOverlay').classList.add('show');
 }
 
-function closeImageOverlay() {
-    document.getElementById('imageOverlay').classList.remove('show');
+function updateGallery() {
+    const img = document.getElementById('galleryImg');
+    const counter = document.getElementById('galleryCounter');
+    const prevBtn = document.getElementById('galleryPrevBtn');
+    const nextBtn = document.getElementById('galleryNextBtn');
+
+    img.src = galleryImages[galleryIndex].url;
+    counter.textContent = `${galleryIndex + 1} / ${galleryImages.length}`;
+
+    prevBtn.style.display = galleryImages.length > 1 ? '' : 'none';
+    nextBtn.style.display = galleryImages.length > 1 ? '' : 'none';
 }
+
+function galleryPrev() {
+    galleryIndex = (galleryIndex - 1 + galleryImages.length) % galleryImages.length;
+    updateGallery();
+}
+
+function galleryNext() {
+    galleryIndex = (galleryIndex + 1) % galleryImages.length;
+    updateGallery();
+}
+
+function closeGallery() {
+    document.getElementById('galleryOverlay').classList.remove('show');
+    galleryImages = [];
+    galleryIndex = 0;
+}
+
+// 갤러리 오버레이 클릭 시 닫기 (이미지/버튼 제외)
+document.getElementById('galleryOverlay').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeGallery();
+    }
+});
 
 // ============================================================================
 // 유틸리티
@@ -1087,7 +1230,12 @@ function showToast(message, type) {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closePreview();
-        closeImageOverlay();
+        closeGallery();
+    }
+    // 갤러리 좌우 키보드 탐색
+    if (galleryImages.length > 1) {
+        if (e.key === 'ArrowLeft') galleryPrev();
+        if (e.key === 'ArrowRight') galleryNext();
     }
 });
 
