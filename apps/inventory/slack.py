@@ -27,12 +27,13 @@ def _extract_inbound_data(record):
         dict 또는 None
     """
     try:
-        # 첫 번째 이미지 URL 추출
-        first_image = record.images.first()
-        image_url = ''
-        if first_image:
+        # 모든 이미지 URL 추출
+        image_urls = []
+        for img in record.images.all():
             try:
-                image_url = first_image.image.url
+                url = img.image.url
+                if url:
+                    image_urls.append(url)
             except Exception:
                 pass
 
@@ -46,7 +47,7 @@ def _extract_inbound_data(record):
             'memo': record.memo or '',
             'registered_by': record.registered_by.name if record.registered_by else '-',
             'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
-            'image_url': image_url,
+            'image_urls': image_urls,
         }
     except Exception as e:
         logger.warning('입고 슬랙 데이터 추출 실패: %s', e)
@@ -105,12 +106,13 @@ def _send_inbound_slack(data):
     ]
 
     # 이미지가 있으면 image 블록 추가 (public HTTPS URL 필요)
-    if data.get('image_url') and data['image_url'].startswith('https://'):
-        blocks.append({
-            'type': 'image',
-            'image_url': data['image_url'],
-            'alt_text': f'{data["product_name"]} 입고 이미지',
-        })
+    for idx, url in enumerate(data.get('image_urls', [])):
+        if url and url.startswith('https://'):
+            blocks.append({
+                'type': 'image',
+                'image_url': url,
+                'alt_text': f'{data["product_name"]} 입고 이미지 {idx + 1}',
+            })
 
     blocks += [
         {'type': 'divider'},
