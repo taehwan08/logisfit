@@ -31,6 +31,7 @@ class Location(models.Model):
     """로케이션 (선반/구역)
 
     바코드 스캔 시 자동 등록됩니다.
+    바코드는 저장 시 자동으로 대문자로 변환됩니다.
     """
     barcode = models.CharField('로케이션 바코드', max_length=50, unique=True, db_index=True)
     name = models.CharField('로케이션명', max_length=100, blank=True, default='')
@@ -42,6 +43,11 @@ class Location(models.Model):
         verbose_name = '로케이션'
         verbose_name_plural = '로케이션 목록'
         ordering = ['barcode']
+
+    def save(self, *args, **kwargs):
+        if self.barcode:
+            self.barcode = self.barcode.upper()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         if self.name:

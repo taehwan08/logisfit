@@ -536,7 +536,7 @@ def scan_location(request):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
 
-    barcode = data.get('barcode', '').strip()
+    barcode = data.get('barcode', '').strip().upper()
     if not barcode:
         return JsonResponse({'error': '로케이션 바코드를 입력해주세요.'}, status=400)
 
@@ -1045,8 +1045,8 @@ def upload_scan_excel(request):
 
         for row_num, row in enumerate(rows, start=2):
             try:
-                # 로케이션
-                location_val = str(row[location_idx] or '').strip() if location_idx < len(row) else ''
+                # 로케이션 (대문자 변환)
+                location_val = str(row[location_idx] or '').strip().upper() if location_idx < len(row) else ''
                 if not location_val:
                     skipped_count += 1
                     continue
