@@ -345,14 +345,23 @@
         padding-bottom: 5px;
         margin-bottom: 5px;
     }
+    .preview-page .pv-header .pv-date {
+        font-size: 10px;
+        color: #333;
+        flex-shrink: 0;
+    }
     .preview-page .pv-header .pv-title {
         font-size: 14px;
         font-weight: 800;
         letter-spacing: 2px;
+        flex-shrink: 0;
     }
-    .preview-page .pv-header .pv-date {
-        font-size: 10px;
-        color: #333;
+    .preview-page .pv-header .pv-barcode-area {
+        flex-shrink: 0;
+    }
+    .preview-page .pv-header .pv-barcode-area svg {
+        height: 36px;
+        width: auto;
     }
     .preview-page .pv-product {
         text-align: center;
@@ -374,7 +383,6 @@
         border: 2px solid #000;
         text-align: center;
         vertical-align: middle;
-        width: 50%;
     }
     .preview-page .pv-table th {
         font-size: 12px;
@@ -387,13 +395,8 @@
         font-weight: 900;
         padding: 6px 4px;
     }
-    .preview-page .pv-table .pv-barcode-cell {
-        padding: 6px 30px;
-        font-size: 0;
-    }
-    .preview-page .pv-table .pv-barcode-cell svg {
-        max-width: 100%;
-        height: auto;
+    .preview-page .pv-table td.pv-qty {
+        font-size: 52px;
     }
 
     /* ========================================
@@ -461,7 +464,7 @@
             justify-content: space-between;
         }
 
-        /* 헤더: 타이틀 + 날짜 (컴팩트) */
+        /* 헤더: 입고일 | 현 품 표 | 바코드 */
         .print-label-header {
             display: flex !important;
             justify-content: space-between;
@@ -470,16 +473,25 @@
             padding-bottom: 2mm;
             margin-bottom: 2mm;
         }
+        .print-label-header .label-date {
+            font-size: 11pt;
+            color: #333;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
         .print-label-header .label-title {
             font-size: 16pt;
             font-weight: 800;
             color: #000;
             letter-spacing: 2px;
+            flex-shrink: 0;
         }
-        .print-label-header .label-date {
-            font-size: 11pt;
-            color: #333;
-            font-weight: 500;
+        .print-label-header .label-barcode-area {
+            flex-shrink: 0;
+        }
+        .print-label-header .label-barcode-area svg {
+            height: 18mm;
+            width: auto;
         }
 
         /* 상품명 — 최대 크기 */
@@ -495,7 +507,7 @@
             word-break: keep-all;
         }
 
-        /* 정보 테이블 2×2 */
+        /* 정보 테이블: 입고수량(2×1) + 로트번호(1×1) + 유통기한(1×1) */
         .print-info-table {
             width: 100%;
             border-collapse: collapse;
@@ -506,7 +518,6 @@
             border: 2px solid #000;
             text-align: center;
             vertical-align: middle;
-            width: 50%;
         }
         .print-info-table th {
             font-size: 15pt;
@@ -522,17 +533,7 @@
             padding: 3mm 2mm;
         }
         #printQuantity {
-            font-size: 80pt;
-        }
-
-        /* 바코드 셀 — 좌우 여백으로 인식률 확보 */
-        .print-barcode-cell {
-            padding: 3mm 12mm !important;
-            font-size: 0 !important;
-        }
-        .print-barcode-cell svg {
-            max-width: 100%;
-            height: auto;
+            font-size: 100pt;
         }
 
         @page {
@@ -703,18 +704,16 @@
         <div class="preview-body">
             <div class="preview-page">
                 <div class="pv-header">
-                    <div class="pv-title">현 품 표</div>
                     <div class="pv-date" id="pvDate"></div>
+                    <div class="pv-title">현 품 표</div>
+                    <div class="pv-barcode-area"><svg id="pvBarcode"></svg></div>
                 </div>
                 <div class="pv-product">
                     <div class="pv-product-name" id="pvProductName"></div>
                 </div>
                 <table class="pv-table">
-                    <tr><th>입고수량</th><th>바코드</th></tr>
-                    <tr>
-                        <td id="pvQuantity"></td>
-                        <td class="pv-barcode-cell"><svg id="pvBarcode"></svg></td>
-                    </tr>
+                    <tr><th colspan="2">입고수량</th></tr>
+                    <tr><td colspan="2" class="pv-qty" id="pvQuantity"></td></tr>
                     <tr><th>로트번호</th><th>유통기한</th></tr>
                     <tr>
                         <td id="pvLot"></td>
@@ -729,10 +728,11 @@
 <!-- 현품표 인쇄용 (화면에서 숨김, 인쇄 시만 표시) -->
 <div id="printLabelContainer">
     <div class="print-label">
-        <!-- 헤더 -->
+        <!-- 헤더: 입고일 | 현 품 표 | 바코드 -->
         <div class="print-label-header">
-            <div class="label-title">현 품 표</div>
             <div class="label-date" id="printDate"></div>
+            <div class="label-title">현 품 표</div>
+            <div class="label-barcode-area"><svg id="printBarcode"></svg></div>
         </div>
 
         <!-- 상품명 -->
@@ -740,15 +740,13 @@
             <div class="label-product-name" id="printProductName"></div>
         </div>
 
-        <!-- 정보 테이블 2×2 -->
+        <!-- 정보 테이블: 입고수량(2×1) + 로트번호/유통기한(1×1) -->
         <table class="print-info-table">
             <tr>
-                <th>입고수량</th>
-                <th>바코드</th>
+                <th colspan="2">입고수량</th>
             </tr>
             <tr>
-                <td id="printQuantity"></td>
-                <td class="print-barcode-cell"><svg id="printBarcode"></svg></td>
+                <td colspan="2" id="printQuantity"></td>
             </tr>
             <tr>
                 <th>로트번호</th>
@@ -1031,14 +1029,14 @@ function previewLabel(idx) {
     try {
         JsBarcode(barcodeSvg, barcodeValue, {
             format: 'CODE128',
-            width: 2.5,
-            height: 80,
+            width: 1.5,
+            height: 32,
             displayValue: true,
-            fontSize: 18,
+            fontSize: 11,
             font: 'monospace',
             fontOptions: 'bold',
-            textMargin: 4,
-            margin: 5,
+            textMargin: 2,
+            margin: 2,
         });
     } catch (e) {
         barcodeSvg.innerHTML = '';
@@ -1080,21 +1078,21 @@ function printLabel(idx) {
     document.getElementById('printLot').textContent = record.lot_number || '-';
     document.getElementById('printDate').textContent = '입고일: ' + (record.created_at || '');
 
-    // 바코드 생성 (가로 A4에 맞게 크게)
+    // 바코드 생성 (헤더 영역에 배치)
     const barcodeSvg = document.getElementById('printBarcode');
     const barcodeValue = record.product_barcode || '0000000000000';
 
     try {
         JsBarcode(barcodeSvg, barcodeValue, {
             format: 'CODE128',
-            width: 4,
-            height: 140,
+            width: 2.5,
+            height: 60,
             displayValue: true,
-            fontSize: 32,
+            fontSize: 18,
             font: 'monospace',
             fontOptions: 'bold',
-            textMargin: 6,
-            margin: 5,
+            textMargin: 3,
+            margin: 3,
         });
     } catch (e) {
         barcodeSvg.innerHTML = '';
