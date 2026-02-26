@@ -51,14 +51,23 @@ else:
 MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 # Django 4.2+ STORAGES 설정
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
+# base.py에서 R2 설정 시 STORAGES['default']가 S3Boto3Storage로 설정됨
+# 여기서는 staticfiles만 WhiteNoise로 오버라이드하고, default는 base.py 설정을 유지
+if not (R2_ACCESS_KEY_ID and R2_BUCKET_NAME):
+    # R2 미설정 시 로컬 파일 시스템 사용
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+else:
+    # R2 설정 시 base.py의 STORAGES 유지, staticfiles만 WhiteNoise로 변경
+    STORAGES['staticfiles'] = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
+    }
 
 # 정적 파일 경로
 STATIC_ROOT = BASE_DIR / 'staticfiles'
