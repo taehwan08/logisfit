@@ -10,6 +10,8 @@ def uppercase_barcodes(apps, schema_editor):
     동일 대문자 바코드를 가진 로케이션이 여러 개 있으면,
     첫 번째 것을 남기고 나머지의 재고 기록(InventoryRecord)을
     첫 번째 로케이션으로 옮긴 뒤 중복 로케이션을 삭제한다.
+
+    주의: unique 제약 위반을 피하기 위해 중복 삭제 → 바코드 변경 순서로 처리.
     """
     Location = apps.get_model('inventory', 'Location')
     InventoryRecord = apps.get_model('inventory', 'InventoryRecord')
@@ -26,16 +28,17 @@ def uppercase_barcodes(apps, schema_editor):
         # 대표 로케이션 (가장 먼저 생성된 것)
         primary = locations[0]
 
-        if primary.barcode != upper_barcode:
-            primary.barcode = upper_barcode
-            primary.save(update_fields=['barcode'])
-
-        # 중복 로케이션 병합
+        # ① 먼저 중복 로케이션을 병합·삭제 (unique 제약 위반 방지)
         for dup in locations[1:]:
             # 재고 기록을 대표 로케이션으로 이관
             InventoryRecord.objects.filter(location=dup).update(location=primary)
             # 중복 로케이션 삭제
             dup.delete()
+
+        # ② 중복이 제거된 후 바코드를 대문자로 변경
+        if primary.barcode != upper_barcode:
+            primary.barcode = upper_barcode
+            primary.save(update_fields=['barcode'])
 
 
 def noop(apps, schema_editor):
