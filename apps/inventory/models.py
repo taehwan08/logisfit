@@ -130,6 +130,7 @@ class InboundRecord(models.Model):
     lot_number = models.CharField('로트번호', max_length=50, blank=True, default='')
     status = models.CharField('상태', max_length=20, choices=STATUS_CHOICES, default='pending')
     memo = models.TextField('메모', blank=True, default='')
+    image = models.ImageField('입고 이미지', upload_to='inbound/%Y/%m/', blank=True, default='')
 
     registered_by = models.ForeignKey(
         'accounts.User', on_delete=models.SET_NULL, null=True,

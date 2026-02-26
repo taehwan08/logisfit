@@ -1221,6 +1221,7 @@ def get_inbound_records(request):
                     if r.completed_at else ''
                 ),
                 'created_at': timezone.localtime(r.created_at).strftime('%Y-%m-%d %H:%M'),
+                'image_url': r.image.url if r.image else '',
             }
             for r in records
         ],
@@ -1234,17 +1235,24 @@ def get_inbound_records(request):
 def create_inbound(request):
     """입고를 등록한다.
 
-    JSON body:
+    multipart/form-data 또는 JSON body:
         product_id: 상품 ID (필수)
         quantity: 입고 수량 (필수)
         expiry_date: 유통기한
         lot_number: 로트번호
         memo: 메모
+        image: 입고 이미지 (선택)
     """
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+    content_type = request.content_type or ''
+    if 'multipart/form-data' in content_type:
+        data = request.POST
+        image = request.FILES.get('image')
+    else:
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+        image = None
 
     product_id = data.get('product_id')
     quantity = data.get('quantity')
@@ -1277,6 +1285,7 @@ def create_inbound(request):
         lot_number=lot_number,
         memo=memo,
         registered_by=request.user,
+        image=image or '',
     )
 
     # 슬랙 알림 (비동기)
@@ -1300,5 +1309,6 @@ def create_inbound(request):
             'memo': record.memo,
             'registered_by': request.user.name,
             'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
+            'image_url': record.image.url if record.image else '',
         },
     })

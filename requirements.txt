@@ -41,6 +41,10 @@ resend>=2.0
 # 폼 스타일링
 django-widget-tweaks>=1.4
 
+# 클라우드 스토리지 (Cloudflare R2)
+django-storages>=1.14
+boto3>=1.28
+
 # Production 서버
 gunicorn>=21.2
 whitenoise>=6.6

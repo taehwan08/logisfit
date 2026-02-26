@@ -50,6 +50,7 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     'corsheaders',
     'widget_tweaks',
+    'storages',
 ]
 
 LOCAL_APPS = [
@@ -279,6 +280,44 @@ SLACK_WEBHOOK_INBOUND = env('SLACK_WEBHOOK_INBOUND', default='')        # 입고
 
 SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
 SITE_URL = env('SITE_URL', default='http://localhost:8000')
+
+
+# ============================================================================
+# Cloudflare R2 스토리지 설정
+# ============================================================================
+
+R2_ACCESS_KEY_ID = env('R2_ACCESS_KEY_ID', default='')
+R2_SECRET_ACCESS_KEY = env('R2_SECRET_ACCESS_KEY', default='')
+R2_BUCKET_NAME = env('R2_BUCKET_NAME', default='')
+R2_ENDPOINT_URL = env('R2_ENDPOINT_URL', default='')  # https://<account_id>.r2.cloudflarestorage.com
+R2_CUSTOM_DOMAIN = env('R2_CUSTOM_DOMAIN', default='')  # 퍼블릭 도메인 (선택)
+
+# R2 설정이 있으면 미디어 파일에 R2 사용
+if R2_ACCESS_KEY_ID and R2_BUCKET_NAME:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+            'OPTIONS': {
+                'access_key': R2_ACCESS_KEY_ID,
+                'secret_key': R2_SECRET_ACCESS_KEY,
+                'bucket_name': R2_BUCKET_NAME,
+                'endpoint_url': R2_ENDPOINT_URL,
+                'region_name': 'auto',
+                'default_acl': None,
+                'signature_version': 's3v4',
+                'object_parameters': {
+                    'CacheControl': 'max-age=86400',
+                },
+            },
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
+    if R2_CUSTOM_DOMAIN:
+        MEDIA_URL = f'https://{R2_CUSTOM_DOMAIN}/'
+    else:
+        MEDIA_URL = f'{R2_ENDPOINT_URL}/{R2_BUCKET_NAME}/'
 
 
 # ============================================================================

@@ -147,6 +147,42 @@
         font-weight: 700;
     }
 
+    /* 입고 이미지 썸네일 */
+    .inbound-thumb {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: opacity 0.2s;
+    }
+    .inbound-thumb:hover {
+        opacity: 0.7;
+    }
+
+    /* 이미지 확대 모달 */
+    .image-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 10001;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+    }
+    .image-overlay.show {
+        display: flex;
+    }
+    .image-overlay img {
+        max-width: 90vw;
+        max-height: 90vh;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+
     /* 인쇄 버튼 */
     .btn-print-label {
         padding: 0.25rem 0.5rem;
@@ -474,6 +510,24 @@
                         </div>
                     </div>
 
+                    <!-- 이미지 업로드 -->
+                    <div class="mt-3">
+                        <label class="form-label">입고 이미지</label>
+                        <div class="d-flex align-items-center gap-3">
+                            <label class="btn btn-outline-secondary btn-sm" for="inboundImage" style="cursor:pointer;">
+                                <i class="bi bi-camera me-1"></i>사진 선택
+                            </label>
+                            <input type="file" id="inboundImage" accept="image/*" style="display:none;" onchange="previewImage(this)">
+                            <span id="imageFileName" class="text-muted" style="font-size:0.82rem;">선택된 파일 없음</span>
+                            <button type="button" id="btnRemoveImage" class="btn btn-outline-danger btn-sm" style="display:none;" onclick="removeImage()">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                        <div id="imagePreview" class="mt-2" style="display:none;">
+                            <img id="imagePreviewImg" src="" alt="미리보기" style="max-height:120px; border-radius:8px; border:1px solid #dee2e6;">
+                        </div>
+                    </div>
+
                     <div class="mt-3 text-end">
                         <button type="button" class="btn btn-primary px-4" onclick="createInbound()" id="btnCreateInbound">
                             <i class="bi bi-plus-lg me-1"></i> 입고 등록
@@ -536,6 +590,11 @@
         </div>
     </div>
 
+</div>
+
+<!-- 이미지 확대 모달 -->
+<div id="imageOverlay" class="image-overlay" onclick="closeImageOverlay()">
+    <img id="imageOverlayImg" src="" alt="입고 이미지">
 </div>
 
 <!-- 현품표 미리보기 모달 -->
@@ -714,19 +773,24 @@ function createInbound() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 등록 중...';
 
+    const formData = new FormData();
+    formData.append('product_id', selectedProductId);
+    formData.append('quantity', parseInt(quantity));
+    formData.append('expiry_date', document.getElementById('inboundExpiry').value.trim());
+    formData.append('lot_number', document.getElementById('inboundLot').value.trim());
+    formData.append('memo', document.getElementById('inboundMemo').value.trim());
+
+    const imageFile = document.getElementById('inboundImage').files[0];
+    if (imageFile) {
+        formData.append('image', imageFile);
+    }
+
     fetch('/inventory/api/inbound/create/', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
             'X-CSRFToken': csrfToken,
         },
-        body: JSON.stringify({
-            product_id: selectedProductId,
-            quantity: parseInt(quantity),
-            expiry_date: document.getElementById('inboundExpiry').value.trim(),
-            lot_number: document.getElementById('inboundLot').value.trim(),
-            memo: document.getElementById('inboundMemo').value.trim(),
-        }),
+        body: formData,
     })
     .then(r => r.json())
     .then(data => {
@@ -737,6 +801,7 @@ function createInbound() {
             document.getElementById('inboundExpiry').value = '';
             document.getElementById('inboundLot').value = '';
             document.getElementById('inboundMemo').value = '';
+            removeImage();
             loadRecords();
             showToast(data.message, 'success');
         } else {
@@ -797,11 +862,18 @@ function loadRecords() {
             tbody.innerHTML = data.records.map((r, idx) => `
                 <tr>
                     <td class="ps-3">
-                        <div class="fw-medium">${escapeHtml(r.product_name)}</div>
-                        ${r.product_display_name && r.product_display_name !== r.product_name
-                            ? `<small class="text-muted">${escapeHtml(r.product_display_name)}</small>`
-                            : ''}
-                        ${r.memo ? `<div class="text-muted" style="font-size:0.78rem;"><i class="bi bi-chat-text me-1"></i>${escapeHtml(r.memo)}</div>` : ''}
+                        <div class="d-flex align-items-start gap-2">
+                            ${r.image_url
+                                ? `<img src="${escapeHtml(r.image_url)}" alt="" class="inbound-thumb" onclick="showImage('${escapeHtml(r.image_url)}')" title="클릭하여 크게 보기">`
+                                : ''}
+                            <div>
+                                <div class="fw-medium">${escapeHtml(r.product_name)}</div>
+                                ${r.product_display_name && r.product_display_name !== r.product_name
+                                    ? `<small class="text-muted">${escapeHtml(r.product_display_name)}</small>`
+                                    : ''}
+                                ${r.memo ? `<div class="text-muted" style="font-size:0.78rem;"><i class="bi bi-chat-text me-1"></i>${escapeHtml(r.memo)}</div>` : ''}
+                            </div>
+                        </div>
                     </td>
                     <td><code style="font-size:0.82rem;">${escapeHtml(r.product_barcode)}</code></td>
                     <td class="text-center fw-bold">${r.quantity.toLocaleString()}</td>
@@ -948,6 +1020,41 @@ function printLabel(idx) {
 }
 
 // ============================================================================
+// 이미지 관련
+// ============================================================================
+
+function previewImage(input) {
+    const file = input.files[0];
+    if (file) {
+        document.getElementById('imageFileName').textContent = file.name;
+        document.getElementById('btnRemoveImage').style.display = '';
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('imagePreviewImg').src = e.target.result;
+            document.getElementById('imagePreview').style.display = '';
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function removeImage() {
+    document.getElementById('inboundImage').value = '';
+    document.getElementById('imageFileName').textContent = '선택된 파일 없음';
+    document.getElementById('btnRemoveImage').style.display = 'none';
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('imagePreviewImg').src = '';
+}
+
+function showImage(url) {
+    document.getElementById('imageOverlayImg').src = url;
+    document.getElementById('imageOverlay').classList.add('show');
+}
+
+function closeImageOverlay() {
+    document.getElementById('imageOverlay').classList.remove('show');
+}
+
+// ============================================================================
 // 유틸리티
 // ============================================================================
 
@@ -976,9 +1083,12 @@ function showToast(message, type) {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// ESC 키로 미리보기 닫기
+// ESC 키로 모달 닫기
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closePreview();
+    if (e.key === 'Escape') {
+        closePreview();
+        closeImageOverlay();
+    }
 });
 
 // 페이지 로드 시 기록 조회
