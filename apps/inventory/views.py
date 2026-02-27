@@ -797,6 +797,41 @@ def get_records(request):
 @csrf_exempt
 @login_required
 @staff_required
+@require_POST
+def update_record(request, record_id):
+    """재고 기록의 수량/유통기한/로트번호를 수정한다."""
+    try:
+        record = InventoryRecord.objects.select_related('location').get(pk=record_id)
+    except InventoryRecord.DoesNotExist:
+        return JsonResponse({'error': '기록을 찾을 수 없습니다.'}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    # 수량
+    try:
+        quantity = int(data.get('quantity', record.quantity))
+        if quantity < 1:
+            return JsonResponse({'error': '수량은 1 이상이어야 합니다.'}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': '올바른 수량을 입력해주세요.'}, status=400)
+
+    record.quantity = quantity
+    record.expiry_date = data.get('expiry_date', record.expiry_date or '').strip()
+    record.lot_number = data.get('lot_number', record.lot_number or '').strip()
+    record.save(update_fields=['quantity', 'expiry_date', 'lot_number'])
+
+    return JsonResponse({
+        'success': True,
+        'record': _record_to_dict(record),
+    })
+
+
+@csrf_exempt
+@login_required
+@staff_required
 def delete_record(request, record_id):
     """재고 기록을 삭제한다."""
     if request.method != 'DELETE':

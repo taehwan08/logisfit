@@ -343,6 +343,59 @@
     .rack-etc-cell code {
         font-weight: 600;
     }
+
+    /* 편집 모드 상세 패널 */
+    .rack-detail.edit-mode {
+        border: 2px solid #0d6efd;
+    }
+    .rack-detail.edit-mode .rack-detail-header {
+        background: #e8f0fe;
+    }
+    .edit-badge {
+        display: inline-block;
+        background: #0d6efd;
+        color: #fff;
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 10px;
+        margin-left: 8px;
+    }
+    .rack-edit-input {
+        border: 1px solid #0d6efd;
+        border-radius: 6px;
+        padding: 0.2rem 0.4rem;
+        font-size: 0.82rem;
+        width: 100%;
+        text-align: center;
+    }
+    .rack-edit-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(13,110,253,0.25);
+    }
+    .rack-edit-input.qty-input {
+        max-width: 70px;
+    }
+    .btn-save-record {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    .btn-delete-record {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    .btn-close-edit {
+        background: none;
+        border: 1px solid #6c757d;
+        border-radius: 6px;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.7rem;
+        color: #6c757d;
+        cursor: pointer;
+    }
+    .btn-close-edit:hover {
+        background: #f8f9fa;
+    }
 </style>
 {% endblock %}
 
@@ -909,7 +962,8 @@ function renderRackView(groups) {
                             onmouseenter="showRackTooltip(event, '${escapeHtml(cellData.barcode)}')"
                             onmousemove="moveRackTooltip(event)"
                             onmouseleave="hideRackTooltip()"
-                            onclick="selectRackCell(event, '${escapeHtml(cellData.barcode)}')">
+                            onclick="selectRackCell(event, '${escapeHtml(cellData.barcode)}')"
+                            ondblclick="editRackCell(event, '${escapeHtml(cellData.barcode)}')">
                             <span class="cell-qty" style="color:${txtColor}">${cellData.totalQty ? cellData.totalQty.toLocaleString() : '-'}</span>
                             ${!isEmpty ? `<span class="cell-types" style="color:${txtColor}">${cellData.productCount}종</span>` : ''}
                         </div>`;
@@ -950,7 +1004,8 @@ function renderRackView(groups) {
                 onmouseenter="showRackTooltip(event, '${escapeHtml(loc.barcode)}')"
                 onmousemove="moveRackTooltip(event)"
                 onmouseleave="hideRackTooltip()"
-                onclick="selectRackCell(event, '${escapeHtml(loc.barcode)}')">
+                onclick="selectRackCell(event, '${escapeHtml(loc.barcode)}')"
+                ondblclick="editRackCell(event, '${escapeHtml(loc.barcode)}')">
                 <code>${escapeHtml(loc.barcode)}</code>
                 <span style="margin-left:4px; font-weight:700;">${loc.totalQty ? loc.totalQty.toLocaleString() + '개' : '-'}</span>
             </div>`;
@@ -1100,6 +1155,306 @@ function renderRackDetail(data) {
             </table>
         </div>
     `;
+}
+
+// ============================================================================
+// 더블클릭 편집 모드
+// ============================================================================
+
+let editingBarcode = null;  // 현재 편집 중인 로케이션 바코드
+
+/** 셀 더블클릭 → 편집 모드 상세 패널 */
+function editRackCell(event, barcode) {
+    event.stopPropagation();
+    event.preventDefault();
+    const data = window._rackCellMap && window._rackCellMap[barcode];
+    if (!data || !data.products || !data.products.length) return;
+
+    // 선택 상태
+    document.querySelectorAll('.rack-cell.selected, .rack-etc-cell.selected').forEach(el => el.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+    selectedRackCell = data;
+    editingBarcode = barcode;
+
+    renderRackDetailEdit(data);
+}
+
+/** 편집 모드 상세 패널 렌더링 */
+function renderRackDetailEdit(data) {
+    const detailEl = document.getElementById('rackDetail');
+    if (!detailEl || !data) return;
+
+    const p = data.parsed;
+    const locInfo = p
+        ? `<span class="text-muted ms-2">${p.center} ${p.dong} · ${p.col}라인 ${p.line}열 ${p.floor}층</span>`
+        : (data.locationName ? `<span class="text-muted ms-2">${escapeHtml(data.locationName)}</span>` : '');
+
+    const hasProducts = data.products && data.products.length > 0;
+
+    detailEl.innerHTML = `
+        <div class="rack-detail edit-mode">
+            <div class="rack-detail-header">
+                <div class="detail-title">
+                    <i class="bi bi-geo-alt text-primary me-2"></i>
+                    <code>${escapeHtml(data.barcode)}</code>
+                    ${locInfo}
+                    <span class="edit-badge"><i class="bi bi-pencil-fill me-1"></i>편집 모드</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="badge bg-primary">${data.productCount}종</span>
+                    <span class="badge bg-success">${data.totalQty.toLocaleString()}개</span>
+                    <button class="btn-close-edit" onclick="closeEditMode('${escapeHtml(data.barcode)}')" title="편집 닫기">
+                        <i class="bi bi-x-lg"></i> 닫기
+                    </button>
+                </div>
+            </div>
+            ${hasProducts ? `
+            <table class="table group-table mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">상품명</th>
+                        <th style="width:120px;">유통기한</th>
+                        <th style="width:120px;">로트번호</th>
+                        <th class="text-center" style="width:80px;">수량</th>
+                        <th>바코드</th>
+                        <th style="width:120px;" class="text-end pe-3">작업</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.products.map(pr => `
+                    <tr id="edit-row-${pr.id}">
+                        <td class="ps-3 product-name">${escapeHtml(pr.product_name || '-')}</td>
+                        <td>
+                            <input type="text" class="rack-edit-input" id="edit-expiry-${pr.id}"
+                                   value="${escapeHtml(pr.expiry_date || '')}" placeholder="-">
+                        </td>
+                        <td>
+                            <input type="text" class="rack-edit-input" id="edit-lot-${pr.id}"
+                                   value="${escapeHtml(pr.lot_number || '')}" placeholder="-">
+                        </td>
+                        <td class="text-center">
+                            <input type="number" class="rack-edit-input qty-input" id="edit-qty-${pr.id}"
+                                   value="${pr.quantity}" min="1">
+                        </td>
+                        <td><code>${escapeHtml(pr.barcode || '-')}</code></td>
+                        <td class="text-end pe-3">
+                            <button class="btn btn-sm btn-success btn-save-record me-1"
+                                    onclick="saveRecordEdit(${pr.id}, '${escapeHtml(data.barcode)}')" title="저장">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-delete-record"
+                                    onclick="deleteRecordFromRack(${pr.id}, '${escapeHtml(data.barcode)}')" title="삭제">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            ` : `
+            <div class="text-center text-muted py-3" style="font-size:0.85rem;">
+                등록된 상품이 없습니다.
+            </div>
+            `}
+        </div>
+    `;
+
+    // Enter키로 저장
+    if (hasProducts) {
+        data.products.forEach(pr => {
+            ['edit-expiry-', 'edit-lot-', 'edit-qty-'].forEach(prefix => {
+                const el = document.getElementById(prefix + pr.id);
+                if (el) {
+                    el.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') saveRecordEdit(pr.id, data.barcode);
+                    });
+                }
+            });
+        });
+    }
+}
+
+/** 편집 모드 닫기 → 읽기 전용으로 전환 */
+function closeEditMode(barcode) {
+    editingBarcode = null;
+    const data = window._rackCellMap && window._rackCellMap[barcode];
+    if (data) {
+        renderRackDetail(data);
+    } else {
+        const detailEl = document.getElementById('rackDetail');
+        if (detailEl) detailEl.innerHTML = '';
+    }
+}
+
+/** 기록 저장 */
+async function saveRecordEdit(recordId, locationBarcode) {
+    const qtyEl = document.getElementById(`edit-qty-${recordId}`);
+    const expiryEl = document.getElementById(`edit-expiry-${recordId}`);
+    const lotEl = document.getElementById(`edit-lot-${recordId}`);
+
+    if (!qtyEl) return;
+
+    const quantity = parseInt(qtyEl.value);
+    if (!quantity || quantity < 1) {
+        alert('수량은 1 이상이어야 합니다.');
+        qtyEl.focus();
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/inventory/api/records/${recordId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                quantity: quantity,
+                expiry_date: expiryEl ? expiryEl.value.trim() : '',
+                lot_number: lotEl ? lotEl.value.trim() : '',
+            }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // 캐시 업데이트
+            updateRackCellCache(locationBarcode, recordId, data.record);
+            // 셀 DOM 업데이트
+            refreshRackCellDOM(locationBarcode);
+            // 편집 패널 새로고침
+            const cellData = window._rackCellMap[locationBarcode];
+            if (cellData) renderRackDetailEdit(cellData);
+        } else {
+            alert(data.error || '저장에 실패했습니다.');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+/** 기록 삭제 */
+async function deleteRecordFromRack(recordId, locationBarcode) {
+    if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+
+    try {
+        const resp = await fetch(`/inventory/api/records/${recordId}/delete/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken },
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // 캐시에서 삭제
+            removeFromRackCellCache(locationBarcode, recordId);
+            // 셀 DOM 업데이트
+            refreshRackCellDOM(locationBarcode);
+            // 편집 패널 새로고침
+            const cellData = window._rackCellMap[locationBarcode];
+            if (cellData && cellData.products.length > 0) {
+                renderRackDetailEdit(cellData);
+            } else {
+                // 모든 상품 삭제됨
+                editingBarcode = null;
+                const detailEl = document.getElementById('rackDetail');
+                if (detailEl) detailEl.innerHTML = '';
+            }
+        } else {
+            alert(data.error || '삭제에 실패했습니다.');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+/** 캐시 업데이트: 기록 수정 후 */
+function updateRackCellCache(barcode, recordId, updatedRecord) {
+    const cellData = window._rackCellMap[barcode];
+    if (!cellData) return;
+
+    let totalQty = 0;
+    cellData.products = cellData.products.map(p => {
+        if (p.id === recordId) {
+            p.quantity = updatedRecord.quantity;
+            p.expiry_date = updatedRecord.expiry_date;
+            p.lot_number = updatedRecord.lot_number;
+        }
+        totalQty += p.quantity;
+        return p;
+    });
+    cellData.totalQty = totalQty;
+}
+
+/** 캐시 업데이트: 기록 삭제 후 */
+function removeFromRackCellCache(barcode, recordId) {
+    const cellData = window._rackCellMap[barcode];
+    if (!cellData) return;
+
+    cellData.products = cellData.products.filter(p => p.id !== recordId);
+    cellData.productCount = cellData.products.length;
+    cellData.totalQty = cellData.products.reduce((sum, p) => sum + p.quantity, 0);
+}
+
+/** 셀 DOM 갱신: 수량/색상 업데이트 */
+function refreshRackCellDOM(barcode) {
+    const cellData = window._rackCellMap[barcode];
+    if (!cellData) return;
+
+    // 전체 최대 수량 재계산
+    let globalMax = 0;
+    Object.values(window._rackCellMap).forEach(c => {
+        if (c.totalQty > globalMax) globalMax = c.totalQty;
+    });
+
+    // 해당 바코드의 셀 엘리먼트 찾기
+    const cellEl = document.querySelector(`[data-barcode="${barcode}"]`);
+    if (!cellEl) return;
+
+    const isEmpty = !cellData.totalQty;
+    const bgColor = getRackCellColor(cellData.totalQty, globalMax);
+    const txtColor = getRackTextColor(cellData.totalQty, globalMax);
+
+    // 스타일 업데이트
+    cellEl.className = cellEl.className.includes('rack-etc-cell')
+        ? `rack-etc-cell${cellEl.classList.contains('selected') ? ' selected' : ''}`
+        : `rack-cell${isEmpty ? ' empty' : ''}${cellEl.classList.contains('selected') ? ' selected' : ''}`;
+
+    if (cellEl.classList.contains('rack-etc-cell')) {
+        // 기타 셀
+        cellEl.style.background = !isEmpty ? bgColor : '';
+        cellEl.style.color = !isEmpty ? txtColor : '';
+        const spanEl = cellEl.querySelector('span');
+        if (spanEl) {
+            spanEl.textContent = cellData.totalQty ? cellData.totalQty.toLocaleString() + '개' : '-';
+            spanEl.style.fontWeight = '700';
+        }
+    } else {
+        // 일반 랙 셀
+        cellEl.style.background = !isEmpty ? bgColor : '';
+        if (isEmpty) cellEl.style.borderStyle = 'dashed';
+        else cellEl.style.borderStyle = '';
+
+        const qtySpan = cellEl.querySelector('.cell-qty');
+        if (qtySpan) {
+            qtySpan.textContent = cellData.totalQty ? cellData.totalQty.toLocaleString() : '-';
+            qtySpan.style.color = txtColor;
+        }
+
+        const typesSpan = cellEl.querySelector('.cell-types');
+        if (!isEmpty && cellData.productCount > 0) {
+            if (typesSpan) {
+                typesSpan.textContent = cellData.productCount + '종';
+                typesSpan.style.color = txtColor;
+            } else {
+                const newSpan = document.createElement('span');
+                newSpan.className = 'cell-types';
+                newSpan.style.color = txtColor;
+                newSpan.textContent = cellData.productCount + '종';
+                cellEl.appendChild(newSpan);
+            }
+        } else if (typesSpan) {
+            typesSpan.remove();
+        }
+    }
 }
 
 // ============================================================================
