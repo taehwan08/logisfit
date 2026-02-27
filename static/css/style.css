@@ -172,6 +172,29 @@ body {
     padding: 0.5rem;
 }
 
+/* 페이지 제목 (반응형) */
+.navbar-page-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+@media (max-width: 991.98px) {
+    .navbar-page-title {
+        font-size: 0.9rem;
+        max-width: 55vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .navbar-page-title {
+        font-size: 0.85rem;
+        max-width: 45vw;
+    }
+}
+
 .notification-badge {
     position: absolute;
     top: 0;
@@ -393,17 +416,196 @@ body {
 }
 
 /* ============================================
-   반응형
+   반응형 — 태블릿 (≤991px)
+   ============================================ */
+
+@media (max-width: 991.98px) {
+    .container-fluid.py-4 {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    .card-body {
+        padding: 1rem;
+    }
+
+    .card-header {
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* ============================================
+   반응형 — 모바일 (≤767px)
    ============================================ */
 
 @media (max-width: 767.98px) {
-    .auth-card {
-        padding: 1.5rem;
+    /* 인증 */
+    .auth-card { padding: 1.5rem; }
+    .auth-logo { height: 60px; }
+    .auth-wrapper { padding: 1rem; }
+
+    /* 콘텐츠 */
+    .container-fluid.py-4 { padding: 0.75rem !important; }
+
+    /* 카드 */
+    .card { border-radius: 0.5rem; }
+    .card-body { padding: 0.75rem; }
+    .card-header { padding: 0.625rem 0.75rem; font-size: 0.9rem; }
+
+    /* 타이포그래피 */
+    h2, .h2 { font-size: 1.25rem; }
+    h3, .h3 { font-size: 1.1rem; }
+    h4, .h4 { font-size: 1rem; }
+    h5, .h5 { font-size: 0.95rem; }
+
+    /* 테이블 */
+    .table { font-size: 0.8rem; }
+    .table th, .table td { padding: 0.4rem 0.5rem; white-space: nowrap; }
+
+    /* 버튼 터치 최적화 */
+    .btn { min-height: 40px; padding: 0.5rem 0.875rem; font-size: 0.85rem; }
+    .btn-sm { min-height: 34px; padding: 0.35rem 0.625rem; font-size: 0.8rem; }
+
+    /* 폼 터치 최적화 */
+    .form-control, .form-select { min-height: 40px; font-size: 16px !important; }
+    .form-control-sm, .form-select-sm { min-height: 34px; }
+    .input-group .form-control { min-height: 40px; }
+    .form-check-input { width: 1.25em; height: 1.25em; }
+
+    /* 모달 */
+    .modal-dialog { margin: 0.5rem; }
+    .modal-lg, .modal-xl { max-width: calc(100vw - 1rem); }
+    .modal-body { padding: 0.75rem; }
+    .modal-header, .modal-footer { padding: 0.625rem 0.75rem; }
+
+    /* 배지 */
+    .badge { font-size: 0.7em; padding: 0.3em 0.6em; }
+
+    /* 네비게이션 바 */
+    .navbar { padding: 0.375rem 0.75rem; }
+
+    /* 토스트/메시지 */
+    .toast-container { left: 0.5rem !important; right: 0.5rem !important; max-width: 100% !important; }
+    .auth-wrapper .messages-container { left: 0.5rem; right: 0.5rem; max-width: none; }
+
+    /* 드롭다운 */
+    .dropdown-menu { font-size: 0.85rem; }
+
+    /* 인라인 고정너비 오버라이드 */
+    [style*="max-width: 500px"],
+    [style*="max-width: 350px"],
+    [style*="max-width:500px"],
+    [style*="max-width:350px"] {
+        max-width: 100% !important;
+    }
+    [style*="width: 200px"],
+    [style*="width:200px"] {
+        width: 100% !important;
     }
 
-    .auth-logo {
-        height: 60px;
+    /* Flex 줄바꿈 */
+    .d-flex.gap-2 { flex-wrap: wrap; }
+    .btn-group { flex-wrap: wrap; }
+
+    /* 푸터 */
+    .footer { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
+}
+
+/* ============================================
+   반응형 — 소형 모바일 (≤575px)
+   ============================================ */
+
+@media (max-width: 575.98px) {
+    .container-fluid.py-4 { padding: 0.5rem !important; }
+    .card-body { padding: 0.625rem; }
+
+    .table { font-size: 0.75rem; }
+    .table th, .table td { padding: 0.3rem 0.4rem; }
+
+    /* 소형 모바일 검색영역 스택 */
+    .row.g-2 > [class*="col-md-"],
+    .row.g-3 > [class*="col-md-"] {
+        flex: 0 0 100%;
+        max-width: 100%;
     }
+
+    /* 테이블 스크롤 힌트 (우측 그라데이션) */
+    .table-responsive {
+        position: relative;
+    }
+    .table-responsive::after {
+        content: '';
+        position: absolute;
+        top: 0; right: 0; bottom: 0;
+        width: 20px;
+        background: linear-gradient(to left, rgba(0,0,0,0.04), transparent);
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .auth-card { padding: 1.25rem; border-radius: 0.75rem; }
+    .auth-title { font-size: 1.4rem; }
+}
+
+/* ============================================
+   터치 디바이스 최적화
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+    .btn, .nav-link, .dropdown-item, .sidebar-link {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .sidebar-link { padding: 0.5rem 1rem; }
+
+    .table td, .table th {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+
+    .form-control, .form-select { min-height: 44px; }
+
+    .form-check {
+        padding-left: 2em;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .form-check-input {
+        width: 1.5em;
+        height: 1.5em;
+        margin-top: 0;
+    }
+}
+
+/* ============================================
+   PWA standalone 모드 (노치/홈바 대응)
+   ============================================ */
+
+@media all and (display-mode: standalone) {
+    body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .sidebar { padding-top: env(safe-area-inset-top); }
+    .navbar { padding-top: max(0.375rem, env(safe-area-inset-top)); }
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .footer {
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    }
+}
+
+/* ============================================
+   가로 스크롤 테이블 부드러운 스크롤
+   ============================================ */
+
+.table-responsive {
+    -webkit-overflow-scrolling: touch;
 }
 
 /* 사이드바 오버레이 (모바일) */

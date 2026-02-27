@@ -7,6 +7,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // 사이드바 토글 (모바일)
     initSidebarToggle();
 
+    // 사이드바 스와이프 제스처 (모바일)
+    initSidebarSwipe();
+
     // 메시지 자동 닫기
     initAutoCloseMessages();
 
@@ -59,6 +62,66 @@ function initSidebarToggle() {
             overlay.classList.remove('show');
         }
     });
+}
+
+/**
+ * 사이드바 스와이프 제스처 (모바일)
+ * - 왼쪽 가장자리에서 오른쪽 스와이프: 사이드바 열기
+ * - 사이드바 위에서 왼쪽 스와이프: 사이드바 닫기
+ */
+function initSidebarSwipe() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (!sidebar) return;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let swiping = false;
+
+    const EDGE_WIDTH = 30;       // 가장자리 감지 영역 (px)
+    const SWIPE_THRESHOLD = 60;  // 스와이프 인식 최소 거리 (px)
+
+    // 스와이프 시작
+    document.addEventListener('touchstart', function(e) {
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+
+        // 사이드바 닫혀있을 때: 왼쪽 가장자리에서만 시작
+        if (!sidebar.classList.contains('show') && touchStartX <= EDGE_WIDTH) {
+            swiping = true;
+        }
+        // 사이드바 열려있을 때: 사이드바/오버레이 위에서 시작
+        else if (sidebar.classList.contains('show')) {
+            swiping = true;
+        }
+    }, { passive: true });
+
+    // 스와이프 종료
+    document.addEventListener('touchend', function(e) {
+        if (!swiping) return;
+        swiping = false;
+
+        const touch = e.changedTouches[0];
+        const diffX = touch.clientX - touchStartX;
+        const diffY = Math.abs(touch.clientY - touchStartY);
+
+        // 수직 스크롤이 더 크면 무시
+        if (diffY > Math.abs(diffX)) return;
+
+        const isOpen = sidebar.classList.contains('show');
+
+        // 오른쪽 스와이프 → 열기
+        if (!isOpen && diffX > SWIPE_THRESHOLD) {
+            sidebar.classList.add('show');
+            if (overlay) overlay.classList.add('show');
+        }
+        // 왼쪽 스와이프 → 닫기
+        else if (isOpen && diffX < -SWIPE_THRESHOLD) {
+            sidebar.classList.remove('show');
+            if (overlay) overlay.classList.remove('show');
+        }
+    }, { passive: true });
 }
 
 /**

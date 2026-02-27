@@ -233,6 +233,20 @@
         color: #6c757d;
         padding-top: 2px;
     }
+    /* 랙 뷰 모바일 대응 */
+    @media (max-width: 767.98px) {
+        .rack-col-content { padding: 0.5rem; }
+        .rack-cell { width: 44px; height: 34px; font-size: 0.65rem; }
+        .rack-cell .cell-qty { font-size: 0.68rem; }
+        .rack-cell .cell-types { font-size: 0.5rem; }
+        .rack-floor-label { width: 26px; height: 34px; font-size: 0.6rem; }
+        .rack-line-label { width: 44px; font-size: 0.55rem; }
+        .rack-col-tab { padding: 0.35rem 0.6rem; font-size: 0.65rem; }
+    }
+    @media (hover: none) and (pointer: coarse) {
+        .rack-cell { min-width: 44px; min-height: 38px; }
+    }
+
     /* 히트맵 범례 */
     .rack-heatmap-legend {
         display: flex;
