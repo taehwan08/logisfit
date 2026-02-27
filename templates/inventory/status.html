@@ -99,60 +99,140 @@
         margin-bottom: 1rem;
     }
 
-    /* 트리맵 */
-    .treemap-wrapper {
+    /* 창고 랙 뷰 */
+    .rack-wrapper {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 1.5rem;
     }
-    .treemap-legend {
+    .rack-building {
+        border: 1px solid #dee2e6;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .rack-building-header {
+        background: #2c3e50;
+        color: #fff;
+        padding: 0.6rem 1rem;
+        font-weight: 700;
+        font-size: 0.95rem;
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        padding: 0.5rem 0;
+        align-items: center;
+        gap: 8px;
     }
-    .treemap-legend-item {
+    .rack-building-header .building-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .rack-columns-area {
+        display: flex;
+        gap: 0;
+        overflow-x: auto;
+        padding: 1rem;
+        background: #f8f9fa;
+    }
+    .rack-column {
+        flex-shrink: 0;
+        min-width: 0;
+    }
+    .rack-column-header {
+        text-align: center;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #495057;
+        padding: 0.3rem 0;
+        margin-bottom: 0.25rem;
+        border-bottom: 2px solid #adb5bd;
+    }
+    .rack-shelf-area {
+        display: flex;
+        flex-direction: column;
+    }
+    .rack-shelf-row {
+        display: flex;
+    }
+    .rack-cell {
+        width: 72px;
+        height: 54px;
+        border: 1px solid #dee2e6;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s;
+        position: relative;
+        font-size: 0.78rem;
+        background: #e9ecef;
+    }
+    .rack-cell:hover {
+        box-shadow: 0 0 0 2px #0d6efd;
+        z-index: 2;
+    }
+    .rack-cell.selected {
+        box-shadow: 0 0 0 3px #000;
+        z-index: 3;
+    }
+    .rack-cell .cell-qty {
+        font-weight: 800;
+        font-size: 0.95rem;
+        line-height: 1;
+    }
+    .rack-cell .cell-types {
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.8);
+        margin-top: 1px;
+    }
+    .rack-cell.empty {
+        background: #f0f0f0;
+        border-style: dashed;
+    }
+    .rack-cell.empty .cell-qty {
+        color: #ccc;
+        font-weight: 400;
+        font-size: 0.75rem;
+    }
+    .rack-floor-label {
+        width: 40px;
+        height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #6c757d;
+        flex-shrink: 0;
+    }
+    .rack-line-labels {
+        display: flex;
+    }
+    .rack-line-label {
+        width: 72px;
+        text-align: center;
+        font-size: 0.7rem;
+        color: #6c757d;
+        padding-top: 2px;
+    }
+    /* 히트맵 범례 */
+    .rack-heatmap-legend {
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 0.82rem;
-        color: #495057;
+        padding: 0.5rem 0;
+        font-size: 0.78rem;
+        color: #6c757d;
     }
-    .treemap-legend-swatch {
-        width: 14px;
+    .rack-heatmap-bar {
+        width: 180px;
         height: 14px;
-        border-radius: 3px;
-        flex-shrink: 0;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
     }
-    .treemap-container {
-        width: 100%;
-        height: 500px;
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        overflow: hidden;
-        position: relative;
-        background: #fafafa;
-    }
-    .treemap-container svg {
-        width: 100%;
-        height: 100%;
-    }
-    .treemap-cell {
-        cursor: pointer;
-        transition: opacity 0.15s;
-    }
-    .treemap-cell:hover {
-        opacity: 0.85;
-    }
-    .treemap-cell.selected rect {
-        stroke: #000 !important;
-        stroke-width: 3px !important;
-    }
-    .treemap-cell text {
-        pointer-events: none;
-        font-family: 'Noto Sans KR', sans-serif;
-    }
-    .treemap-tooltip {
+    /* 툴팁 */
+    .rack-tooltip {
         position: fixed;
         background: rgba(33, 37, 41, 0.95);
         color: #fff;
@@ -161,44 +241,81 @@
         font-size: 0.82rem;
         pointer-events: none;
         z-index: 9999;
-        max-width: 280px;
+        max-width: 300px;
         line-height: 1.5;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         display: none;
     }
-    .treemap-tooltip .tt-title {
+    .rack-tooltip .tt-title {
         font-weight: 700;
         font-size: 0.9rem;
         margin-bottom: 4px;
     }
-    .treemap-tooltip .tt-zone {
+    .rack-tooltip .tt-loc {
         color: #adb5bd;
         font-size: 0.75rem;
     }
-    .treemap-tooltip .tt-qty {
+    .rack-tooltip .tt-qty {
         font-weight: 700;
         color: #69b4ff;
     }
-    .treemap-tooltip .tt-products {
+    .rack-tooltip .tt-products {
         margin-top: 6px;
         border-top: 1px solid rgba(255,255,255,0.15);
         padding-top: 6px;
     }
-    .treemap-detail {
+    /* 상세 패널 */
+    .rack-detail {
         border: 1px solid #e9ecef;
         border-radius: 10px;
         overflow: hidden;
     }
-    .treemap-detail-header {
+    .rack-detail-header {
         background: #f8f9fa;
         padding: 0.75rem 1rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
-    .treemap-detail-header .detail-title {
+    .rack-detail-header .detail-title {
         font-weight: 600;
         font-size: 0.95rem;
+    }
+    /* 기타 (파싱 불가) */
+    .rack-etc-section {
+        border: 1px dashed #dee2e6;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .rack-etc-header {
+        background: #f8f9fa;
+        padding: 0.6rem 1rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    .rack-etc-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 0.75rem 1rem;
+    }
+    .rack-etc-cell {
+        padding: 6px 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .rack-etc-cell:hover {
+        box-shadow: 0 0 0 2px #0d6efd;
+    }
+    .rack-etc-cell.selected {
+        box-shadow: 0 0 0 3px #000;
+    }
+    .rack-etc-cell code {
+        font-weight: 600;
     }
 </style>
 {% endblock %}
@@ -269,7 +386,7 @@
                     </li>
                     <li class="nav-item">
                         <button class="nav-link" data-tab="treemap" onclick="switchTab('treemap')">
-                            <i class="bi bi-grid-1x2 me-1"></i>시각화
+                            <i class="bi bi-building me-1"></i>시각화
                         </button>
                     </li>
                 </ul>
@@ -289,7 +406,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- D3.js for treemap visualization -->
+<!-- D3.js for color scales -->
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 const csrfToken = '{{ csrf_token }}';
@@ -328,7 +445,7 @@ function switchTab(tab) {
 
     // 시각화 탭에서 캐시된 location 데이터가 있으면 바로 렌더링
     if (tab === 'treemap' && treemapLocationData) {
-        renderTreemap(treemapLocationData);
+        renderRackView(treemapLocationData);
         updateStats(treemapLocationData);
         return;
     }
@@ -369,7 +486,7 @@ async function loadRecords() {
 
         if (currentTab === 'treemap') {
             treemapLocationData = data.groups || [];
-            renderTreemap(treemapLocationData);
+            renderRackView(treemapLocationData);
         } else if (currentTab === 'location') {
             renderByLocation(data.groups || []);
         } else {
@@ -561,11 +678,10 @@ function exportExcel() {
 }
 
 // ============================================================================
-// 트리맵 시각화
+// 창고 랙 뷰 시각화
 // ============================================================================
 
-const ZONE_COLORS = d3.schemeTableau10;
-let selectedCell = null;
+let selectedRackCell = null;
 
 /**
  * 로케이션 바코드 파싱
@@ -583,7 +699,6 @@ function parseLocationBarcode(barcode) {
     const line = parts[3];    // 01
     const floor = parts[4];   // 02
 
-    // 최소 검증: 센터/동은 비어있으면 안됨
     if (!center || !dong || !col || !line || !floor) return null;
 
     return {
@@ -592,71 +707,73 @@ function parseLocationBarcode(barcode) {
         col,
         line,
         floor,
-        building: `${center}-${dong}`,        // "1C-1D" (1단계)
-        colLabel: `${col}열`,                   // "A열" (2단계)
-        cellLabel: `${line}-${floor}`,          // "01-02" (셀 라벨)
-        fullLabel: `${col}-${line}-${floor}`,   // "A-01-02" (간략 표기)
+        building: `${center}-${dong}`,
+        colLabel: `${col}열`,
+        cellLabel: `${line}-${floor}`,
+        fullLabel: `${col}-${line}-${floor}`,
     };
 }
 
-function buildTreemapData(groups) {
-    // 바코드 파싱 기반 3단 계층: 센터+동 → 열 → 로케이션
-    const buildingMap = {};  // { "1C-1D": { "A": [...], "B": [...] } }
-    const unmatched = [];    // 파싱 실패 로케이션
+/**
+ * 셀 배경색 계산 (히트맵)
+ * 재고 없음 → 회색, 재고 있음 → 연한 파랑~진한 파랑
+ */
+function getRackCellColor(qty, maxQty) {
+    if (!qty || qty === 0) return null;  // empty
+    const ratio = Math.min(qty / Math.max(maxQty, 1), 1);
+    // 연한 하늘색 → 진한 남색
+    const h = 210;
+    const s = 40 + ratio * 50;       // 40% → 90%
+    const l = 78 - ratio * 42;       // 78% → 36%
+    return `hsl(${h}, ${s}%, ${l}%)`;
+}
+
+function getRackTextColor(qty, maxQty) {
+    if (!qty || qty === 0) return '#ccc';
+    const ratio = Math.min(qty / Math.max(maxQty, 1), 1);
+    return ratio > 0.45 ? '#fff' : '#1a3a5c';
+}
+
+/**
+ * location 데이터를 건물 → 열 → {라인, 층} 구조로 파싱
+ */
+function buildRackData(groups) {
+    const buildings = {};  // { "1C-1D": { cols: { "A": { lines: Set, floors: Set, cells: {} } } } }
+    const unmatched = [];
 
     groups.forEach(g => {
         const parsed = parseLocationBarcode(g.location.barcode);
         const locData = {
-            name: g.location.barcode,
+            barcode: g.location.barcode,
             locationName: g.location.name || '',
             locationId: g.location.id,
-            value: g.total_quantity || 1,
+            totalQty: g.total_quantity || 0,
             products: g.products,
             productCount: g.products.length,
             parsed: parsed,
         };
 
         if (!parsed) {
-            locData.zone = '기타';
             unmatched.push(locData);
             return;
         }
 
-        locData.zone = parsed.building;
-        if (!buildingMap[parsed.building]) buildingMap[parsed.building] = {};
-        if (!buildingMap[parsed.building][parsed.col]) buildingMap[parsed.building][parsed.col] = [];
-        buildingMap[parsed.building][parsed.col].push(locData);
+        const bKey = parsed.building;
+        if (!buildings[bKey]) buildings[bKey] = { cols: {} };
+        if (!buildings[bKey].cols[parsed.col]) {
+            buildings[bKey].cols[parsed.col] = { lines: new Set(), floors: new Set(), cells: {} };
+        }
+
+        const colObj = buildings[bKey].cols[parsed.col];
+        colObj.lines.add(parsed.line);
+        colObj.floors.add(parsed.floor);
+        colObj.cells[`${parsed.line}-${parsed.floor}`] = locData;
     });
 
-    // 계층 구조 생성
-    const children = [];
-
-    // 센터+동 순서대로
-    Object.keys(buildingMap).sort().forEach(building => {
-        const colMap = buildingMap[building];
-        const colChildren = Object.keys(colMap).sort().map(col => ({
-            name: `${col}열`,
-            children: colMap[col].sort((a, b) => a.name.localeCompare(b.name)),
-        }));
-
-        children.push({
-            name: building,
-            children: colChildren,
-        });
-    });
-
-    // 파싱 실패 로케이션은 "기타"로 묶기
-    if (unmatched.length > 0) {
-        children.push({
-            name: '기타',
-            children: unmatched.sort((a, b) => a.name.localeCompare(b.name)),
-        });
-    }
-
-    return { name: '전체', children };
+    return { buildings, unmatched };
 }
 
-function renderTreemap(groups) {
+function renderRackView(groups) {
     const container = document.getElementById('dataContainer');
 
     if (!groups || !groups.length) {
@@ -668,214 +785,235 @@ function renderTreemap(groups) {
         return;
     }
 
-    const hierarchyData = buildTreemapData(groups);
-    const zones = hierarchyData.children.map(c => c.name);
-    const colorScale = d3.scaleOrdinal().domain(zones).range(ZONE_COLORS);
+    const { buildings, unmatched } = buildRackData(groups);
 
-    // 레이아웃 생성
-    container.innerHTML = `
-        <div class="treemap-wrapper">
-            <div class="treemap-legend" id="treemapLegend"></div>
-            <div class="treemap-container" id="treemapChart"></div>
-            <div id="treemapDetail"></div>
+    // 전체 최대 수량 계산 (히트맵 스케일용)
+    let globalMax = 0;
+    groups.forEach(g => { if (g.total_quantity > globalMax) globalMax = g.total_quantity; });
+
+    let html = '<div class="rack-wrapper">';
+
+    // 히트맵 범례
+    const gradientId = 'heatmapGrad';
+    html += `
+        <div class="rack-heatmap-legend">
+            <span>재고 없음</span>
+            <svg width="180" height="14" style="border-radius:4px; border:1px solid #dee2e6; overflow:hidden;">
+                <defs>
+                    <linearGradient id="${gradientId}">
+                        <stop offset="0%" stop-color="hsl(210,40%,78%)"/>
+                        <stop offset="100%" stop-color="hsl(210,90%,36%)"/>
+                    </linearGradient>
+                </defs>
+                <rect width="180" height="14" fill="url(#${gradientId})"/>
+            </svg>
+            <span>재고 많음 (최대 ${globalMax.toLocaleString()}개)</span>
         </div>
-        <div class="treemap-tooltip" id="treemapTooltip"></div>
     `;
 
-    // 범례 렌더링 (센터+동 단위)
-    const legendEl = document.getElementById('treemapLegend');
-    legendEl.innerHTML = zones.map(z => {
-        // "1C-1D" → "1센터 1동" 형태로 표시
-        const parts = z.split('-');
-        const label = (parts.length === 2)
-            ? `${parts[0].replace('C', '센터')} ${parts[1].replace('D', '동')}`
-            : z;
-        return `
-            <div class="treemap-legend-item">
-                <div class="treemap-legend-swatch" style="background:${colorScale(z)}"></div>
-                <span>${escapeHtml(label)} <code style="font-size:0.75rem;">${escapeHtml(z)}</code></span>
-            </div>
-        `;
-    }).join('');
+    // 건물별 렌더링
+    Object.keys(buildings).sort().forEach(bKey => {
+        const building = buildings[bKey];
+        const bParts = bKey.split('-');
+        const bLabel = (bParts.length === 2)
+            ? `${bParts[0].replace('C', '센터')} ${bParts[1].replace('D', '동')}`
+            : bKey;
 
-    // SVG 트리맵 렌더링
-    const chartEl = document.getElementById('treemapChart');
-    const width = chartEl.clientWidth;
-    const height = chartEl.clientHeight;
+        // 건물 내 총 수량
+        let bTotalQty = 0;
+        let bTotalLocs = 0;
+        Object.values(building.cols).forEach(colObj => {
+            Object.values(colObj.cells).forEach(c => {
+                bTotalQty += c.totalQty;
+                bTotalLocs++;
+            });
+        });
 
-    const root = d3.hierarchy(hierarchyData)
-        .sum(d => d.value)
-        .sort((a, b) => b.value - a.value);
+        html += `<div class="rack-building">`;
+        html += `<div class="rack-building-header">
+            <i class="bi bi-building"></i>
+            ${escapeHtml(bLabel)}
+            <code style="opacity:0.7; font-size:0.8rem;">${escapeHtml(bKey)}</code>
+            <span class="building-badge">${bTotalLocs}곳 · ${bTotalQty.toLocaleString()}개</span>
+        </div>`;
+        html += `<div class="rack-columns-area">`;
 
-    d3.treemap()
-        .size([width, height])
-        .paddingOuter(4)
-        .paddingInner(2)
-        .paddingTop(22)  // 센터+동 라벨용
-        .round(true)(root);
+        // 열(col)별 렌더링
+        const cols = Object.keys(building.cols).sort();
+        cols.forEach((colName, colIdx) => {
+            const colObj = building.cols[colName];
+            const lines = Array.from(colObj.lines).sort();
+            const floors = Array.from(colObj.floors).sort().reverse(); // 높은 층이 위
 
-    const svg = d3.select('#treemapChart')
-        .append('svg')
-        .attr('viewBox', `0 0 ${width} ${height}`)
-        .attr('preserveAspectRatio', 'xMidYMid meet');
+            html += `<div class="rack-column">`;
+            html += `<div class="rack-column-header">${escapeHtml(colName)}열</div>`;
+            html += `<div class="rack-shelf-area">`;
 
-    const tooltip = document.getElementById('treemapTooltip');
+            // 층별 행 (높은 층부터)
+            floors.forEach(floor => {
+                html += `<div class="rack-shelf-row">`;
+                // 층 라벨
+                html += `<div class="rack-floor-label">${escapeHtml(floor)}층</div>`;
 
-    // 1단계: 센터+동 그룹 (가장 바깥 테두리 + 라벨)
-    const buildingGroups = svg.selectAll('.building-group')
-        .data(root.children || [])
-        .join('g')
-        .attr('class', 'building-group');
+                // 라인별 셀
+                lines.forEach(line => {
+                    const cellKey = `${line}-${floor}`;
+                    const cellData = colObj.cells[cellKey];
 
-    buildingGroups.append('rect')
-        .attr('x', d => d.x0)
-        .attr('y', d => d.y0)
-        .attr('width', d => d.x0 === d.x1 ? 0 : d.x1 - d.x0)
-        .attr('height', d => d.y0 === d.y1 ? 0 : d.y1 - d.y0)
-        .attr('fill', d => {
-            const c = d3.color(colorScale(d.data.name));
-            c.opacity = 0.08;
-            return c.toString();
-        })
-        .attr('stroke', d => colorScale(d.data.name))
-        .attr('stroke-width', 2)
-        .attr('rx', 5);
+                    if (cellData) {
+                        const bgColor = getRackCellColor(cellData.totalQty, globalMax);
+                        const txtColor = getRackTextColor(cellData.totalQty, globalMax);
+                        const isEmpty = !cellData.totalQty;
 
-    buildingGroups.append('text')
-        .attr('x', d => d.x0 + 7)
-        .attr('y', d => d.y0 + 15)
-        .text(d => d.data.name)
-        .attr('fill', d => d3.color(colorScale(d.data.name)).darker(0.8))
-        .attr('font-size', '12px')
-        .attr('font-weight', '800');
+                        html += `<div class="rack-cell ${isEmpty ? 'empty' : ''}"
+                            style="${!isEmpty ? `background:${bgColor};` : ''}"
+                            data-barcode="${escapeHtml(cellData.barcode)}"
+                            onmouseenter="showRackTooltip(event, '${escapeHtml(cellData.barcode)}')"
+                            onmousemove="moveRackTooltip(event)"
+                            onmouseleave="hideRackTooltip()"
+                            onclick="selectRackCell(event, '${escapeHtml(cellData.barcode)}')">
+                            <span class="cell-qty" style="color:${txtColor}">${cellData.totalQty ? cellData.totalQty.toLocaleString() : '-'}</span>
+                            ${!isEmpty ? `<span class="cell-types" style="color:${txtColor}">${cellData.productCount}종</span>` : ''}
+                        </div>`;
+                    } else {
+                        // 해당 라인-층 조합이 없는 경우 빈 셀
+                        html += `<div class="rack-cell empty">
+                            <span class="cell-qty">-</span>
+                        </div>`;
+                    }
+                });
 
-    // 2단계: 열 그룹 (depth=2 노드) — 작은 라벨만
-    const colNodes = root.descendants().filter(d => d.depth === 2);
-    const colGroups = svg.selectAll('.col-group')
-        .data(colNodes)
-        .join('g')
-        .attr('class', 'col-group');
+                html += `</div>`; // rack-shelf-row
+            });
 
-    colGroups.append('text')
-        .attr('x', d => d.x0 + 4)
-        .attr('y', d => d.y0 + 11)
-        .text(d => d.data.name)
-        .attr('fill', d => d3.color(colorScale(d.parent.data.name)).darker(0.3))
-        .attr('font-size', '9px')
-        .attr('font-weight', '600')
-        .attr('opacity', d => (d.x1 - d.x0) > 30 ? 1 : 0);
+            // 하단 라인 라벨
+            html += `<div class="rack-line-labels">`;
+            html += `<div style="width:40px"></div>`; // 층 라벨 공간
+            lines.forEach(line => {
+                html += `<div class="rack-line-label">${escapeHtml(line)}라인</div>`;
+            });
+            html += `</div>`;
 
-    // 3단계: 로케이션 셀 (리프 노드)
-    const leaves = root.leaves();
+            html += `</div>`; // rack-shelf-area
+            html += `</div>`; // rack-column
 
-    // 리프의 최상위 그룹(센터+동) 찾기
-    function getBuilding(d) {
-        let node = d;
-        while (node.depth > 1) node = node.parent;
-        return node.data.name;
+            // 열 사이 간격
+            if (colIdx < cols.length - 1) {
+                html += `<div style="width:20px; flex-shrink:0;"></div>`;
+            }
+        });
+
+        html += `</div>`; // rack-columns-area
+        html += `</div>`; // rack-building
+    });
+
+    // 파싱 불가 로케이션
+    if (unmatched.length > 0) {
+        html += `<div class="rack-etc-section">`;
+        html += `<div class="rack-etc-header"><i class="bi bi-question-circle me-2"></i>기타 로케이션 (${unmatched.length}곳)</div>`;
+        html += `<div class="rack-etc-grid">`;
+        unmatched.forEach(loc => {
+            const bgColor = getRackCellColor(loc.totalQty, globalMax);
+            const txtColor = getRackTextColor(loc.totalQty, globalMax);
+            const isEmpty = !loc.totalQty;
+            html += `<div class="rack-etc-cell ${isEmpty ? '' : ''}"
+                style="${!isEmpty ? `background:${bgColor}; color:${txtColor};` : ''}"
+                data-barcode="${escapeHtml(loc.barcode)}"
+                onmouseenter="showRackTooltip(event, '${escapeHtml(loc.barcode)}')"
+                onmousemove="moveRackTooltip(event)"
+                onmouseleave="hideRackTooltip()"
+                onclick="selectRackCell(event, '${escapeHtml(loc.barcode)}')">
+                <code>${escapeHtml(loc.barcode)}</code>
+                <span style="margin-left:6px; font-weight:700;">${loc.totalQty ? loc.totalQty.toLocaleString() + '개' : '-'}</span>
+            </div>`;
+        });
+        html += `</div></div>`;
     }
 
-    const cells = svg.selectAll('.treemap-cell')
-        .data(leaves)
-        .join('g')
-        .attr('class', 'treemap-cell')
-        .attr('transform', d => `translate(${d.x0},${d.y0})`);
+    // 상세 패널 영역
+    html += `<div id="rackDetail"></div>`;
+    html += `</div>`; // rack-wrapper
 
-    cells.append('rect')
-        .attr('width', d => Math.max(0, d.x1 - d.x0))
-        .attr('height', d => Math.max(0, d.y1 - d.y0))
-        .attr('fill', d => colorScale(getBuilding(d)))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5)
-        .attr('rx', 3)
-        .attr('opacity', 0.8);
+    // 툴팁 (전역)
+    html += `<div class="rack-tooltip" id="rackTooltip"></div>`;
 
-    // 라벨: 파싱된 경우 간결한 라벨, 아니면 원본 바코드
-    cells.each(function(d) {
-        const cellW = d.x1 - d.x0;
-        const cellH = d.y1 - d.y0;
-        const g = d3.select(this);
-        const label = d.data.parsed ? d.data.parsed.cellLabel : d.data.name;
-        const shortLabel = label.length > 12 ? label.substring(0, 12) + '..' : label;
+    container.innerHTML = html;
 
-        if (cellW > 40 && cellH > 28) {
-            g.append('text')
-                .attr('x', cellW / 2)
-                .attr('y', cellH / 2 - 5)
-                .attr('text-anchor', 'middle')
-                .attr('fill', '#fff')
-                .attr('font-size', cellW > 80 ? '12px' : '10px')
-                .attr('font-weight', '700')
-                .text(shortLabel);
-
-            g.append('text')
-                .attr('x', cellW / 2)
-                .attr('y', cellH / 2 + 11)
-                .attr('text-anchor', 'middle')
-                .attr('fill', 'rgba(255,255,255,0.85)')
-                .attr('font-size', cellW > 80 ? '11px' : '9px')
-                .attr('font-weight', '600')
-                .text(d.data.value.toLocaleString() + '개');
-        } else if (cellW > 22 && cellH > 16) {
-            g.append('text')
-                .attr('x', cellW / 2)
-                .attr('y', cellH / 2 + 4)
-                .attr('text-anchor', 'middle')
-                .attr('fill', '#fff')
-                .attr('font-size', '9px')
-                .attr('font-weight', '700')
-                .text(d.data.value.toLocaleString());
-        }
-    });
-
-    // 호버 툴팁
-    cells.on('mousemove', function(event, d) {
-        const productLines = (d.data.products || []).slice(0, 5).map(p =>
-            `<div>${escapeHtml(p.product_name || p.barcode)} — ${p.quantity}개</div>`
-        ).join('');
-        const moreCount = (d.data.products || []).length - 5;
-        const p = d.data.parsed;
-        const locDetail = p
-            ? `<div class="tt-zone">${p.center} ${p.dong} · ${p.col}열 ${p.line}라인 ${p.floor}층</div>`
-            : '';
-
-        tooltip.innerHTML = `
-            <div class="tt-title">${escapeHtml(d.data.name)}</div>
-            ${d.data.locationName ? `<div class="tt-zone">${escapeHtml(d.data.locationName)}</div>` : ''}
-            ${locDetail}
-            <div style="margin-top:4px;">총 <span class="tt-qty">${d.data.value.toLocaleString()}개</span> · ${d.data.productCount}종</div>
-            ${productLines ? `<div class="tt-products">${productLines}${moreCount > 0 ? `<div class="text-muted">외 ${moreCount}건...</div>` : ''}</div>` : ''}
-        `;
-        tooltip.style.display = 'block';
-        tooltip.style.left = (event.clientX + 14) + 'px';
-        tooltip.style.top = (event.clientY - 10) + 'px';
-    })
-    .on('mouseleave', function() {
-        tooltip.style.display = 'none';
-    });
-
-    // 클릭 → 상세 패널
-    cells.on('click', function(event, d) {
-        event.stopPropagation();
-        // 선택 상태 토글
-        svg.selectAll('.treemap-cell').classed('selected', false);
-        d3.select(this).classed('selected', true);
-        selectedCell = d.data;
-        renderTreemapDetail(d.data);
-    });
-
-    // 빈 영역 클릭 → 상세 닫기
-    svg.on('click', function() {
-        svg.selectAll('.treemap-cell').classed('selected', false);
-        selectedCell = null;
-        document.getElementById('treemapDetail').innerHTML = '';
+    // 셀 데이터를 빠른 검색용으로 캐시
+    window._rackCellMap = {};
+    groups.forEach(g => {
+        const parsed = parseLocationBarcode(g.location.barcode);
+        window._rackCellMap[g.location.barcode] = {
+            barcode: g.location.barcode,
+            locationName: g.location.name || '',
+            locationId: g.location.id,
+            totalQty: g.total_quantity || 0,
+            products: g.products,
+            productCount: g.products.length,
+            parsed: parsed,
+        };
     });
 }
 
-function renderTreemapDetail(data) {
-    const detailEl = document.getElementById('treemapDetail');
-    if (!data || !data.products || !data.products.length) {
-        detailEl.innerHTML = '';
+// 툴팁 함수
+function showRackTooltip(event, barcode) {
+    const data = window._rackCellMap && window._rackCellMap[barcode];
+    if (!data) return;
+
+    const tooltip = document.getElementById('rackTooltip');
+    const productLines = (data.products || []).slice(0, 5).map(p =>
+        `<div>${escapeHtml(p.product_name || p.barcode)} — ${p.quantity}개</div>`
+    ).join('');
+    const moreCount = (data.products || []).length - 5;
+    const p = data.parsed;
+    const locDetail = p
+        ? `<div class="tt-loc">${p.center} ${p.dong} · ${p.col}열 ${p.line}라인 ${p.floor}층</div>`
+        : '';
+
+    tooltip.innerHTML = `
+        <div class="tt-title">${escapeHtml(data.barcode)}</div>
+        ${data.locationName ? `<div class="tt-loc">${escapeHtml(data.locationName)}</div>` : ''}
+        ${locDetail}
+        <div style="margin-top:4px;">총 <span class="tt-qty">${data.totalQty.toLocaleString()}개</span> · ${data.productCount}종</div>
+        ${productLines ? `<div class="tt-products">${productLines}${moreCount > 0 ? `<div style="color:#adb5bd;">외 ${moreCount}건...</div>` : ''}</div>` : ''}
+    `;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (event.clientX + 14) + 'px';
+    tooltip.style.top = (event.clientY - 10) + 'px';
+}
+
+function moveRackTooltip(event) {
+    const tooltip = document.getElementById('rackTooltip');
+    if (tooltip) {
+        tooltip.style.left = (event.clientX + 14) + 'px';
+        tooltip.style.top = (event.clientY - 10) + 'px';
+    }
+}
+
+function hideRackTooltip() {
+    const tooltip = document.getElementById('rackTooltip');
+    if (tooltip) tooltip.style.display = 'none';
+}
+
+// 셀 클릭 → 상세 패널
+function selectRackCell(event, barcode) {
+    event.stopPropagation();
+    const data = window._rackCellMap && window._rackCellMap[barcode];
+    if (!data) return;
+
+    // 선택 상태 토글
+    document.querySelectorAll('.rack-cell.selected, .rack-etc-cell.selected').forEach(el => el.classList.remove('selected'));
+    const clickedEl = event.currentTarget;
+    clickedEl.classList.add('selected');
+    selectedRackCell = data;
+
+    renderRackDetail(data);
+}
+
+function renderRackDetail(data) {
+    const detailEl = document.getElementById('rackDetail');
+    if (!detailEl || !data || !data.products || !data.products.length) {
+        if (detailEl) detailEl.innerHTML = '';
         return;
     }
 
@@ -885,16 +1023,16 @@ function renderTreemapDetail(data) {
         : (data.locationName ? `<span class="text-muted ms-2">${escapeHtml(data.locationName)}</span>` : '');
 
     detailEl.innerHTML = `
-        <div class="treemap-detail">
-            <div class="treemap-detail-header">
+        <div class="rack-detail">
+            <div class="rack-detail-header">
                 <div class="detail-title">
                     <i class="bi bi-geo-alt text-primary me-2"></i>
-                    <code>${escapeHtml(data.name)}</code>
+                    <code>${escapeHtml(data.barcode)}</code>
                     ${locInfo}
                 </div>
                 <div>
                     <span class="badge bg-primary">${data.productCount}종</span>
-                    <span class="badge bg-success ms-1">${data.value.toLocaleString()}개</span>
+                    <span class="badge bg-success ms-1">${data.totalQty.toLocaleString()}개</span>
                 </div>
             </div>
             <table class="table group-table mb-0">
@@ -926,14 +1064,6 @@ function renderTreemapDetail(data) {
         </div>
     `;
 }
-
-// 윈도우 리사이즈 시 트리맵 다시 렌더링
-let resizeTimer = null;
-window.addEventListener('resize', function() {
-    if (currentTab !== 'treemap' || !treemapLocationData) return;
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => renderTreemap(treemapLocationData), 300);
-});
 
 // ============================================================================
 // 유틸리티
