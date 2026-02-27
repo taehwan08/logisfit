@@ -9,6 +9,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
 from django.http import JsonResponse
+from django.views.static import serve as static_serve
 
 # 대시보드 뷰 (임시로 TemplateView 사용, 추후 별도 뷰로 분리)
 from apps.accounts.views import DashboardView
@@ -19,7 +20,16 @@ def health_check(request):
     return JsonResponse({'status': 'ok'})
 
 
+def _pwa_file(request, filename):
+    """PWA 파일(sw.js, manifest.json)을 루트 경로에서 서빙한다."""
+    return static_serve(request, filename, document_root=settings.STATICFILES_DIRS[0])
+
+
 urlpatterns = [
+    # PWA (서비스워커, 매니페스트 — 루트 경로 필수)
+    path('sw.js', _pwa_file, {'filename': 'sw.js'}, name='pwa_sw'),
+    path('manifest.json', _pwa_file, {'filename': 'manifest.json'}, name='pwa_manifest'),
+
     # Healthcheck (Railway용)
     path('health/', health_check, name='health_check'),
 
