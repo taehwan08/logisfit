@@ -13,6 +13,7 @@ class Product(models.Model):
     barcode = models.CharField('바코드', max_length=50, db_index=True)
     name = models.CharField('상품명', max_length=200)
     display_name = models.CharField('관리명', max_length=200, blank=True, default='')
+    option_code = models.CharField('옵션코드', max_length=50, blank=True, default='', db_index=True)
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
     updated_at = models.DateTimeField('수정일시', auto_now=True)
 

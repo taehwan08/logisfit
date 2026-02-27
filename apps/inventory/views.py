@@ -151,7 +151,8 @@ def get_products(request):
         products = products.filter(
             Q(barcode__icontains=search) |
             Q(name__icontains=search) |
-            Q(display_name__icontains=search)
+            Q(display_name__icontains=search) |
+            Q(option_code__icontains=search)
         )
     elif initial:
         # 초성 검색 (ㄱ~ㅎ)
@@ -184,6 +185,7 @@ def get_products(request):
                 'barcode': p.barcode,
                 'name': p.name,
                 'display_name': p.display_name,
+                'option_code': p.option_code,
                 'created_at': timezone.localtime(p.created_at).strftime('%Y-%m-%d %H:%M'),
             }
             for p in products
@@ -206,6 +208,7 @@ def create_product(request):
     barcode = data.get('barcode', '').strip()
     name = data.get('name', '').strip()
     display_name = data.get('display_name', '').strip()
+    option_code = data.get('option_code', '').strip()
 
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
@@ -213,7 +216,9 @@ def create_product(request):
     if Product.objects.filter(barcode=barcode, name=name).exists():
         return JsonResponse({'error': f'이미 등록된 상품입니다: {barcode} / {name}'}, status=400)
 
-    product = Product.objects.create(barcode=barcode, name=name, display_name=display_name)
+    product = Product.objects.create(
+        barcode=barcode, name=name, display_name=display_name, option_code=option_code,
+    )
 
     return JsonResponse({
         'success': True,
@@ -222,6 +227,7 @@ def create_product(request):
             'barcode': product.barcode,
             'name': product.name,
             'display_name': product.display_name,
+            'option_code': product.option_code,
         },
     })
 
@@ -245,6 +251,7 @@ def update_product(request, product_id):
     barcode = data.get('barcode', '').strip()
     name = data.get('name', '').strip()
     display_name = data.get('display_name', '').strip()
+    option_code = data.get('option_code', '').strip()
 
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
@@ -256,7 +263,8 @@ def update_product(request, product_id):
     product.barcode = barcode
     product.name = name
     product.display_name = display_name
-    product.save(update_fields=['barcode', 'name', 'display_name', 'updated_at'])
+    product.option_code = option_code
+    product.save(update_fields=['barcode', 'name', 'display_name', 'option_code', 'updated_at'])
 
     return JsonResponse({
         'success': True,
@@ -265,6 +273,7 @@ def update_product(request, product_id):
             'barcode': product.barcode,
             'name': product.name,
             'display_name': product.display_name,
+            'option_code': product.option_code,
         },
     })
 
@@ -324,14 +333,19 @@ def upload_products_excel(request):
             for row_idx in range(1, ws.nrows):
                 rows.append(tuple(ws.cell_value(row_idx, col) for col in range(ws.ncols)))
 
-        # 헤더에서 바코드/상품명/관리명 컬럼 인덱스 찾기
+        # 헤더에서 바코드/상품명/관리명/옵션코드 컬럼 인덱스 찾기
         barcode_idx = _find_column_index(headers, ['바코드', '바코드번호', 'barcode', 'BarCode', 'BARCODE'])
         name_idx = _find_column_index(headers, ['상품명', '품명', '제품명', '이름', 'name', 'product_name', '상품이름'])
         display_name_idx = _find_column_index(headers, ['관리명', '관리이름', '관리상품명', 'display_name', '별칭'])
+        option_code_idx = _find_column_index(headers, ['옵션코드', '옵션번호', 'option_code', 'optioncode', 'OPTION_CODE'])
 
         if barcode_idx is None:
             return JsonResponse({'error': '바코드 컬럼을 찾을 수 없습니다. 헤더에 "바코드" 또는 "barcode"가 포함되어야 합니다.'}, status=400)
-        if name_idx is None:
+
+        # 옵션코드 일괄 업데이트 모드: 바코드 + 옵션코드만 있고 상품명 컬럼이 없는 경우
+        option_code_update_mode = (option_code_idx is not None and name_idx is None)
+
+        if not option_code_update_mode and name_idx is None:
             return JsonResponse({'error': '상품명 컬럼을 찾을 수 없습니다. 헤더에 "상품명" 또는 "name"이 포함되어야 합니다.'}, status=400)
 
         created_count = 0
@@ -341,10 +355,6 @@ def upload_products_excel(request):
 
         for row_num, row in enumerate(rows, start=2):
             barcode_val = str(row[barcode_idx] or '').strip() if barcode_idx < len(row) else ''
-            name_val = str(row[name_idx] or '').strip() if name_idx < len(row) else ''
-            display_name_val = ''
-            if display_name_idx is not None and display_name_idx < len(row):
-                display_name_val = str(row[display_name_idx] or '').strip()
 
             # 바코드가 숫자로 읽힌 경우 정수로 변환
             if barcode_val and '.' in barcode_val:
@@ -353,16 +363,73 @@ def upload_products_excel(request):
                 except (ValueError, OverflowError):
                     pass
 
-            if not barcode_val or not name_val:
+            if not barcode_val:
+                skipped_count += 1
+                continue
+
+            # ── 옵션코드 일괄 업데이트 모드 ──
+            if option_code_update_mode:
+                option_code_val = ''
+                if option_code_idx is not None and option_code_idx < len(row):
+                    option_code_val = str(row[option_code_idx] or '').strip()
+                    # 숫자로 읽힌 경우 정수로 변환
+                    if option_code_val and '.' in option_code_val:
+                        try:
+                            option_code_val = str(int(float(option_code_val)))
+                        except (ValueError, OverflowError):
+                            pass
+
+                if not option_code_val:
+                    skipped_count += 1
+                    continue
+
+                try:
+                    products_qs = Product.objects.filter(barcode=barcode_val)
+                    cnt = products_qs.count()
+                    if cnt == 1:
+                        products_qs.update(option_code=option_code_val)
+                        updated_count += 1
+                    elif cnt == 0:
+                        errors.append(f'{row_num}행: 바코드 "{barcode_val}" 상품 없음')
+                        skipped_count += 1
+                    else:
+                        # 바코드 중복 → 건너뛰기
+                        skipped_count += 1
+                except Exception as e:
+                    errors.append(f'{row_num}행: {str(e)}')
+                    skipped_count += 1
+                continue
+
+            # ── 기존 상품 등록/업데이트 모드 ──
+            name_val = str(row[name_idx] or '').strip() if name_idx < len(row) else ''
+            display_name_val = ''
+            if display_name_idx is not None and display_name_idx < len(row):
+                display_name_val = str(row[display_name_idx] or '').strip()
+            option_code_val = ''
+            if option_code_idx is not None and option_code_idx < len(row):
+                option_code_val = str(row[option_code_idx] or '').strip()
+                if option_code_val and '.' in option_code_val:
+                    try:
+                        option_code_val = str(int(float(option_code_val)))
+                    except (ValueError, OverflowError):
+                        pass
+
+            if not name_val:
                 skipped_count += 1
                 continue
 
             try:
+                defaults = {}
                 if display_name_val:
+                    defaults['display_name'] = display_name_val
+                if option_code_val:
+                    defaults['option_code'] = option_code_val
+
+                if defaults:
                     product, created = Product.objects.update_or_create(
                         barcode=barcode_val,
                         name=name_val,
-                        defaults={'display_name': display_name_val},
+                        defaults=defaults,
                     )
                 else:
                     product, created = Product.objects.get_or_create(
@@ -377,7 +444,10 @@ def upload_products_excel(request):
                 errors.append(f'{row_num}행: {str(e)}')
                 skipped_count += 1
 
-        result_msg = f'신규 {created_count}건, 업데이트 {updated_count}건'
+        if option_code_update_mode:
+            result_msg = f'옵션코드 업데이트 {updated_count}건'
+        else:
+            result_msg = f'신규 {created_count}건, 업데이트 {updated_count}건'
         if skipped_count:
             result_msg += f', 스킵 {skipped_count}건'
 
@@ -774,12 +844,21 @@ def get_location_records(request):
 def models_Q_search(search):
     """검색어로 Q 필터를 생성한다."""
     from django.db.models import Q
-    return (
+    q = (
         Q(barcode__icontains=search) |
         Q(product_name__icontains=search) |
         Q(location__barcode__icontains=search) |
         Q(location__name__icontains=search)
     )
+    # 옵션코드로 검색: Product 테이블에서 옵션코드 매칭 → 바코드 목록으로 필터
+    option_barcodes = list(
+        Product.objects.filter(option_code__icontains=search)
+        .values_list('barcode', flat=True)
+        .distinct()[:100]
+    )
+    if option_barcodes:
+        q |= Q(barcode__in=option_barcodes)
+    return q
 
 
 def _get_records_by_location(records, include_empty=False):
@@ -930,8 +1009,16 @@ def export_records_excel(request):
         top=Side(style='thin'), bottom=Side(style='thin'),
     )
 
+    # 바코드 → 옵션코드 매핑 구축
+    all_barcodes = set(records.values_list('barcode', flat=True))
+    barcode_option_map = {}
+    if all_barcodes:
+        for p in Product.objects.filter(barcode__in=all_barcodes).values('barcode', 'option_code'):
+            if p['option_code']:
+                barcode_option_map.setdefault(p['barcode'], p['option_code'])
+
     # 헤더
-    headers = ['로케이션', '로케이션명', '상품명', '유통기한', '로트번호', '수량', '바코드', '작업자', '등록시간']
+    headers = ['로케이션', '로케이션명', '상품명', '옵션코드', '유통기한', '로트번호', '수량', '바코드', '작업자', '등록시간']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -945,6 +1032,7 @@ def export_records_excel(request):
             r.location.barcode if r.location else '',
             r.location.name if r.location else '',
             r.product_name,
+            barcode_option_map.get(r.barcode, ''),
             r.expiry_date or '',
             r.lot_number or '',
             r.quantity,
@@ -958,7 +1046,7 @@ def export_records_excel(request):
             cell.alignment = Alignment(vertical='center')
 
     # 컬럼 너비 조정
-    col_widths = [15, 15, 30, 12, 15, 8, 18, 10, 16]
+    col_widths = [15, 15, 30, 14, 12, 15, 8, 18, 10, 16]
     for i, width in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
