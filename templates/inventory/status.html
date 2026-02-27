@@ -434,6 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function onSessionChange() {
+    treemapLocationData = null;  // 시각화 캐시 초기화
     loadRecords();
 }
 
@@ -455,6 +456,7 @@ function switchTab(tab) {
 async function loadRecords() {
     const sessionId = document.getElementById('sessionSelect').value;
     if (!sessionId) {
+        treemapLocationData = null;
         document.getElementById('dataContainer').innerHTML = `
             <div class="empty-state">
                 <i class="bi bi-bar-chart-line d-block"></i>
@@ -465,6 +467,8 @@ async function loadRecords() {
     }
 
     const search = document.getElementById('searchInput').value.trim();
+    // 새 데이터를 불러올 때 시각화 캐시 초기화
+    treemapLocationData = null;
     // 시각화 탭은 항상 location 기준으로 데이터 가져오기
     const groupBy = currentTab === 'treemap' ? 'location' : currentTab;
     const params = new URLSearchParams({
@@ -488,6 +492,8 @@ async function loadRecords() {
             treemapLocationData = data.groups || [];
             renderRackView(treemapLocationData);
         } else if (currentTab === 'location') {
+            // location 데이터는 시각화에서도 사용 가능 → 캐시
+            treemapLocationData = data.groups || [];
             renderByLocation(data.groups || []);
         } else {
             renderByProduct(data.groups || []);
