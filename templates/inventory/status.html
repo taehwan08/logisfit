@@ -703,7 +703,7 @@ let selectedRackCell = null;
 
 /**
  * 로케이션 바코드 파싱
- * 형식: {센터}-{동}-{열}-{라인}-{층}  예) 1C-1D-A-01-02
+ * 형식: {센터}-{동}-{라인}-{열}-{층}  예) 1C-1D-A-01-02
  * 파싱 실패 시 null 반환
  */
 function parseLocationBarcode(barcode) {
@@ -711,11 +711,11 @@ function parseLocationBarcode(barcode) {
     const parts = barcode.split('-');
     if (parts.length < 5) return null;
 
-    const center = parts[0];  // 1C
-    const dong = parts[1];    // 1D
-    const col = parts[2];     // A
-    const line = parts[3];    // 01
-    const floor = parts[4];   // 02
+    const center = parts[0];  // 1C (센터)
+    const dong = parts[1];    // 1D (동)
+    const col = parts[2];     // A  (라인)
+    const line = parts[3];    // 01 (열)
+    const floor = parts[4];   // 02 (층)
 
     if (!center || !dong || !col || !line || !floor) return null;
 
@@ -726,7 +726,7 @@ function parseLocationBarcode(barcode) {
         line,
         floor,
         building: `${center}-${dong}`,
-        colLabel: `${col}열`,
+        colLabel: `${col}라인`,
         cellLabel: `${line}-${floor}`,
         fullLabel: `${col}-${line}-${floor}`,
     };
@@ -863,7 +863,7 @@ function renderRackView(groups) {
             html += `<button class="rack-col-tab ${i === 0 ? 'active' : ''}"
                 onclick="switchRackCol('${bId}', '${escapeHtml(colName)}')"
                 data-col="${escapeHtml(colName)}">
-                ${escapeHtml(colName)}열 <span style="opacity:0.6;">(${colQty.toLocaleString()})</span>
+                ${escapeHtml(colName)}라인 <span style="opacity:0.6;">(${colQty.toLocaleString()})</span>
             </button>`;
         });
         html += `</div>`;
@@ -911,7 +911,7 @@ function renderRackView(groups) {
             html += `<div class="rack-line-labels">`;
             html += `<div style="width:32px"></div>`;
             lines.forEach(line => {
-                html += `<div class="rack-line-label">${escapeHtml(line)}라인</div>`;
+                html += `<div class="rack-line-label">${escapeHtml(line)}열</div>`;
             });
             html += `</div>`;
 
@@ -991,7 +991,7 @@ function showRackTooltip(event, barcode) {
     const moreCount = (data.products || []).length - 5;
     const p = data.parsed;
     const locDetail = p
-        ? `<div class="tt-loc">${p.center} ${p.dong} · ${p.col}열 ${p.line}라인 ${p.floor}층</div>`
+        ? `<div class="tt-loc">${p.center} ${p.dong} · ${p.col}라인 ${p.line}열 ${p.floor}층</div>`
         : '';
 
     tooltip.innerHTML = `
@@ -1043,7 +1043,7 @@ function renderRackDetail(data) {
 
     const p = data.parsed;
     const locInfo = p
-        ? `<span class="text-muted ms-2">${p.center} ${p.dong} · ${p.col}열 ${p.line}라인 ${p.floor}층</span>`
+        ? `<span class="text-muted ms-2">${p.center} ${p.dong} · ${p.col}라인 ${p.line}열 ${p.floor}층</span>`
         : (data.locationName ? `<span class="text-muted ms-2">${escapeHtml(data.locationName)}</span>` : '');
 
     detailEl.innerHTML = `
