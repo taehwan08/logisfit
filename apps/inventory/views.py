@@ -707,6 +707,7 @@ def get_records(request):
 
     group_by = request.GET.get('group_by', 'location')
     search = request.GET.get('search', '').strip()
+    include_empty = request.GET.get('include_empty', '') == '1'
 
     records = InventoryRecord.objects.filter(
         session_id=session_id,
@@ -720,7 +721,7 @@ def get_records(request):
     if group_by == 'product':
         return _get_records_by_product(records)
     else:
-        return _get_records_by_location(records)
+        return _get_records_by_location(records, include_empty=include_empty and not search)
 
 
 @csrf_exempt
@@ -781,8 +782,11 @@ def models_Q_search(search):
     )
 
 
-def _get_records_by_location(records):
-    """로케이션별로 그룹핑하여 반환한다."""
+def _get_records_by_location(records, include_empty=False):
+    """로케이션별로 그룹핑하여 반환한다.
+
+    include_empty=True 이면 재고가 없는 로케이션도 빈 상태로 포함한다.
+    """
     grouped = defaultdict(lambda: {
         'location': None,
         'products': [],
@@ -800,6 +804,22 @@ def _get_records_by_location(records):
             }
         grouped[key]['products'].append(_record_to_dict(r))
         grouped[key]['total_quantity'] += r.quantity
+
+    # 전체 로케이션을 빈 상태로 추가 (시각화용)
+    if include_empty:
+        existing_ids = set(grouped.keys())
+        for loc in Location.objects.all():
+            if loc.pk not in existing_ids:
+                grouped[loc.pk] = {
+                    'location': {
+                        'id': loc.pk,
+                        'barcode': loc.barcode,
+                        'name': loc.name,
+                        'zone': loc.zone,
+                    },
+                    'products': [],
+                    'total_quantity': 0,
+                }
 
     # 로케이션 바코드 순 정렬
     result = sorted(

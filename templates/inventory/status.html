@@ -470,11 +470,10 @@ function switchTab(tab) {
         el.classList.toggle('active', el.dataset.tab === tab);
     });
 
-    // 시각화 탭에서 캐시된 location 데이터가 있으면 바로 렌더링
-    if (tab === 'treemap' && treemapLocationData) {
-        renderRackView(treemapLocationData);
-        updateStats(treemapLocationData);
-        return;
+    // 시각화 탭은 include_empty 가 필요하므로 항상 새로 요청
+    // (location 탭 캐시에는 빈 로케이션이 없음)
+    if (tab === 'treemap') {
+        treemapLocationData = null;
     }
     loadRecords();
 }
@@ -502,6 +501,8 @@ async function loadRecords() {
         group_by: groupBy,
     });
     if (search) params.append('search', search);
+    // 시각화 탭: 전체 로케이션을 빈 상태로 포함
+    if (currentTab === 'treemap') params.append('include_empty', '1');
 
     try {
         document.getElementById('dataContainer').innerHTML = `
@@ -518,8 +519,6 @@ async function loadRecords() {
             treemapLocationData = data.groups || [];
             renderRackView(treemapLocationData);
         } else if (currentTab === 'location') {
-            // location 데이터는 시각화에서도 사용 가능 → 캐시
-            treemapLocationData = data.groups || [];
             renderByLocation(data.groups || []);
         } else {
             renderByProduct(data.groups || []);
