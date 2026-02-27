@@ -103,69 +103,87 @@
     .rack-wrapper {
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 1.25rem;
+        font-size: 0.7rem;
     }
     .rack-building {
         border: 1px solid #dee2e6;
-        border-radius: 12px;
+        border-radius: 10px;
         overflow: hidden;
     }
     .rack-building-header {
         background: #2c3e50;
         color: #fff;
-        padding: 0.6rem 1rem;
+        padding: 0.5rem 0.75rem;
         font-weight: 700;
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
     }
     .rack-building-header .building-badge {
         background: rgba(255,255,255,0.2);
-        padding: 2px 10px;
-        border-radius: 12px;
-        font-size: 0.75rem;
+        padding: 1px 8px;
+        border-radius: 10px;
+        font-size: 0.65rem;
         font-weight: 500;
     }
-    .rack-columns-area {
+    /* 열 탭 */
+    .rack-col-tabs {
         display: flex;
         gap: 0;
+        background: #e9ecef;
+        border-bottom: 1px solid #dee2e6;
         overflow-x: auto;
-        padding: 1rem;
-        background: #f8f9fa;
+        padding: 0 0.5rem;
     }
-    .rack-column {
-        flex-shrink: 0;
-        min-width: 0;
+    .rack-col-tab {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #6c757d;
+        cursor: pointer;
+        border: none;
+        background: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+        transition: all 0.15s;
     }
-    .rack-column-header {
-        text-align: center;
-        font-weight: 700;
-        font-size: 0.85rem;
+    .rack-col-tab:hover {
         color: #495057;
-        padding: 0.3rem 0;
-        margin-bottom: 0.25rem;
-        border-bottom: 2px solid #adb5bd;
+        background: rgba(0,0,0,0.03);
+    }
+    .rack-col-tab.active {
+        color: #0d6efd;
+        border-bottom-color: #0d6efd;
+        background: #fff;
+    }
+    /* 열 콘텐츠 영역 (가로 스크롤) */
+    .rack-col-content {
+        overflow-x: auto;
+        padding: 0.75rem;
+        background: #f8f9fa;
     }
     .rack-shelf-area {
         display: flex;
         flex-direction: column;
+        width: fit-content;
     }
     .rack-shelf-row {
         display: flex;
     }
     .rack-cell {
-        width: 72px;
-        height: 54px;
+        width: 52px;
+        height: 38px;
         border: 1px solid #dee2e6;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: all 0.12s;
         position: relative;
-        font-size: 0.78rem;
+        font-size: 0.7rem;
         background: #e9ecef;
     }
     .rack-cell:hover {
@@ -173,16 +191,16 @@
         z-index: 2;
     }
     .rack-cell.selected {
-        box-shadow: 0 0 0 3px #000;
+        box-shadow: 0 0 0 2px #000;
         z-index: 3;
     }
     .rack-cell .cell-qty {
         font-weight: 800;
-        font-size: 0.95rem;
+        font-size: 0.75rem;
         line-height: 1;
     }
     .rack-cell .cell-types {
-        font-size: 0.65rem;
+        font-size: 0.55rem;
         color: rgba(255,255,255,0.8);
         margin-top: 1px;
     }
@@ -193,15 +211,14 @@
     .rack-cell.empty .cell-qty {
         color: #ccc;
         font-weight: 400;
-        font-size: 0.75rem;
     }
     .rack-floor-label {
-        width: 40px;
-        height: 54px;
+        width: 32px;
+        height: 38px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         font-weight: 600;
         color: #6c757d;
         flex-shrink: 0;
@@ -210,9 +227,9 @@
         display: flex;
     }
     .rack-line-label {
-        width: 72px;
+        width: 52px;
         text-align: center;
-        font-size: 0.7rem;
+        font-size: 0.6rem;
         color: #6c757d;
         padding-top: 2px;
     }
@@ -221,48 +238,42 @@
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 0.5rem 0;
-        font-size: 0.78rem;
+        padding: 0.4rem 0;
+        font-size: 0.7rem;
         color: #6c757d;
-    }
-    .rack-heatmap-bar {
-        width: 180px;
-        height: 14px;
-        border-radius: 4px;
-        border: 1px solid #dee2e6;
     }
     /* 툴팁 */
     .rack-tooltip {
         position: fixed;
         background: rgba(33, 37, 41, 0.95);
         color: #fff;
-        padding: 10px 14px;
+        padding: 8px 12px;
         border-radius: 8px;
-        font-size: 0.82rem;
+        font-size: 0.7rem;
         pointer-events: none;
         z-index: 9999;
-        max-width: 300px;
-        line-height: 1.5;
+        max-width: 280px;
+        line-height: 1.45;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         display: none;
     }
     .rack-tooltip .tt-title {
         font-weight: 700;
-        font-size: 0.9rem;
-        margin-bottom: 4px;
+        font-size: 0.78rem;
+        margin-bottom: 3px;
     }
     .rack-tooltip .tt-loc {
         color: #adb5bd;
-        font-size: 0.75rem;
+        font-size: 0.65rem;
     }
     .rack-tooltip .tt-qty {
         font-weight: 700;
         color: #69b4ff;
     }
     .rack-tooltip .tt-products {
-        margin-top: 6px;
+        margin-top: 4px;
         border-top: 1px solid rgba(255,255,255,0.15);
-        padding-top: 6px;
+        padding-top: 4px;
     }
     /* 상세 패널 */
     .rack-detail {
@@ -272,14 +283,15 @@
     }
     .rack-detail-header {
         background: #f8f9fa;
-        padding: 0.75rem 1rem;
+        padding: 0.5rem 0.75rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        font-size: 0.7rem;
     }
     .rack-detail-header .detail-title {
         font-weight: 600;
-        font-size: 0.95rem;
+        font-size: 0.8rem;
     }
     /* 기타 (파싱 불가) */
     .rack-etc-section {
@@ -289,30 +301,30 @@
     }
     .rack-etc-header {
         background: #f8f9fa;
-        padding: 0.6rem 1rem;
+        padding: 0.4rem 0.75rem;
         font-weight: 600;
-        font-size: 0.9rem;
+        font-size: 0.75rem;
         color: #6c757d;
     }
     .rack-etc-grid {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        padding: 0.75rem 1rem;
+        gap: 4px;
+        padding: 0.5rem 0.75rem;
     }
     .rack-etc-cell {
-        padding: 6px 12px;
+        padding: 4px 8px;
         border: 1px solid #dee2e6;
-        border-radius: 6px;
-        font-size: 0.8rem;
+        border-radius: 5px;
+        font-size: 0.7rem;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: all 0.12s;
     }
     .rack-etc-cell:hover {
         box-shadow: 0 0 0 2px #0d6efd;
     }
     .rack-etc-cell.selected {
-        box-shadow: 0 0 0 3px #000;
+        box-shadow: 0 0 0 2px #000;
     }
     .rack-etc-cell code {
         font-weight: 600;
@@ -793,29 +805,29 @@ function renderRackView(groups) {
 
     const { buildings, unmatched } = buildRackData(groups);
 
-    // 전체 최대 수량 계산 (히트맵 스케일용)
+    // 전체 최대 수량 (히트맵 스케일)
     let globalMax = 0;
     groups.forEach(g => { if (g.total_quantity > globalMax) globalMax = g.total_quantity; });
 
     let html = '<div class="rack-wrapper">';
 
     // 히트맵 범례
-    const gradientId = 'heatmapGrad';
     html += `
         <div class="rack-heatmap-legend">
             <span>재고 없음</span>
-            <svg width="180" height="14" style="border-radius:4px; border:1px solid #dee2e6; overflow:hidden;">
-                <defs>
-                    <linearGradient id="${gradientId}">
-                        <stop offset="0%" stop-color="hsl(210,40%,78%)"/>
-                        <stop offset="100%" stop-color="hsl(210,90%,36%)"/>
-                    </linearGradient>
-                </defs>
-                <rect width="180" height="14" fill="url(#${gradientId})"/>
+            <svg width="140" height="12" style="border-radius:3px; border:1px solid #dee2e6; overflow:hidden;">
+                <defs><linearGradient id="heatG">
+                    <stop offset="0%" stop-color="hsl(210,40%,78%)"/>
+                    <stop offset="100%" stop-color="hsl(210,90%,36%)"/>
+                </linearGradient></defs>
+                <rect width="140" height="12" fill="url(#heatG)"/>
             </svg>
             <span>재고 많음 (최대 ${globalMax.toLocaleString()}개)</span>
         </div>
     `;
+
+    // 건물별 고유 ID 카운터
+    let bIdx = 0;
 
     // 건물별 렌더링
     Object.keys(buildings).sort().forEach(bKey => {
@@ -824,44 +836,51 @@ function renderRackView(groups) {
         const bLabel = (bParts.length === 2)
             ? `${bParts[0].replace('C', '센터')} ${bParts[1].replace('D', '동')}`
             : bKey;
+        const bId = `rack-b-${bIdx++}`;
 
         // 건물 내 총 수량
-        let bTotalQty = 0;
-        let bTotalLocs = 0;
+        let bTotalQty = 0, bTotalLocs = 0;
         Object.values(building.cols).forEach(colObj => {
-            Object.values(colObj.cells).forEach(c => {
-                bTotalQty += c.totalQty;
-                bTotalLocs++;
-            });
+            Object.values(colObj.cells).forEach(c => { bTotalQty += c.totalQty; bTotalLocs++; });
         });
+
+        const cols = Object.keys(building.cols).sort();
 
         html += `<div class="rack-building">`;
         html += `<div class="rack-building-header">
             <i class="bi bi-building"></i>
             ${escapeHtml(bLabel)}
-            <code style="opacity:0.7; font-size:0.8rem;">${escapeHtml(bKey)}</code>
+            <code style="opacity:0.6; font-size:0.65rem;">${escapeHtml(bKey)}</code>
             <span class="building-badge">${bTotalLocs}곳 · ${bTotalQty.toLocaleString()}개</span>
         </div>`;
-        html += `<div class="rack-columns-area">`;
 
-        // 열(col)별 렌더링
-        const cols = Object.keys(building.cols).sort();
+        // 열 탭
+        html += `<div class="rack-col-tabs" id="${bId}-tabs">`;
+        cols.forEach((colName, i) => {
+            // 해당 열의 수량
+            let colQty = 0;
+            Object.values(building.cols[colName].cells).forEach(c => { colQty += c.totalQty; });
+            html += `<button class="rack-col-tab ${i === 0 ? 'active' : ''}"
+                onclick="switchRackCol('${bId}', '${escapeHtml(colName)}')"
+                data-col="${escapeHtml(colName)}">
+                ${escapeHtml(colName)}열 <span style="opacity:0.6;">(${colQty.toLocaleString()})</span>
+            </button>`;
+        });
+        html += `</div>`;
+
+        // 각 열의 콘텐츠
         cols.forEach((colName, colIdx) => {
             const colObj = building.cols[colName];
             const lines = Array.from(colObj.lines).sort();
-            const floors = Array.from(colObj.floors).sort().reverse(); // 높은 층이 위
+            const floors = Array.from(colObj.floors).sort().reverse();
 
-            html += `<div class="rack-column">`;
-            html += `<div class="rack-column-header">${escapeHtml(colName)}열</div>`;
+            html += `<div class="rack-col-content" id="${bId}-col-${escapeHtml(colName)}" style="${colIdx > 0 ? 'display:none;' : ''}">`;
             html += `<div class="rack-shelf-area">`;
 
-            // 층별 행 (높은 층부터)
             floors.forEach(floor => {
                 html += `<div class="rack-shelf-row">`;
-                // 층 라벨
                 html += `<div class="rack-floor-label">${escapeHtml(floor)}층</div>`;
 
-                // 라인별 셀
                 lines.forEach(line => {
                     const cellKey = `${line}-${floor}`;
                     const cellData = colObj.cells[cellKey];
@@ -882,47 +901,37 @@ function renderRackView(groups) {
                             ${!isEmpty ? `<span class="cell-types" style="color:${txtColor}">${cellData.productCount}종</span>` : ''}
                         </div>`;
                     } else {
-                        // 해당 라인-층 조합이 없는 경우 빈 셀
-                        html += `<div class="rack-cell empty">
-                            <span class="cell-qty">-</span>
-                        </div>`;
+                        html += `<div class="rack-cell empty"><span class="cell-qty">-</span></div>`;
                     }
                 });
-
-                html += `</div>`; // rack-shelf-row
+                html += `</div>`;
             });
 
             // 하단 라인 라벨
             html += `<div class="rack-line-labels">`;
-            html += `<div style="width:40px"></div>`; // 층 라벨 공간
+            html += `<div style="width:32px"></div>`;
             lines.forEach(line => {
                 html += `<div class="rack-line-label">${escapeHtml(line)}라인</div>`;
             });
             html += `</div>`;
 
             html += `</div>`; // rack-shelf-area
-            html += `</div>`; // rack-column
-
-            // 열 사이 간격
-            if (colIdx < cols.length - 1) {
-                html += `<div style="width:20px; flex-shrink:0;"></div>`;
-            }
+            html += `</div>`; // rack-col-content
         });
 
-        html += `</div>`; // rack-columns-area
         html += `</div>`; // rack-building
     });
 
     // 파싱 불가 로케이션
     if (unmatched.length > 0) {
         html += `<div class="rack-etc-section">`;
-        html += `<div class="rack-etc-header"><i class="bi bi-question-circle me-2"></i>기타 로케이션 (${unmatched.length}곳)</div>`;
+        html += `<div class="rack-etc-header"><i class="bi bi-question-circle me-1"></i>기타 (${unmatched.length}곳)</div>`;
         html += `<div class="rack-etc-grid">`;
         unmatched.forEach(loc => {
             const bgColor = getRackCellColor(loc.totalQty, globalMax);
             const txtColor = getRackTextColor(loc.totalQty, globalMax);
             const isEmpty = !loc.totalQty;
-            html += `<div class="rack-etc-cell ${isEmpty ? '' : ''}"
+            html += `<div class="rack-etc-cell"
                 style="${!isEmpty ? `background:${bgColor}; color:${txtColor};` : ''}"
                 data-barcode="${escapeHtml(loc.barcode)}"
                 onmouseenter="showRackTooltip(event, '${escapeHtml(loc.barcode)}')"
@@ -930,22 +939,19 @@ function renderRackView(groups) {
                 onmouseleave="hideRackTooltip()"
                 onclick="selectRackCell(event, '${escapeHtml(loc.barcode)}')">
                 <code>${escapeHtml(loc.barcode)}</code>
-                <span style="margin-left:6px; font-weight:700;">${loc.totalQty ? loc.totalQty.toLocaleString() + '개' : '-'}</span>
+                <span style="margin-left:4px; font-weight:700;">${loc.totalQty ? loc.totalQty.toLocaleString() + '개' : '-'}</span>
             </div>`;
         });
         html += `</div></div>`;
     }
 
-    // 상세 패널 영역
     html += `<div id="rackDetail"></div>`;
-    html += `</div>`; // rack-wrapper
-
-    // 툴팁 (전역)
+    html += `</div>`;
     html += `<div class="rack-tooltip" id="rackTooltip"></div>`;
 
     container.innerHTML = html;
 
-    // 셀 데이터를 빠른 검색용으로 캐시
+    // 셀 데이터 캐시
     window._rackCellMap = {};
     groups.forEach(g => {
         const parsed = parseLocationBarcode(g.location.barcode);
@@ -959,6 +965,18 @@ function renderRackView(groups) {
             parsed: parsed,
         };
     });
+}
+
+/** 열 탭 전환 */
+function switchRackCol(buildingId, colName) {
+    // 탭 활성화
+    const tabs = document.querySelectorAll(`#${buildingId}-tabs .rack-col-tab`);
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.col === colName));
+    // 콘텐츠 전환
+    const building = document.getElementById(`${buildingId}-tabs`).closest('.rack-building');
+    building.querySelectorAll('.rack-col-content').forEach(el => { el.style.display = 'none'; });
+    const target = document.getElementById(`${buildingId}-col-${colName}`);
+    if (target) target.style.display = '';
 }
 
 // 툴팁 함수
