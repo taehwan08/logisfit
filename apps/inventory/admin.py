@@ -1,7 +1,58 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
+from django.shortcuts import render, redirect
+from django.urls import path
 from django.utils.html import format_html
 
 from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord, InboundImage
+
+
+# ============================================================================
+# 로케이션 다중 생성 폼
+# ============================================================================
+
+class BulkLocationForm(forms.Form):
+    """바코드 형식: {센터}-{동}-{라인}-{열}-{층}  예) 1C-1D-A-01-02"""
+
+    center = forms.CharField(
+        label='센터', max_length=10, initial='1C',
+        help_text='예: 1C, 2C, 3C',
+    )
+    building = forms.CharField(
+        label='동', max_length=10, initial='1D',
+        help_text='예: 1D, 2D, 3D',
+    )
+    lines = forms.CharField(
+        label='라인', initial='A',
+        help_text='쉼표 구분: A,B,C  또는 범위: A-D (A~D 자동 생성)',
+    )
+    col_start = forms.IntegerField(label='열 시작', initial=1, min_value=1)
+    col_end = forms.IntegerField(label='열 끝', initial=5, min_value=1,
+                                  help_text='예: 1~5 → 01열~05열')
+    floor_start = forms.IntegerField(label='층 시작', initial=1, min_value=1)
+    floor_end = forms.IntegerField(label='층 끝', initial=3, min_value=1,
+                                    help_text='예: 1~3 → 01층~03층')
+    zone = forms.CharField(label='구역', max_length=50, required=False,
+                           help_text='선택사항')
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('col_start') and cleaned.get('col_end'):
+            if cleaned['col_start'] > cleaned['col_end']:
+                raise forms.ValidationError('열 시작이 열 끝보다 클 수 없습니다.')
+        if cleaned.get('floor_start') and cleaned.get('floor_end'):
+            if cleaned['floor_start'] > cleaned['floor_end']:
+                raise forms.ValidationError('층 시작이 층 끝보다 클 수 없습니다.')
+        return cleaned
+
+    def parse_lines(self):
+        raw = self.cleaned_data['lines'].strip().upper()
+        # A-D 범위 형식
+        if '-' in raw and ',' not in raw and len(raw) == 3:
+            s, e = raw[0], raw[2]
+            if s.isalpha() and e.isalpha():
+                return [chr(c) for c in range(ord(s), ord(e) + 1)]
+        return [x.strip() for x in raw.split(',') if x.strip()]
 
 
 @admin.register(Product)
@@ -16,6 +67,64 @@ class LocationAdmin(admin.ModelAdmin):
     list_display = ('barcode', 'name', 'zone', 'created_at')
     search_fields = ('barcode', 'name')
     list_filter = ('zone',)
+
+    # ── 커스텀 URL 추가 ──
+    def get_urls(self):
+        custom = [
+            path('bulk-create/',
+                 self.admin_site.admin_view(self.bulk_create_view),
+                 name='inventory_location_bulk_create'),
+        ]
+        return custom + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['has_bulk_create'] = True
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def bulk_create_view(self, request):
+        """로케이션 다중 생성 뷰"""
+        if request.method == 'POST':
+            form = BulkLocationForm(request.POST)
+            if form.is_valid():
+                center = form.cleaned_data['center'].upper()
+                building = form.cleaned_data['building'].upper()
+                line_list = form.parse_lines()
+                col_s = form.cleaned_data['col_start']
+                col_e = form.cleaned_data['col_end']
+                floor_s = form.cleaned_data['floor_start']
+                floor_e = form.cleaned_data['floor_end']
+                zone = form.cleaned_data['zone']
+
+                created = skipped = 0
+                for line in line_list:
+                    for col in range(col_s, col_e + 1):
+                        for floor in range(floor_s, floor_e + 1):
+                            barcode = f'{center}-{building}-{line}-{col:02d}-{floor:02d}'
+                            _, is_new = Location.objects.get_or_create(
+                                barcode=barcode,
+                                defaults={'zone': zone},
+                            )
+                            if is_new:
+                                created += 1
+                            else:
+                                skipped += 1
+
+                msg = f'{created}개 로케이션 생성 완료.'
+                if skipped:
+                    msg += f' ({skipped}개는 이미 존재하여 건너뜀)'
+                messages.success(request, msg)
+                return redirect('..')
+        else:
+            form = BulkLocationForm()
+
+        context = {
+            **self.admin_site.each_context(request),
+            'form': form,
+            'opts': self.model._meta,
+            'title': '로케이션 다중 생성',
+        }
+        return render(request, 'admin/inventory/location/bulk_create.html', context)
 
 
 @admin.register(InventorySession)

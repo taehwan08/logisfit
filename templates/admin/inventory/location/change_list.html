@@ -1,0 +1,12 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+{% if has_bulk_create %}
+<li>
+    <a href="bulk-create/" style="background: #2ecc71;">
+        다중 생성
+    </a>
+</li>
+{% endif %}
+{{ block.super }}
+{% endblock %}

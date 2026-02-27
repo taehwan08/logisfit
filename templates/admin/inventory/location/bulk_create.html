@@ -1,0 +1,158 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}로케이션 다중 생성{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">홈</a>
+    &rsaquo; <a href="{% url 'admin:app_list' opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:inventory_location_changelist' %}">{{ opts.verbose_name_plural }}</a>
+    &rsaquo; 다중 생성
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    .bulk-form { max-width: 600px; }
+    .bulk-form .form-row { margin-bottom: 1rem; display: flex; gap: 1rem; align-items: flex-start; }
+    .bulk-form .form-row > div { flex: 1; }
+    .bulk-form label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.85rem; }
+    .bulk-form input, .bulk-form select { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .bulk-form input:focus { border-color: #417690; outline: none; box-shadow: 0 0 0 2px rgba(65,118,144,0.2); }
+    .bulk-form .help { font-size: 0.75rem; color: #666; margin-top: 3px; }
+    .bulk-form .errors { color: #ba2121; margin-bottom: 1rem; }
+    .preview-box { background: #f0f4f8; border: 1px solid #d4dce4; border-radius: 8px; padding: 1rem; margin-top: 1rem; font-size: 0.85rem; }
+    .preview-box code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+    .submit-row { margin-top: 1.5rem; }
+    .submit-row input[type="submit"] {
+        background: #417690; color: #fff; border: none; padding: 10px 28px;
+        border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .submit-row input[type="submit"]:hover { background: #205067; }
+    .submit-row a { margin-left: 1rem; color: #666; text-decoration: none; font-size: 0.9rem; }
+</style>
+
+<h2 style="margin-bottom: 0.5rem;">로케이션 다중 생성</h2>
+<p style="color: #666; font-size: 0.85rem; margin-bottom: 1.5rem;">
+    바코드 형식: <code>{센터}-{동}-{라인}-{열}-{층}</code> &nbsp; 예) <code>1C-1D-A-01-02</code>
+</p>
+
+{% if form.non_field_errors %}
+<div class="errors">
+    {% for error in form.non_field_errors %}
+    <p>{{ error }}</p>
+    {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" class="bulk-form">
+    {% csrf_token %}
+
+    <div class="form-row">
+        <div>
+            <label for="id_center">{{ form.center.label }}</label>
+            {{ form.center }}
+            {% if form.center.help_text %}<div class="help">{{ form.center.help_text }}</div>{% endif %}
+            {% if form.center.errors %}<div class="errors">{{ form.center.errors }}</div>{% endif %}
+        </div>
+        <div>
+            <label for="id_building">{{ form.building.label }}</label>
+            {{ form.building }}
+            {% if form.building.help_text %}<div class="help">{{ form.building.help_text }}</div>{% endif %}
+            {% if form.building.errors %}<div class="errors">{{ form.building.errors }}</div>{% endif %}
+        </div>
+        <div>
+            <label for="id_lines">{{ form.lines.label }}</label>
+            {{ form.lines }}
+            {% if form.lines.help_text %}<div class="help">{{ form.lines.help_text }}</div>{% endif %}
+            {% if form.lines.errors %}<div class="errors">{{ form.lines.errors }}</div>{% endif %}
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div>
+            <label for="id_col_start">{{ form.col_start.label }}</label>
+            {{ form.col_start }}
+        </div>
+        <div>
+            <label for="id_col_end">{{ form.col_end.label }}</label>
+            {{ form.col_end }}
+            {% if form.col_end.help_text %}<div class="help">{{ form.col_end.help_text }}</div>{% endif %}
+        </div>
+        <div>
+            <label for="id_floor_start">{{ form.floor_start.label }}</label>
+            {{ form.floor_start }}
+        </div>
+        <div>
+            <label for="id_floor_end">{{ form.floor_end.label }}</label>
+            {{ form.floor_end }}
+            {% if form.floor_end.help_text %}<div class="help">{{ form.floor_end.help_text }}</div>{% endif %}
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div>
+            <label for="id_zone">{{ form.zone.label }}</label>
+            {{ form.zone }}
+            {% if form.zone.help_text %}<div class="help">{{ form.zone.help_text }}</div>{% endif %}
+        </div>
+    </div>
+
+    <div class="preview-box" id="previewBox">
+        <strong>미리보기:</strong>
+        <span id="previewContent">입력값을 채워주세요</span>
+    </div>
+
+    <div class="submit-row">
+        <input type="submit" value="생성">
+        <a href="{% url 'admin:inventory_location_changelist' %}">취소</a>
+    </div>
+</form>
+
+<script>
+(function() {
+    const fields = ['id_center','id_building','id_lines','id_col_start','id_col_end','id_floor_start','id_floor_end'];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updatePreview);
+    });
+
+    function updatePreview() {
+        const center = (document.getElementById('id_center').value || '').toUpperCase();
+        const building = (document.getElementById('id_building').value || '').toUpperCase();
+        const linesRaw = (document.getElementById('id_lines').value || '').toUpperCase().trim();
+        const colS = parseInt(document.getElementById('id_col_start').value) || 0;
+        const colE = parseInt(document.getElementById('id_col_end').value) || 0;
+        const floorS = parseInt(document.getElementById('id_floor_start').value) || 0;
+        const floorE = parseInt(document.getElementById('id_floor_end').value) || 0;
+
+        if (!center || !building || !linesRaw || colS <= 0 || colE <= 0 || floorS <= 0 || floorE <= 0) {
+            document.getElementById('previewContent').textContent = '입력값을 채워주세요';
+            return;
+        }
+
+        // 라인 파싱
+        let lineList;
+        if (linesRaw.length === 3 && linesRaw[1] === '-' && !linesRaw.includes(',')) {
+            const s = linesRaw.charCodeAt(0), e = linesRaw.charCodeAt(2);
+            lineList = [];
+            for (let c = s; c <= e; c++) lineList.push(String.fromCharCode(c));
+        } else {
+            lineList = linesRaw.split(',').map(x => x.trim()).filter(Boolean);
+        }
+
+        const total = lineList.length * (colE - colS + 1) * (floorE - floorS + 1);
+        const pad = n => String(n).padStart(2, '0');
+        const first = `${center}-${building}-${lineList[0]}-${pad(colS)}-${pad(floorS)}`;
+        const last = `${center}-${building}-${lineList[lineList.length-1]}-${pad(colE)}-${pad(floorE)}`;
+
+        document.getElementById('previewContent').innerHTML =
+            `<code>${first}</code> ~ <code>${last}</code> &nbsp; ` +
+            `(${lineList.join(',')}라인 × ${pad(colS)}~${pad(colE)}열 × ${pad(floorS)}~${pad(floorE)}층 = <strong>${total}개</strong>)`;
+    }
+
+    updatePreview();
+})();
+</script>
+{% endblock %}
