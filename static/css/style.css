@@ -38,6 +38,7 @@ body {
 .main-content {
     flex: 1;
     margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
     display: flex;
     flex-direction: column;
     min-height: 100vh;
@@ -46,6 +47,7 @@ body {
 @media (max-width: 991.98px) {
     .main-content {
         margin-left: 0;
+        width: 100%;
     }
 }
 
