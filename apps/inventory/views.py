@@ -45,6 +45,18 @@ def staff_required(view_func):
     return wrapper
 
 
+def staff_or_client_required(view_func):
+    """관리자, 작업자, 거래처 모두 접근 가능 데코레이터"""
+    def wrapper(request, *args, **kwargs):
+        if not (request.user.is_admin or request.user.is_worker
+                or request.user.is_superuser or request.user.is_client):
+            return JsonResponse({'error': '접근 권한이 없습니다.'}, status=403)
+        return view_func(request, *args, **kwargs)
+    wrapper.__name__ = view_func.__name__
+    wrapper.__doc__ = view_func.__doc__
+    return wrapper
+
+
 # ============================================================================
 # 페이지 뷰
 # ============================================================================
@@ -70,9 +82,9 @@ def scan_page(request):
 
 
 @login_required
-@staff_required
+@staff_or_client_required
 def status_page(request):
-    """재고 현황 조회 페이지 (관리자 + 작업자)"""
+    """재고 현황 조회 페이지 (관리자 + 작업자 + 거래처)"""
     sessions = InventorySession.objects.all()
     active_session = sessions.filter(status='active').first()
     return render(request, 'inventory/status.html', {
@@ -679,7 +691,7 @@ def scan_product(request):
 # ============================================================================
 
 @login_required
-@staff_required
+@staff_or_client_required
 @require_GET
 def get_records(request):
     """재고 기록을 조회한다.
@@ -729,7 +741,7 @@ def delete_record(request, record_id):
 
 
 @login_required
-@staff_required
+@staff_or_client_required
 @require_GET
 def get_location_records(request):
     """특정 로케이션의 현재 세션 기록을 조회한다.

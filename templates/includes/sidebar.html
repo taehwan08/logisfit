@@ -172,6 +172,15 @@
             {% endif %}
 
             {% if user.is_client %}
+                <!-- 거래처 전용: 재고 현황 -->
+                <li class="sidebar-header-text">재고 관리</li>
+                <li class="sidebar-item">
+                    <a href="{% url 'inventory:status_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'status_page' %}active{% endif %}">
+                        <i class="bi bi-bar-chart-line"></i>
+                        <span>재고 현황</span>
+                    </a>
+                </li>
+
                 <!-- 거래처 메뉴 -->
                 <li class="sidebar-header-text">내 거래처</li>
 
