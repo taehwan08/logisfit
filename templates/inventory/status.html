@@ -885,7 +885,7 @@ function renderRackView(groups) {
         // 각 열의 콘텐츠
         cols.forEach((colName, colIdx) => {
             const colObj = building.cols[colName];
-            const lines = Array.from(colObj.lines).sort();
+            const lines = Array.from(colObj.lines).sort().reverse();
             const floors = Array.from(colObj.floors).sort().reverse();
 
             html += `<div class="rack-col-content" id="${bId}-col-${escapeHtml(colName)}" style="${colIdx > 0 ? 'display:none;' : ''}">`;
