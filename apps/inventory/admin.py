@@ -57,8 +57,10 @@ class BulkLocationForm(forms.Form):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('barcode', 'name', 'display_name', 'option_code', 'created_at', 'updated_at')
+    list_display = ('barcode', 'name', 'display_name', 'option_code', 'client', 'brand', 'created_at', 'updated_at')
     search_fields = ('barcode', 'name', 'display_name', 'option_code')
+    list_filter = ('client',)
+    raw_id_fields = ('client', 'brand')
     ordering = ('name',)
 
 

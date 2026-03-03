@@ -14,6 +14,16 @@ class Product(models.Model):
     name = models.CharField('상품명', max_length=200)
     display_name = models.CharField('관리명', max_length=200, blank=True, default='')
     option_code = models.CharField('옵션코드', max_length=50, blank=True, default='', db_index=True)
+    client = models.ForeignKey(
+        'clients.Client', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='products', verbose_name='거래처',
+    )
+    brand = models.ForeignKey(
+        'clients.Brand', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='products', verbose_name='브랜드',
+    )
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
     updated_at = models.DateTimeField('수정일시', auto_now=True)
 

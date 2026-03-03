@@ -396,6 +396,28 @@
     .btn-close-edit:hover {
         background: #f8f9fa;
     }
+
+    /* 드래그앤드롭 */
+    .rack-cell.drag-source {
+        opacity: 0.5;
+        box-shadow: 0 0 0 2px #ffc107;
+    }
+    .rack-cell.drag-over {
+        box-shadow: 0 0 0 3px #198754;
+        background: rgba(25, 135, 84, 0.15) !important;
+    }
+    .rack-etc-cell.drag-source {
+        opacity: 0.5;
+    }
+    .rack-etc-cell.drag-over {
+        box-shadow: 0 0 0 3px #198754;
+    }
+
+    /* 이동 버튼 */
+    .btn-move-record {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+    }
 </style>
 {% endblock %}
 
@@ -405,7 +427,7 @@
     <div class="col-12">
         <div class="filter-bar">
             <div class="row g-3 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label small fw-medium">세션 선택</label>
                     <select class="form-select" id="sessionSelect" onchange="onSessionChange()">
                         <option value="">세션을 선택하세요</option>
@@ -418,7 +440,16 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-2" id="clientFilterWrap" {% if is_client %}style="display:none;"{% endif %}>
+                    <label class="form-label small fw-medium">거래처</label>
+                    <select class="form-select" id="clientFilter" onchange="onStatusClientFilterChange()">
+                        <option value="">전체</option>
+                        {% for c in clients %}
+                        <option value="{{ c.pk }}">{{ c.company_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label class="form-label small fw-medium">검색</label>
                     <div class="input-group">
                         <input type="text" class="form-control" id="searchInput"
@@ -482,6 +513,47 @@
         </div>
     </div>
 </div>
+
+<!-- 이동 모달 -->
+<div class="modal fade" id="moveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-arrows-move me-2"></i>재고 이동
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3 p-2 bg-light rounded">
+                    <small class="text-muted">출발지</small>
+                    <div class="fw-bold" id="moveSourceInfo"></div>
+                    <div class="small text-muted" id="moveProductInfo"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">도착 로케이션</label>
+                    <input type="text" class="form-control" id="moveTargetSearch"
+                           placeholder="로케이션 바코드 또는 이름 검색" autocomplete="off">
+                    <div id="moveTargetResults" class="list-group mt-1" style="max-height:150px; overflow-y:auto;"></div>
+                    <input type="hidden" id="moveTargetLocationId">
+                    <div id="moveTargetSelected" class="mt-1" style="display:none;"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">이동 수량</label>
+                    <input type="number" class="form-control" id="moveQuantity" min="1">
+                    <small class="text-muted" id="moveMaxQty"></small>
+                </div>
+                <input type="hidden" id="moveRecordId">
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="executeMove()">
+                    <i class="bi bi-arrows-move me-1"></i>이동
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -517,6 +589,11 @@ function onSessionChange() {
     loadRecords();
 }
 
+function onStatusClientFilterChange() {
+    treemapLocationData = null;
+    loadRecords();
+}
+
 function switchTab(tab) {
     currentTab = tab;
     document.querySelectorAll('#viewTabs .nav-link').forEach(el => {
@@ -545,6 +622,7 @@ async function loadRecords() {
     }
 
     const search = document.getElementById('searchInput').value.trim();
+    const clientId = document.getElementById('clientFilter')?.value || '';
     // 새 데이터를 불러올 때 시각화 캐시 초기화
     treemapLocationData = null;
     // 시각화 탭은 항상 location 기준으로 데이터 가져오기
@@ -554,6 +632,7 @@ async function loadRecords() {
         group_by: groupBy,
     });
     if (search) params.append('search', search);
+    if (clientId) params.append('client_id', clientId);
     // 시각화 탭: 전체 로케이션을 빈 상태로 포함
     if (currentTab === 'treemap') params.append('include_empty', '1');
 
@@ -628,6 +707,7 @@ function renderByLocation(groups) {
                             <th>바코드</th>
                             <th>작업자</th>
                             <th>등록시간</th>
+                            <th style="width:40px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -640,6 +720,11 @@ function renderByLocation(groups) {
                             <td><code>${escapeHtml(p.barcode || '-')}</code></td>
                             <td>${escapeHtml(p.worker || '-')}</td>
                             <td class="small text-muted">${escapeHtml(p.created_at)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-warning btn-move-record"
+                                    onclick="openMoveModal(${p.id}, '${escapeHtml(g.location.barcode)}', '${escapeHtml(p.product_name || '')}', '${escapeHtml(p.barcode || '')}', ${p.quantity})"
+                                    title="이동"><i class="bi bi-arrows-move"></i></button>
+                            </td>
                         </tr>
                         `).join('')}
                     </tbody>
@@ -756,8 +841,10 @@ function exportExcel() {
     const sessionId = document.getElementById('sessionSelect').value;
     if (!sessionId) return;
     const search = document.getElementById('searchInput').value.trim();
+    const clientId = document.getElementById('clientFilter')?.value || '';
     const params = new URLSearchParams({ session_id: sessionId });
     if (search) params.append('search', search);
+    if (clientId) params.append('client_id', clientId);
     window.location.href = `{% url "inventory:export_records_excel" %}?${params.toString()}`;
 }
 
@@ -963,7 +1050,13 @@ function renderRackView(groups) {
                             onmousemove="moveRackTooltip(event)"
                             onmouseleave="hideRackTooltip()"
                             onclick="selectRackCell(event, '${escapeHtml(cellData.barcode)}')"
-                            ondblclick="editRackCell(event, '${escapeHtml(cellData.barcode)}')">
+                            ondblclick="editRackCell(event, '${escapeHtml(cellData.barcode)}')"
+                            ${!isEmpty ? `draggable="true"
+                            ondragstart="onRackDragStart(event, '${escapeHtml(cellData.barcode)}')"
+                            ondragend="onRackDragEnd(event)"` : ''}
+                            ondragover="onRackDragOver(event)"
+                            ondragleave="onRackDragLeave(event)"
+                            ondrop="onRackDrop(event, '${escapeHtml(cellData.barcode)}')">
                             <span class="cell-qty" style="color:${txtColor}">${cellData.totalQty ? cellData.totalQty.toLocaleString() : '-'}</span>
                             ${!isEmpty ? `<span class="cell-types" style="color:${txtColor}">${cellData.productCount}종</span>` : ''}
                         </div>`;
@@ -1005,7 +1098,13 @@ function renderRackView(groups) {
                 onmousemove="moveRackTooltip(event)"
                 onmouseleave="hideRackTooltip()"
                 onclick="selectRackCell(event, '${escapeHtml(loc.barcode)}')"
-                ondblclick="editRackCell(event, '${escapeHtml(loc.barcode)}')">
+                ondblclick="editRackCell(event, '${escapeHtml(loc.barcode)}')"
+                ${!isEmpty ? `draggable="true"
+                ondragstart="onRackDragStart(event, '${escapeHtml(loc.barcode)}')"
+                ondragend="onRackDragEnd(event)"` : ''}
+                ondragover="onRackDragOver(event)"
+                ondragleave="onRackDragLeave(event)"
+                ondrop="onRackDrop(event, '${escapeHtml(loc.barcode)}')">
                 <code>${escapeHtml(loc.barcode)}</code>
                 <span style="margin-left:4px; font-weight:700;">${loc.totalQty ? loc.totalQty.toLocaleString() + '개' : '-'}</span>
             </div>`;
@@ -1238,6 +1337,10 @@ function renderRackDetailEdit(data) {
                         </td>
                         <td><code>${escapeHtml(pr.barcode || '-')}</code></td>
                         <td class="text-end pe-3">
+                            <button class="btn btn-sm btn-outline-warning btn-move-record me-1"
+                                    onclick="openMoveModal(${pr.id}, '${escapeHtml(data.barcode)}', '${escapeHtml(pr.product_name || '')}', '${escapeHtml(pr.barcode || '')}', ${pr.quantity})" title="이동">
+                                <i class="bi bi-arrows-move"></i>
+                            </button>
                             <button class="btn btn-sm btn-success btn-save-record me-1"
                                     onclick="saveRecordEdit(${pr.id}, '${escapeHtml(data.barcode)}')" title="저장">
                                 <i class="bi bi-check-lg"></i>
@@ -1466,6 +1569,184 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+
+// ============================================================================
+// 이동 모달 + 드래그앤드롭
+// ============================================================================
+
+let moveModal = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    moveModal = new bootstrap.Modal(document.getElementById('moveModal'));
+
+    // 도착지 검색 debounce
+    let searchTimeout;
+    document.getElementById('moveTargetSearch').addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => searchTargetLocations(this.value), 300);
+    });
+});
+
+function openMoveModal(recordId, locationBarcode, productName, barcode, quantity) {
+    document.getElementById('moveRecordId').value = recordId;
+    document.getElementById('moveSourceInfo').textContent = locationBarcode;
+    document.getElementById('moveProductInfo').textContent = `${productName} (${barcode}) - ${quantity}개`;
+    document.getElementById('moveQuantity').value = quantity;
+    document.getElementById('moveQuantity').max = quantity;
+    document.getElementById('moveMaxQty').textContent = `최대 ${quantity}개`;
+    document.getElementById('moveTargetSearch').value = '';
+    document.getElementById('moveTargetLocationId').value = '';
+    document.getElementById('moveTargetResults').innerHTML = '';
+    document.getElementById('moveTargetSelected').style.display = 'none';
+    moveModal.show();
+}
+
+async function searchTargetLocations(query) {
+    const resultsEl = document.getElementById('moveTargetResults');
+    if (!query || query.length < 1) {
+        resultsEl.innerHTML = '';
+        return;
+    }
+    try {
+        const resp = await fetch(`{% url "inventory:search_locations" %}?q=${encodeURIComponent(query)}`);
+        const data = await resp.json();
+        resultsEl.innerHTML = (data.locations || []).map(loc => `
+            <button type="button" class="list-group-item list-group-item-action py-1 px-2"
+                    onclick="selectTargetLocation(${loc.id}, '${escapeHtml(loc.barcode)}', '${escapeHtml(loc.name || '')}')">
+                <code>${escapeHtml(loc.barcode)}</code>
+                ${loc.name ? '<span class="text-muted ms-2">' + escapeHtml(loc.name) + '</span>' : ''}
+            </button>
+        `).join('');
+    } catch (e) {
+        console.error('Location search failed:', e);
+    }
+}
+
+function selectTargetLocation(id, barcode, name) {
+    document.getElementById('moveTargetLocationId').value = id;
+    document.getElementById('moveTargetResults').innerHTML = '';
+    document.getElementById('moveTargetSearch').value = '';
+    const selectedEl = document.getElementById('moveTargetSelected');
+    selectedEl.innerHTML = `<span class="badge bg-success"><code>${escapeHtml(barcode)}</code> ${name ? escapeHtml(name) : ''}</span>
+        <button class="btn btn-sm btn-link text-danger p-0 ms-1" onclick="clearTargetLocation()"><i class="bi bi-x"></i></button>`;
+    selectedEl.style.display = 'block';
+}
+
+function clearTargetLocation() {
+    document.getElementById('moveTargetLocationId').value = '';
+    document.getElementById('moveTargetSelected').style.display = 'none';
+}
+
+async function executeMove() {
+    const recordId = document.getElementById('moveRecordId').value;
+    const targetLocationId = document.getElementById('moveTargetLocationId').value;
+    const moveQuantity = parseInt(document.getElementById('moveQuantity').value);
+
+    if (!targetLocationId) {
+        alert('도착 로케이션을 선택해주세요.');
+        return;
+    }
+    if (!moveQuantity || moveQuantity < 1) {
+        alert('이동 수량을 입력해주세요.');
+        return;
+    }
+
+    try {
+        const resp = await fetch('{% url "inventory:move_record" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                record_id: parseInt(recordId),
+                target_location_id: parseInt(targetLocationId),
+                move_quantity: moveQuantity,
+            }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            moveModal.hide();
+            loadRecords();
+            showToast(data.message);
+        } else {
+            alert(data.error || '이동에 실패했습니다.');
+        }
+    } catch (e) {
+        alert('네트워크 오류가 발생했습니다.');
+    }
+}
+
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed bottom-0 end-0 p-3';
+    toast.style.zIndex = 9999;
+    toast.innerHTML = `
+        <div class="toast show" role="alert">
+            <div class="toast-body bg-success text-white rounded px-3 py-2">
+                <i class="bi bi-check-circle me-2"></i>${escapeHtml(message)}
+            </div>
+        </div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// 드래그앤드롭
+let dragSourceBarcode = null;
+
+function onRackDragStart(event, barcode) {
+    dragSourceBarcode = barcode;
+    event.currentTarget.classList.add('drag-source');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', barcode);
+}
+
+function onRackDragEnd(event) {
+    event.currentTarget.classList.remove('drag-source');
+}
+
+function onRackDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    event.currentTarget.classList.add('drag-over');
+}
+
+function onRackDragLeave(event) {
+    event.currentTarget.classList.remove('drag-over');
+}
+
+function onRackDrop(event, targetBarcode) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('drag-over');
+    document.querySelectorAll('.drag-source').forEach(el => el.classList.remove('drag-source'));
+
+    if (!dragSourceBarcode || dragSourceBarcode === targetBarcode) {
+        dragSourceBarcode = null;
+        return;
+    }
+
+    const sourceData = window._rackCellMap ? window._rackCellMap[dragSourceBarcode] : null;
+    if (!sourceData || !sourceData.products || !sourceData.products.length) {
+        dragSourceBarcode = null;
+        return;
+    }
+
+    // 대상 셀의 location ID 가져오기
+    const targetData = window._rackCellMap ? window._rackCellMap[targetBarcode] : null;
+
+    // 첫 번째 상품으로 이동 모달 오픈
+    const p = sourceData.products[0];
+    openMoveModal(p.id, sourceData.barcode, p.product_name, p.barcode, p.quantity);
+
+    // 대상 로케이션 자동 선택
+    if (targetData && targetData.locationId) {
+        selectTargetLocation(targetData.locationId, targetBarcode, targetData.locationName || '');
+    }
+
+    dragSourceBarcode = null;
 }
 </script>
 {% endblock %}

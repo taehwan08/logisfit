@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord, InboundImage
 from .slack import send_inbound_notification_async
+from apps.clients.models import Client, Brand
 
 logger = logging.getLogger(__name__)
 
@@ -87,17 +88,32 @@ def status_page(request):
     """재고 현황 조회 페이지 (관리자 + 작업자 + 거래처)"""
     sessions = InventorySession.objects.all()
     active_session = sessions.filter(status='active').first()
+    user = request.user
+    if user.is_client:
+        clients = user.clients.filter(is_active=True)
+    else:
+        clients = Client.objects.filter(is_active=True).order_by('company_name')
     return render(request, 'inventory/status.html', {
         'sessions': sessions,
         'active_session': active_session,
+        'clients': clients,
+        'is_client': user.is_client,
     })
 
 
 @login_required
-@staff_required
+@staff_or_client_required
 def products_page(request):
     """상품 마스터 관리 페이지"""
-    return render(request, 'inventory/products.html')
+    user = request.user
+    if user.is_client:
+        clients = user.clients.filter(is_active=True)
+    else:
+        clients = Client.objects.filter(is_active=True).order_by('company_name')
+    return render(request, 'inventory/products.html', {
+        'clients': clients,
+        'is_client': user.is_client,
+    })
 
 
 # ============================================================================
@@ -132,7 +148,7 @@ CHOSUNG_GROUP = {
 
 
 @login_required
-@staff_required
+@staff_or_client_required
 @require_GET
 def get_products(request):
     """상품 목록을 조회한다.
@@ -140,12 +156,21 @@ def get_products(request):
     Query params:
         search: 검색어 (바코드 or 상품명)
         initial: 초성 또는 알파벳 (ㄱ~ㅎ, A~Z) — 해당 글자로 시작하는 상품 검색
+        client_id: 거래처 ID (필터)
     """
     from django.db.models import Q
 
     search = request.GET.get('search', '').strip()
     initial = request.GET.get('initial', '').strip()
-    products = Product.objects.all()
+    client_id = request.GET.get('client_id', '').strip()
+    products = Product.objects.select_related('client', 'brand').all()
+
+    # 거래처 필터
+    if request.user.is_client:
+        client_ids = list(request.user.clients.values_list('id', flat=True))
+        products = products.filter(client_id__in=client_ids)
+    elif client_id:
+        products = products.filter(client_id=client_id)
 
     if search:
         products = products.filter(
@@ -176,6 +201,7 @@ def get_products(request):
                 Q(display_name__regex=r'^[0-9]')
             )
 
+    total_count = products.count()
     products = products.order_by('name')[:100]
 
     return JsonResponse({
@@ -186,17 +212,21 @@ def get_products(request):
                 'name': p.name,
                 'display_name': p.display_name,
                 'option_code': p.option_code,
+                'client_id': p.client_id,
+                'client_name': p.client.company_name if p.client else '',
+                'brand_id': p.brand_id,
+                'brand_name': p.brand.name if p.brand else '',
                 'created_at': timezone.localtime(p.created_at).strftime('%Y-%m-%d %H:%M'),
             }
             for p in products
         ],
-        'total': Product.objects.count(),
+        'total': total_count,
     })
 
 
 @csrf_exempt
 @login_required
-@staff_required
+@staff_or_client_required
 @require_POST
 def create_product(request):
     """상품을 수동으로 등록한다."""
@@ -209,16 +239,28 @@ def create_product(request):
     name = data.get('name', '').strip()
     display_name = data.get('display_name', '').strip()
     option_code = data.get('option_code', '').strip()
+    client_id = data.get('client_id') or None
+    brand_id = data.get('brand_id') or None
 
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
+
+    # client 유저: 자기 거래처 권한 검증
+    if request.user.is_client:
+        user_client_ids = list(request.user.clients.values_list('id', flat=True))
+        if client_id and int(client_id) not in user_client_ids:
+            return JsonResponse({'error': '권한이 없는 거래처입니다.'}, status=403)
+        if not client_id and len(user_client_ids) == 1:
+            client_id = user_client_ids[0]
 
     if Product.objects.filter(barcode=barcode, name=name).exists():
         return JsonResponse({'error': f'이미 등록된 상품입니다: {barcode} / {name}'}, status=400)
 
     product = Product.objects.create(
         barcode=barcode, name=name, display_name=display_name, option_code=option_code,
+        client_id=client_id, brand_id=brand_id,
     )
+    product = Product.objects.select_related('client', 'brand').get(pk=product.pk)
 
     return JsonResponse({
         'success': True,
@@ -228,20 +270,30 @@ def create_product(request):
             'name': product.name,
             'display_name': product.display_name,
             'option_code': product.option_code,
+            'client_id': product.client_id,
+            'client_name': product.client.company_name if product.client else '',
+            'brand_id': product.brand_id,
+            'brand_name': product.brand.name if product.brand else '',
         },
     })
 
 
 @csrf_exempt
 @login_required
-@staff_required
+@staff_or_client_required
 @require_POST
 def update_product(request, product_id):
     """상품 정보를 수정한다."""
     try:
-        product = Product.objects.get(pk=product_id)
+        product = Product.objects.select_related('client', 'brand').get(pk=product_id)
     except Product.DoesNotExist:
         return JsonResponse({'error': '상품을 찾을 수 없습니다.'}, status=404)
+
+    # client 유저: 자기 거래처 상품만 수정 가능
+    if request.user.is_client:
+        user_client_ids = list(request.user.clients.values_list('id', flat=True))
+        if product.client_id not in user_client_ids:
+            return JsonResponse({'error': '권한이 없는 상품입니다.'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -252,6 +304,8 @@ def update_product(request, product_id):
     name = data.get('name', '').strip()
     display_name = data.get('display_name', '').strip()
     option_code = data.get('option_code', '').strip()
+    client_id = data.get('client_id')
+    brand_id = data.get('brand_id')
 
     if not barcode or not name:
         return JsonResponse({'error': '바코드와 상품명을 모두 입력해주세요.'}, status=400)
@@ -264,7 +318,11 @@ def update_product(request, product_id):
     product.name = name
     product.display_name = display_name
     product.option_code = option_code
-    product.save(update_fields=['barcode', 'name', 'display_name', 'option_code', 'updated_at'])
+    product.client_id = client_id or None
+    product.brand_id = brand_id or None
+    product.save(update_fields=['barcode', 'name', 'display_name', 'option_code', 'client_id', 'brand_id', 'updated_at'])
+    product.refresh_from_db()
+    product = Product.objects.select_related('client', 'brand').get(pk=product.pk)
 
     return JsonResponse({
         'success': True,
@@ -274,13 +332,17 @@ def update_product(request, product_id):
             'name': product.name,
             'display_name': product.display_name,
             'option_code': product.option_code,
+            'client_id': product.client_id,
+            'client_name': product.client.company_name if product.client else '',
+            'brand_id': product.brand_id,
+            'brand_name': product.brand.name if product.brand else '',
         },
     })
 
 
 @csrf_exempt
 @login_required
-@staff_required
+@staff_or_client_required
 def delete_product(request, product_id):
     """상품을 삭제한다."""
     if request.method != 'DELETE':
@@ -290,6 +352,12 @@ def delete_product(request, product_id):
         product = Product.objects.get(pk=product_id)
     except Product.DoesNotExist:
         return JsonResponse({'error': '상품을 찾을 수 없습니다.'}, status=404)
+
+    # client 유저: 자기 거래처 상품만 삭제 가능
+    if request.user.is_client:
+        user_client_ids = list(request.user.clients.values_list('id', flat=True))
+        if product.client_id not in user_client_ids:
+            return JsonResponse({'error': '권한이 없는 상품입니다.'}, status=403)
 
     product.delete()
     return JsonResponse({'success': True})
@@ -333,11 +401,13 @@ def upload_products_excel(request):
             for row_idx in range(1, ws.nrows):
                 rows.append(tuple(ws.cell_value(row_idx, col) for col in range(ws.ncols)))
 
-        # 헤더에서 바코드/상품명/관리명/옵션코드 컬럼 인덱스 찾기
+        # 헤더에서 바코드/상품명/관리명/옵션코드/거래처/브랜드 컬럼 인덱스 찾기
         barcode_idx = _find_column_index(headers, ['바코드', '바코드번호', 'barcode', 'BarCode', 'BARCODE'])
         name_idx = _find_column_index(headers, ['상품명', '품명', '제품명', '이름', 'name', 'product_name', '상품이름'])
         display_name_idx = _find_column_index(headers, ['관리명', '관리이름', '관리상품명', 'display_name', '별칭'])
         option_code_idx = _find_column_index(headers, ['옵션코드', '옵션번호', 'option_code', 'optioncode', 'OPTION_CODE'])
+        client_idx = _find_column_index(headers, ['거래처', '거래처명', '고객사', 'client', 'client_name'])
+        brand_idx = _find_column_index(headers, ['브랜드', '브랜드명', 'brand', 'brand_name'])
 
         if barcode_idx is None:
             return JsonResponse({'error': '바코드 컬럼을 찾을 수 없습니다. 헤더에 "바코드" 또는 "barcode"가 포함되어야 합니다.'}, status=400)
@@ -418,12 +488,30 @@ def upload_products_excel(request):
                 skipped_count += 1
                 continue
 
+            # 거래처/브랜드 해석
+            client_val = str(row[client_idx] or '').strip() if client_idx is not None and client_idx < len(row) else ''
+            brand_val = str(row[brand_idx] or '').strip() if brand_idx is not None and brand_idx < len(row) else ''
+            resolved_client_id = None
+            resolved_brand_id = None
+            if client_val:
+                client_obj = Client.objects.filter(company_name__iexact=client_val, is_active=True).first()
+                if client_obj:
+                    resolved_client_id = client_obj.id
+                    if brand_val:
+                        brand_obj = Brand.objects.filter(client=client_obj, name__iexact=brand_val, is_active=True).first()
+                        if brand_obj:
+                            resolved_brand_id = brand_obj.id
+
             try:
                 defaults = {}
                 if display_name_val:
                     defaults['display_name'] = display_name_val
                 if option_code_val:
                     defaults['option_code'] = option_code_val
+                if resolved_client_id:
+                    defaults['client_id'] = resolved_client_id
+                if resolved_brand_id:
+                    defaults['brand_id'] = resolved_brand_id
 
                 if defaults:
                     product, created = Product.objects.update_or_create(
@@ -770,6 +858,7 @@ def get_records(request):
         session_id: 세션 ID (필수)
         group_by: 'location' 또는 'product' (기본: location)
         search: 검색어 (로케이션 바코드, 상품명, 상품바코드)
+        client_id: 거래처 ID (필터)
     """
     session_id = request.GET.get('session_id')
     if not session_id:
@@ -778,10 +867,24 @@ def get_records(request):
     group_by = request.GET.get('group_by', 'location')
     search = request.GET.get('search', '').strip()
     include_empty = request.GET.get('include_empty', '') == '1'
+    client_id = request.GET.get('client_id', '').strip()
 
     records = InventoryRecord.objects.filter(
         session_id=session_id,
     ).select_related('location')
+
+    # 거래처 필터 (barcode 서브쿼리)
+    if request.user.is_client:
+        user_client_ids = list(request.user.clients.values_list('id', flat=True))
+        client_barcodes = Product.objects.filter(
+            client_id__in=user_client_ids
+        ).values_list('barcode', flat=True).distinct()
+        records = records.filter(barcode__in=client_barcodes)
+    elif client_id:
+        client_barcodes = Product.objects.filter(
+            client_id=client_id
+        ).values_list('barcode', flat=True).distinct()
+        records = records.filter(barcode__in=client_barcodes)
 
     if search:
         records = records.filter(
@@ -1022,10 +1125,24 @@ def export_records_excel(request):
         return JsonResponse({'error': '세션을 찾을 수 없습니다.'}, status=404)
 
     search = request.GET.get('search', '').strip()
+    client_id = request.GET.get('client_id', '').strip()
 
     records = InventoryRecord.objects.filter(
         session_id=session_id,
     ).select_related('location').order_by('location__barcode', 'product_name', 'created_at')
+
+    # 거래처 필터
+    if request.user.is_client:
+        user_client_ids = list(request.user.clients.values_list('id', flat=True))
+        client_barcodes = Product.objects.filter(
+            client_id__in=user_client_ids
+        ).values_list('barcode', flat=True).distinct()
+        records = records.filter(barcode__in=client_barcodes)
+    elif client_id:
+        client_barcodes = Product.objects.filter(
+            client_id=client_id
+        ).values_list('barcode', flat=True).distinct()
+        records = records.filter(barcode__in=client_barcodes)
 
     if search:
         records = records.filter(models_Q_search(search))
@@ -1312,6 +1429,184 @@ def upload_scan_excel(request):
     except Exception as e:
         logger.error('재고 스캔 엑셀 업로드 실패: %s', e, exc_info=True)
         return JsonResponse({'error': f'파일 처리 중 오류: {str(e)}'}, status=500)
+
+
+# ============================================================================
+# API: 거래처/브랜드 목록
+# ============================================================================
+
+@login_required
+@staff_or_client_required
+@require_GET
+def get_client_list(request):
+    """상품 관리용 거래처 목록을 조회한다."""
+    user = request.user
+    if user.is_client:
+        clients = user.clients.filter(is_active=True)
+    else:
+        clients = Client.objects.filter(is_active=True).order_by('company_name')
+
+    return JsonResponse({
+        'clients': [{'id': c.id, 'name': c.company_name} for c in clients]
+    })
+
+
+@login_required
+@staff_or_client_required
+@require_GET
+def get_brand_list(request):
+    """거래처별 브랜드 목록을 조회한다.
+
+    Query params:
+        client_id: 거래처 ID
+    """
+    client_id = request.GET.get('client_id')
+    if not client_id:
+        return JsonResponse({'brands': []})
+
+    brands = Brand.objects.filter(client_id=client_id, is_active=True).order_by('name')
+    return JsonResponse({
+        'brands': [{'id': b.id, 'name': b.name, 'code': b.code} for b in brands]
+    })
+
+
+# ============================================================================
+# API: 로케이션 이동
+# ============================================================================
+
+@csrf_exempt
+@login_required
+@staff_required
+@require_POST
+def move_record(request):
+    """재고 기록을 다른 로케이션으로 이동한다.
+
+    Body params:
+        record_id: 이동할 기록 ID
+        target_location_id: 대상 로케이션 ID
+        move_quantity: 이동 수량
+    """
+    from django.db import transaction
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+    record_id = data.get('record_id')
+    target_location_id = data.get('target_location_id')
+    move_quantity = data.get('move_quantity')
+
+    if not record_id or not target_location_id or not move_quantity:
+        return JsonResponse({'error': '필수 파라미터가 누락되었습니다.'}, status=400)
+
+    try:
+        move_quantity = int(move_quantity)
+        if move_quantity < 1:
+            return JsonResponse({'error': '이동 수량은 1 이상이어야 합니다.'}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': '올바른 수량을 입력해주세요.'}, status=400)
+
+    try:
+        with transaction.atomic():
+            record = InventoryRecord.objects.select_for_update().select_related('location').get(pk=record_id)
+            target_location = Location.objects.get(pk=target_location_id)
+
+            if record.location_id == target_location.pk:
+                return JsonResponse({'error': '같은 로케이션으로는 이동할 수 없습니다.'}, status=400)
+
+            if move_quantity > record.quantity:
+                return JsonResponse({
+                    'error': f'이동 수량({move_quantity})이 보유 수량({record.quantity})을 초과합니다.'
+                }, status=400)
+
+            source_location_barcode = record.location.barcode
+
+            # 대상 로케이션에 동일 기록이 있는지 확인
+            target_existing = InventoryRecord.objects.select_for_update().filter(
+                session=record.session,
+                location=target_location,
+                barcode=record.barcode,
+                product_name=record.product_name,
+                expiry_date=record.expiry_date,
+                lot_number=record.lot_number,
+            ).first()
+
+            if move_quantity == record.quantity:
+                # 전체 이동
+                if target_existing:
+                    target_existing.quantity += move_quantity
+                    target_existing.save(update_fields=['quantity'])
+                    record.delete()
+                    result_record = target_existing
+                else:
+                    record.location = target_location
+                    record.save(update_fields=['location_id'])
+                    result_record = record
+            else:
+                # 부분 이동 (분할)
+                record.quantity -= move_quantity
+                record.save(update_fields=['quantity'])
+
+                if target_existing:
+                    target_existing.quantity += move_quantity
+                    target_existing.save(update_fields=['quantity'])
+                    result_record = target_existing
+                else:
+                    result_record = InventoryRecord.objects.create(
+                        session=record.session,
+                        location=target_location,
+                        barcode=record.barcode,
+                        product_name=record.product_name,
+                        quantity=move_quantity,
+                        expiry_date=record.expiry_date,
+                        lot_number=record.lot_number,
+                        worker=request.user.name if hasattr(request.user, 'name') else str(request.user),
+                    )
+
+            return JsonResponse({
+                'success': True,
+                'message': f'{move_quantity}개를 {target_location.barcode}로 이동했습니다.',
+                'source_location_barcode': source_location_barcode,
+                'target_location_barcode': target_location.barcode,
+                'source_record': _record_to_dict(record) if record.pk else None,
+                'target_record': _record_to_dict(result_record),
+            })
+
+    except InventoryRecord.DoesNotExist:
+        return JsonResponse({'error': '기록을 찾을 수 없습니다.'}, status=404)
+    except Location.DoesNotExist:
+        return JsonResponse({'error': '대상 로케이션을 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        logger.error('재고 이동 실패: %s', e, exc_info=True)
+        return JsonResponse({'error': f'이동 처리 중 오류: {str(e)}'}, status=500)
+
+
+@login_required
+@staff_required
+@require_GET
+def search_locations(request):
+    """로케이션을 검색한다 (이동 모달용).
+
+    Query params:
+        q: 검색어 (바코드 또는 이름)
+    """
+    from django.db.models import Q
+
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'locations': []})
+
+    locations = Location.objects.filter(
+        Q(barcode__icontains=q) | Q(name__icontains=q)
+    ).order_by('barcode')[:20]
+
+    return JsonResponse({
+        'locations': [
+            {'id': loc.pk, 'barcode': loc.barcode, 'name': loc.name}
+            for loc in locations
+        ]
+    })
 
 
 # ============================================================================

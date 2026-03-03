@@ -21,6 +21,10 @@ urlpatterns = [
     path('api/products/upload/', views.upload_products_excel, name='upload_products_excel'),
     path('api/products/lookup/', views.lookup_product, name='lookup_product'),
 
+    # API: 거래처/브랜드
+    path('api/clients/', views.get_client_list, name='get_client_list'),
+    path('api/brands/', views.get_brand_list, name='get_brand_list'),
+
     # API: 세션
     path('api/sessions/', views.get_sessions, name='get_sessions'),
     path('api/sessions/create/', views.create_session, name='create_session'),
@@ -40,6 +44,10 @@ urlpatterns = [
     path('api/records/<int:record_id>/update/', views.update_record, name='update_record'),
     path('api/records/<int:record_id>/delete/', views.delete_record, name='delete_record'),
     path('api/records/export/', views.export_records_excel, name='export_records_excel'),
+    path('api/records/move/', views.move_record, name='move_record'),
+
+    # API: 로케이션 검색
+    path('api/locations/search/', views.search_locations, name='search_locations'),
 
     # 입고 관리
     path('inbound/', views.inbound_page, name='inbound_page'),
