@@ -208,3 +208,50 @@ class PickScanSerializer(serializers.Serializer):
     product_barcode = serializers.CharField(max_length=100)
     to_location_code = serializers.CharField(max_length=50)
     qty = serializers.IntegerField(min_value=1)
+
+
+# ------------------------------------------------------------------
+# PDA 검수
+# ------------------------------------------------------------------
+
+class InspectionOrderSerializer(serializers.ModelSerializer):
+    """검수 대기 주문 목록용"""
+    client_name = serializers.CharField(source='client.company_name', read_only=True)
+    item_count = serializers.IntegerField(source='items.count', read_only=True)
+    total_qty = serializers.SerializerMethodField()
+    inspected_total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OutboundOrder
+        fields = [
+            'id', 'wms_order_id', 'status', 'recipient_name',
+            'client', 'client_name', 'item_count',
+            'total_qty', 'inspected_total',
+        ]
+
+    def get_total_qty(self, obj):
+        return sum(i.qty for i in obj.items.all())
+
+    def get_inspected_total(self, obj):
+        return sum(i.inspected_qty for i in obj.items.all())
+
+
+class InspectionItemSerializer(serializers.ModelSerializer):
+    """검수 상세 품목"""
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_barcode = serializers.CharField(source='product.barcode', read_only=True)
+    remaining = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OutboundOrderItem
+        fields = [
+            'id', 'product', 'product_name', 'product_barcode',
+            'qty', 'inspected_qty', 'remaining',
+        ]
+
+    def get_remaining(self, obj):
+        return obj.qty - obj.inspected_qty
+
+
+class InspectScanSerializer(serializers.Serializer):
+    product_barcode = serializers.CharField(max_length=100)

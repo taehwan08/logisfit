@@ -28,4 +28,21 @@ urlpatterns = [
         views.PickScanView.as_view(),
         name='wave-pick',
     ),
+
+    # PDA 검수
+    path(
+        '<str:wave_id>/inspection/',
+        views.InspectionListView.as_view(),
+        name='wave-inspection-list',
+    ),
+    path(
+        'orders/<str:wms_order_id>/inspection-detail/',
+        views.InspectionDetailView.as_view(),
+        name='inspection-detail',
+    ),
+    path(
+        'orders/<str:wms_order_id>/inspect-scan/',
+        views.InspectScanView.as_view(),
+        name='inspect-scan',
+    ),
 ]

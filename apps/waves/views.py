@@ -30,8 +30,12 @@ from .serializers import (
     WaveProgressSerializer,
     TotalPickListSerializer,
     PickScanSerializer,
+    InspectionOrderSerializer,
+    InspectionItemSerializer,
+    InspectScanSerializer,
 )
 from .services import WaveService
+from .signals import order_inspected
 
 logger = logging.getLogger(__name__)
 
@@ -572,4 +576,191 @@ class PickScanView(APIView):
             'detail_picked_qty': detail.picked_qty,
             'detail_remaining': detail.qty - detail.picked_qty,
             'all_completed': all_completed,
+        })
+
+
+# ------------------------------------------------------------------
+# PDA 검수
+# ------------------------------------------------------------------
+
+class InspectionListView(APIView):
+    """GET /api/v1/waves/{wave_id}/inspection/
+
+    검수 대기 주문 목록을 반환합니다.
+    피킹 완료(DISTRIBUTING) 이후, ALLOCATED/PICKING 상태의 주문을 포함합니다.
+    """
+
+    permission_classes = [IsFieldStaff]
+
+    def get(self, request, wave_id):
+        try:
+            wave = Wave.objects.get(wave_id=wave_id)
+        except Wave.DoesNotExist:
+            return Response(
+                {'detail': '웨이브를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        orders = wave.orders.filter(
+            status__in=['ALLOCATED', 'PICKING'],
+        ).select_related('client').prefetch_related('items')
+
+        serializer = InspectionOrderSerializer(orders, many=True)
+        return Response({
+            'wave_id': wave.wave_id,
+            'wave_status': wave.status,
+            'orders': serializer.data,
+        })
+
+
+class InspectionDetailView(APIView):
+    """GET /api/v1/waves/orders/{wms_order_id}/inspection-detail/
+
+    검수할 주문의 품목 상세 정보를 반환합니다.
+    """
+
+    permission_classes = [IsFieldStaff]
+
+    def get(self, request, wms_order_id):
+        try:
+            order = OutboundOrder.objects.select_related(
+                'client',
+            ).prefetch_related(
+                'items__product',
+            ).get(wms_order_id=wms_order_id)
+        except OutboundOrder.DoesNotExist:
+            return Response(
+                {'detail': '주문을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not order.wave:
+            return Response(
+                {'error_code': 'ORDER_NOT_IN_WAVE',
+                 'detail': '웨이브에 배정되지 않은 주문입니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        items = InspectionItemSerializer(order.items.all(), many=True)
+        return Response({
+            'wms_order_id': order.wms_order_id,
+            'status': order.status,
+            'recipient_name': order.recipient_name,
+            'client_name': order.client.company_name,
+            'items': items.data,
+        })
+
+
+class InspectScanView(APIView):
+    """POST /api/v1/waves/orders/{wms_order_id}/inspect-scan/
+
+    바코드 스캔으로 검수를 수행합니다.
+    스캔 1회 = 수량 1개. 동일 상품 3개면 3번 스캔해야 합니다.
+
+    에러코드:
+      - ORDER_NOT_IN_WAVE: 웨이브 미배정 주문
+      - WRONG_PRODUCT: 주문에 없는 상품
+      - ALREADY_COMPLETE: 이미 검수 완료된 주문
+      - QTY_EXCEEDED: 해당 상품의 검수수량이 주문수량을 초과
+    """
+
+    permission_classes = [IsFieldStaff]
+
+    @transaction.atomic
+    def post(self, request, wms_order_id):
+        serializer = InspectScanSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        product_barcode = serializer.validated_data['product_barcode']
+
+        # 1. 주문 조회
+        try:
+            order = OutboundOrder.objects.select_for_update().get(
+                wms_order_id=wms_order_id,
+            )
+        except OutboundOrder.DoesNotExist:
+            return Response(
+                {'detail': '주문을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 2. 웨이브 배정 확인
+        if not order.wave:
+            return Response(
+                {'error_code': 'ORDER_NOT_IN_WAVE',
+                 'detail': '웨이브에 배정되지 않은 주문입니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 3. 이미 검수 완료 확인
+        if order.status == 'INSPECTED':
+            return Response(
+                {'error_code': 'ALREADY_COMPLETE',
+                 'detail': '이미 검수 완료된 주문입니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 4. 바코드로 상품 조회
+        product = _resolve_product_by_barcode(product_barcode)
+        if not product:
+            return Response(
+                {'error_code': 'WRONG_PRODUCT',
+                 'detail': f'바코드 {product_barcode}에 해당하는 상품이 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 5. 주문 품목에서 해당 상품 찾기
+        item = order.items.filter(product=product).first()
+        if not item:
+            return Response(
+                {'error_code': 'WRONG_PRODUCT',
+                 'detail': f'이 주문에 {product.name} 상품이 포함되어 있지 않습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 6. 수량 초과 확인
+        if item.inspected_qty >= item.qty:
+            return Response(
+                {'error_code': 'QTY_EXCEEDED',
+                 'detail': f'{product.name}: 검수수량({item.inspected_qty})이 '
+                           f'주문수량({item.qty})에 도달했습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 7. 검수수량 +1
+        item.inspected_qty += 1
+        item.save(update_fields=['inspected_qty'])
+
+        # 8. 주문 전체 검수 완료 확인
+        all_inspected = True
+        for oi in order.items.all():
+            if oi.inspected_qty < oi.qty:
+                all_inspected = False
+                break
+
+        order_completed = False
+        if all_inspected:
+            order.status = 'INSPECTED'
+            order.save(update_fields=['status'])
+            order_completed = True
+
+            # Wave inspected_count 증가
+            wave = Wave.objects.select_for_update().get(pk=order.wave_id)
+            wave.inspected_count += 1
+            wave.save(update_fields=['inspected_count'])
+
+            # 시그널 발행 (송장 출력 트리거)
+            order_inspected.send(
+                sender=OutboundOrder,
+                order=order,
+                user=request.user,
+            )
+
+        return Response({
+            'success': True,
+            'product_name': product.name,
+            'product_barcode': product.barcode,
+            'inspected_qty': item.inspected_qty,
+            'remaining': item.qty - item.inspected_qty,
+            'order_completed': order_completed,
         })
