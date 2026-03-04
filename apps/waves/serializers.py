@@ -116,7 +116,8 @@ class TotalPickListDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'from_location', 'from_location_code',
             'to_location', 'to_location_code',
-            'qty', 'picked_by', 'picked_by_name', 'picked_at',
+            'qty', 'picked_qty',
+            'picked_by', 'picked_by_name', 'picked_at',
         ]
 
 
@@ -196,3 +197,14 @@ class WaveProgressSerializer(serializers.ModelSerializer):
             'inspection': round(obj.inspected_count / total * 100, 1),
             'shipping': round(obj.shipped_count / total * 100, 1),
         }
+
+
+# ------------------------------------------------------------------
+# PDA 피킹 스캔
+# ------------------------------------------------------------------
+
+class PickScanSerializer(serializers.Serializer):
+    from_location_code = serializers.CharField(max_length=50)
+    product_barcode = serializers.CharField(max_length=100)
+    to_location_code = serializers.CharField(max_length=50)
+    qty = serializers.IntegerField(min_value=1)

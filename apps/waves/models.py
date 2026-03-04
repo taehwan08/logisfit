@@ -285,6 +285,7 @@ class TotalPickListDetail(models.Model):
         related_name='+', verbose_name='도착 로케이션',
     )
     qty = models.IntegerField('수량')
+    picked_qty = models.IntegerField('피킹수량', default=0)
     picked_by = models.ForeignKey(
         'accounts.User', on_delete=models.SET_NULL,
         null=True, blank=True, verbose_name='피킹 작업자',

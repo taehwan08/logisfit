@@ -4,18 +4,23 @@
 import logging
 
 from django.db import transaction
+from django.db.models import F as models_F
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.clients.models import Client, Brand
-from apps.inventory.models import Product
+from apps.inventory.models import Product, Location, InventoryBalance
 from apps.inventory.services import InventoryService
 from apps.inventory.exceptions import InsufficientStockError
 
-from .models import OutboundOrder, OutboundOrderItem, Wave
-from .permissions import IsOfficeStaff
+from .models import (
+    OutboundOrder, OutboundOrderItem, Wave,
+    TotalPickList, TotalPickListDetail,
+)
+from .permissions import IsOfficeStaff, IsFieldStaff
 from .serializers import (
     OrderReceiveSerializer,
     OutboundOrderDetailSerializer,
@@ -23,6 +28,8 @@ from .serializers import (
     WaveListSerializer,
     WaveDetailSerializer,
     WaveProgressSerializer,
+    TotalPickListSerializer,
+    PickScanSerializer,
 )
 from .services import WaveService
 
@@ -331,3 +338,238 @@ class WaveProgressView(APIView):
             )
 
         return Response(WaveProgressSerializer(wave).data)
+
+
+# ------------------------------------------------------------------
+# PDA 토탈피킹 API
+# ------------------------------------------------------------------
+
+def _resolve_product_by_barcode(barcode):
+    """바코드로 상품 조회 (ProductBarcode 우선, Product.barcode 폴백)"""
+    from apps.inventory.models import ProductBarcode
+    pb = ProductBarcode.objects.select_related('product').filter(barcode=barcode).first()
+    if pb:
+        return pb.product
+    return Product.objects.filter(barcode=barcode).first()
+
+
+def _pick_error(code, message, http_status=status.HTTP_400_BAD_REQUEST):
+    return Response({'error': code, 'message': message}, status=http_status)
+
+
+class PickListView(APIView):
+    """피킹리스트 조회 (PDA 화면용)
+
+    GET /api/v1/waves/{wave_id}/picklist/
+    PENDING, IN_PROGRESS 상태의 TotalPickList만 반환.
+    """
+
+    permission_classes = [IsFieldStaff]
+
+    def get(self, request, wave_id):
+        try:
+            wave = Wave.objects.get(wave_id=wave_id)
+        except Wave.DoesNotExist:
+            return Response(
+                {'error': '웨이브를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        pick_lists = (
+            wave.pick_lists
+            .filter(status__in=['PENDING', 'IN_PROGRESS'])
+            .select_related('product')
+            .prefetch_related(
+                'details__from_location',
+                'details__to_location',
+                'details__picked_by',
+            )
+        )
+        return Response({
+            'wave_id': wave.wave_id,
+            'wave_status': wave.status,
+            'outbound_zone_code': (
+                wave.outbound_zone.barcode if wave.outbound_zone else None
+            ),
+            'pick_lists': TotalPickListSerializer(pick_lists, many=True).data,
+        })
+
+
+class PickScanView(APIView):
+    """피킹 스캔 처리
+
+    POST /api/v1/waves/{wave_id}/pick/
+    PDA에서 바코드 스캔 후 피킹 확인 요청.
+    """
+
+    permission_classes = [IsFieldStaff]
+
+    @transaction.atomic
+    def post(self, request, wave_id):
+        # Wave 조회
+        try:
+            wave = Wave.objects.select_for_update().get(wave_id=wave_id)
+        except Wave.DoesNotExist:
+            return Response(
+                {'error': '웨이브를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if wave.status not in ('CREATED', 'PICKING'):
+            return _pick_error(
+                'ALREADY_COMPLETED',
+                '이미 피킹이 완료된 웨이브입니다.',
+            )
+
+        # 입력 검증
+        serializer = PickScanSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+
+        # 1. from_location 검증
+        from_location = Location.objects.filter(
+            barcode=data['from_location_code'].upper(),
+        ).first()
+        if not from_location or from_location.zone_type not in ('STORAGE', 'PICKING'):
+            return _pick_error(
+                'WRONG_LOCATION',
+                f"유효하지 않은 보관 로케이션입니다: {data['from_location_code']}",
+            )
+
+        # 2. product 검증
+        product = _resolve_product_by_barcode(data['product_barcode'])
+        if not product:
+            return _pick_error(
+                'WRONG_PRODUCT',
+                f"상품을 찾을 수 없습니다: {data['product_barcode']}",
+            )
+
+        # 3. to_location 검증 (웨이브 출고존 매칭)
+        to_location = Location.objects.filter(
+            barcode=data['to_location_code'].upper(),
+        ).first()
+        if not to_location:
+            return _pick_error(
+                'WRONG_OUTBOUND_ZONE',
+                f"로케이션을 찾을 수 없습니다: {data['to_location_code']}",
+            )
+        if wave.outbound_zone and to_location != wave.outbound_zone:
+            return _pick_error(
+                'WRONG_OUTBOUND_ZONE',
+                f"웨이브의 출고존이 아닙니다. "
+                f"{wave.outbound_zone.barcode}을 스캔해주세요.",
+            )
+
+        # 4. 매칭 TotalPickListDetail 조회
+        detail = (
+            TotalPickListDetail.objects
+            .select_for_update()
+            .filter(
+                pick_list__wave=wave,
+                pick_list__product=product,
+                from_location=from_location,
+            )
+            .first()
+        )
+        if not detail:
+            # 올바른 로케이션 추천
+            valid_details = (
+                TotalPickListDetail.objects
+                .filter(
+                    pick_list__wave=wave,
+                    pick_list__product=product,
+                    picked_qty__lt=models_F('qty'),
+                )
+                .select_related('from_location')
+            )
+            hint_locations = [
+                d.from_location.barcode for d in valid_details[:3]
+            ]
+            hint = ', '.join(hint_locations) if hint_locations else '없음'
+            return _pick_error(
+                'WRONG_LOCATION',
+                f"해당 로케이션은 이 피킹리스트에 없습니다. "
+                f"{hint}을 스캔해주세요.",
+            )
+
+        # 5. 수량 검증
+        remaining = detail.qty - detail.picked_qty
+        if remaining <= 0:
+            return _pick_error(
+                'ALREADY_COMPLETED',
+                '이미 피킹이 완료된 항목입니다.',
+            )
+        qty = data['qty']
+        if qty > remaining:
+            return _pick_error(
+                'QTY_EXCEEDED',
+                f"남은 수량({remaining})을 초과했습니다.",
+            )
+
+        # 6. InventoryService.move_stock() 호출
+        # 재고 밸런스에서 client 식별
+        balance = (
+            InventoryBalance.objects
+            .filter(product=product, location=from_location, on_hand_qty__gt=0)
+            .first()
+        )
+        if balance:
+            try:
+                InventoryService.move_stock(
+                    product=product,
+                    from_location=from_location,
+                    to_location=to_location,
+                    client=balance.client,
+                    qty=qty,
+                    reference_id=wave.wave_id,
+                    performed_by=request.user,
+                    transaction_type='WV_MV',
+                    reference_type='WAVE',
+                )
+            except InsufficientStockError:
+                return _pick_error(
+                    'QTY_EXCEEDED',
+                    '해당 로케이션에 충분한 재고가 없습니다.',
+                )
+
+        # 7. Detail 업데이트
+        detail.picked_qty += qty
+        detail.picked_by = request.user
+        detail.picked_at = timezone.now()
+        detail.save(update_fields=['picked_qty', 'picked_by', 'picked_at'])
+
+        # 8. TotalPickList 업데이트
+        pick_list = detail.pick_list
+        total_picked = sum(
+            d.picked_qty for d in pick_list.details.all()
+        )
+        pick_list.picked_qty = total_picked
+        if total_picked >= pick_list.total_qty:
+            pick_list.status = 'COMPLETED'
+        elif total_picked > 0:
+            pick_list.status = 'IN_PROGRESS'
+        pick_list.save(update_fields=['picked_qty', 'status'])
+
+        # 9. Wave 상태 업데이트
+        if wave.status == 'CREATED':
+            wave.status = 'PICKING'
+
+        completed_count = wave.pick_lists.filter(status='COMPLETED').count()
+        wave.picked_count = completed_count
+
+        # 전체 피킹 완료 → DISTRIBUTING
+        all_completed = not wave.pick_lists.exclude(status='COMPLETED').exists()
+        if all_completed:
+            wave.status = 'DISTRIBUTING'
+
+        wave.save(update_fields=['status', 'picked_count'])
+
+        return Response({
+            'success': True,
+            'wave_status': wave.status,
+            'pick_list_status': pick_list.status,
+            'detail_picked_qty': detail.picked_qty,
+            'detail_remaining': detail.qty - detail.picked_qty,
+            'all_completed': all_completed,
+        })

@@ -16,4 +16,16 @@ urlpatterns = [
         views.WaveProgressView.as_view(),
         name='wave-progress',
     ),
+
+    # PDA 토탈피킹
+    path(
+        '<str:wave_id>/picklist/',
+        views.PickListView.as_view(),
+        name='wave-picklist',
+    ),
+    path(
+        '<str:wave_id>/pick/',
+        views.PickScanView.as_view(),
+        name='wave-pick',
+    ),
 ]
