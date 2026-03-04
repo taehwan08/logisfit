@@ -3,6 +3,14 @@
 """
 from django.urls import path
 
+from . import views
+
 app_name = 'history'
 
-urlpatterns = []
+urlpatterns = [
+    path(
+        'transactions/',
+        views.InventoryTransactionListView.as_view(),
+        name='transaction-list',
+    ),
+]
