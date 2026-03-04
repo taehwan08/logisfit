@@ -54,6 +54,7 @@ urlpatterns = [
     path('api/v1/adapters/', include('apps.adapters.urls')),
     path('api/v1/webhooks/', include('apps.webhooks.urls')),
     path('api/v1/returns/', include('apps.returns.urls')),
+    path('api/v1/reports/', include('apps.reports.urls')),
 
     # 거래처 관리
     path('clients/', include('apps.clients.urls')),
