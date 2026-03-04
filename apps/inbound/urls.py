@@ -13,4 +13,21 @@ router.register('orders', views.InboundOrderViewSet, basename='inbound-order')
 
 urlpatterns = [
     path('', include(router.urls)),
+
+    # PDA 전용 API
+    path(
+        '<str:inbound_id>/inspect/',
+        views.PDAInspectView.as_view(),
+        name='pda-inspect',
+    ),
+    path(
+        '<str:inbound_id>/putaway/',
+        views.PDAPutawayView.as_view(),
+        name='pda-putaway',
+    ),
+    path(
+        'suggest-location/',
+        views.SuggestLocationView.as_view(),
+        name='suggest-location',
+    ),
 ]

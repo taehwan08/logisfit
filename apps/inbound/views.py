@@ -4,13 +4,16 @@
 import logging
 
 from django.db import transaction
+from django.db.models import Q, Sum
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import InboundOrder, InboundOrderItem
+from .permissions import IsFieldStaff
 from .serializers import (
     InboundOrderListSerializer,
     InboundOrderDetailSerializer,
@@ -19,6 +22,7 @@ from .serializers import (
     InboundOrderItemSerializer,
 )
 from .slack import send_inbound_order_notification_async
+from apps.inventory.models import Product, ProductBarcode, Location, InventoryBalance
 from apps.inventory.services import InventoryService
 
 logger = logging.getLogger(__name__)
@@ -268,3 +272,306 @@ class InboundOrderViewSet(viewsets.ModelViewSet):
                 {'error': f'파일 처리 중 오류: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+# ============================================================================
+# PDA 전용 API
+# ============================================================================
+
+def _resolve_product_by_barcode(barcode):
+    """바코드로 Product 조회 (ProductBarcode 테이블 우선, Product.barcode 폴백)"""
+    pb = ProductBarcode.objects.select_related('product').filter(barcode=barcode).first()
+    if pb:
+        return pb.product
+    return Product.objects.filter(barcode=barcode).first()
+
+
+class PDAInspectView(APIView):
+    """PDA 검수 API
+
+    POST /api/v1/inbound/{inbound_id}/inspect/
+    {
+        "product_barcode": "8801234567890",
+        "qty": 10,
+        "defect_qty": 1,
+        "notes": ""
+    }
+    """
+    permission_classes = [IsFieldStaff]
+
+    def post(self, request, inbound_id):
+        try:
+            order = InboundOrder.objects.select_related('client').get(
+                inbound_id=inbound_id,
+            )
+        except InboundOrder.DoesNotExist:
+            return Response(
+                {'error': f'입고번호 {inbound_id}을(를) 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 상태 체크: ARRIVED 또는 INSPECTING만 검수 가능
+        if order.status not in ('ARRIVED', 'INSPECTING'):
+            return Response(
+                {'error': f'현재 상태({order.get_status_display()})에서는 검수할 수 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        barcode = request.data.get('product_barcode', '').strip()
+        qty = request.data.get('qty')
+        defect_qty = request.data.get('defect_qty', 0)
+
+        if not barcode or qty is None:
+            return Response(
+                {'error': 'product_barcode, qty는 필수입니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            qty = int(qty)
+            defect_qty = int(defect_qty)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': '수량은 정수여야 합니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 바코드로 상품 조회
+        product = _resolve_product_by_barcode(barcode)
+        if not product:
+            return Response(
+                {'error': f'바코드 {barcode}에 해당하는 상품을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # InboundOrderItem 매칭
+        item = order.items.filter(product=product).first()
+        if not item:
+            return Response(
+                {'error': f'입고예정에 해당 상품({product.name})이 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 검수 수량 누적
+        item.inspected_qty += qty
+        item.defect_qty += defect_qty
+        item.save(update_fields=['inspected_qty', 'defect_qty'])
+
+        # 첫 검수 시 ARRIVED → INSPECTING
+        if order.status == 'ARRIVED':
+            order.status = 'INSPECTING'
+            order.save(update_fields=['status', 'updated_at'])
+
+        # 모든 아이템 검수 완료 체크
+        all_inspected = all(
+            i.inspected_qty >= i.expected_qty
+            for i in order.items.all()
+        )
+        if all_inspected and order.status == 'INSPECTING':
+            order.status = 'INSPECTED'
+            order.save(update_fields=['status', 'updated_at'])
+
+        order.refresh_from_db()
+
+        return Response({
+            'success': True,
+            'item': InboundOrderItemSerializer(item).data,
+            'order_status': order.status,
+            'order_status_display': order.get_status_display(),
+            'all_inspected': all_inspected,
+        })
+
+
+class PDAPutawayView(APIView):
+    """PDA 적치 API
+
+    POST /api/v1/inbound/{inbound_id}/putaway/
+    {
+        "product_barcode": "8801234567890",
+        "location_code": "B9-A-03-02-01",
+        "qty": 9
+    }
+    """
+    permission_classes = [IsFieldStaff]
+
+    def post(self, request, inbound_id):
+        try:
+            order = InboundOrder.objects.select_related('client', 'brand').get(
+                inbound_id=inbound_id,
+            )
+        except InboundOrder.DoesNotExist:
+            return Response(
+                {'error': f'입고번호 {inbound_id}을(를) 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 상태 체크: INSPECTED 또는 이미 PUTAWAY 진행중
+        if order.status not in ('INSPECTED', 'PUTAWAY_COMPLETE'):
+            return Response(
+                {'error': f'현재 상태({order.get_status_display()})에서는 적치할 수 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        barcode = request.data.get('product_barcode', '').strip()
+        location_code = request.data.get('location_code', '').strip()
+        qty = request.data.get('qty')
+
+        if not barcode or not location_code or qty is None:
+            return Response(
+                {'error': 'product_barcode, location_code, qty는 필수입니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            qty = int(qty)
+            if qty < 1:
+                raise ValueError
+        except (ValueError, TypeError):
+            return Response(
+                {'error': '수량은 1 이상 정수여야 합니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 바코드로 상품 조회
+        product = _resolve_product_by_barcode(barcode)
+        if not product:
+            return Response(
+                {'error': f'바코드 {barcode}에 해당하는 상품을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 로케이션 조회
+        try:
+            location = Location.objects.get(barcode=location_code.upper())
+        except Location.DoesNotExist:
+            return Response(
+                {'error': f'로케이션 {location_code}을(를) 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # InboundOrderItem 매칭
+        item = order.items.filter(product=product).first()
+        if not item:
+            return Response(
+                {'error': f'입고예정에 해당 상품({product.name})이 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 재고 입고 + 히스토리
+        with transaction.atomic():
+            InventoryService.receive_stock(
+                product=product,
+                location=location,
+                client=order.client,
+                qty=qty,
+                lot_number=item.lot_number,
+                expiry_date=item.expiry_date,
+                reference_id=order.inbound_id,
+                performed_by=request.user,
+                brand=order.brand,
+            )
+
+            # 적치 로케이션 기록
+            item.putaway_location = location
+            item.save(update_fields=['putaway_location_id'])
+
+        # 모든 아이템 적치 완료 체크
+        all_putaway = all(
+            i.putaway_location_id is not None
+            for i in order.items.all()
+        )
+        if all_putaway and order.status == 'INSPECTED':
+            order.status = 'PUTAWAY_COMPLETE'
+            order.save(update_fields=['status', 'updated_at'])
+
+        order.refresh_from_db()
+
+        return Response({
+            'success': True,
+            'item': InboundOrderItemSerializer(item).data,
+            'order_status': order.status,
+            'order_status_display': order.get_status_display(),
+            'all_putaway': all_putaway,
+        })
+
+
+class SuggestLocationView(APIView):
+    """로케이션 추천 API
+
+    GET /api/v1/inbound/suggest-location/?product_id=123
+
+    동일 SKU가 이미 있는 STORAGE/PICKING 로케이션을 반환합니다.
+    없으면 빈 STORAGE 로케이션을 반환합니다.
+    """
+    permission_classes = [IsFieldStaff]
+
+    def get(self, request):
+        product_id = request.query_params.get('product_id')
+        if not product_id:
+            return Response(
+                {'error': 'product_id는 필수입니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 1) 동일 SKU가 이미 있는 STORAGE/PICKING 로케이션
+        existing = (
+            InventoryBalance.objects
+            .filter(
+                product_id=product_id,
+                on_hand_qty__gt=0,
+                location__zone_type__in=['STORAGE', 'PICKING'],
+                location__is_active=True,
+            )
+            .select_related('location')
+            .order_by('-on_hand_qty')
+        )
+
+        existing_locations = [
+            {
+                'location_id': b.location_id,
+                'location_code': b.location.barcode,
+                'zone_type': b.location.zone_type,
+                'current_qty': b.on_hand_qty,
+                'reason': 'same_sku',
+            }
+            for b in existing[:5]
+        ]
+
+        if existing_locations:
+            return Response({
+                'suggestions': existing_locations,
+                'reason': '동일 상품 보관중인 로케이션',
+            })
+
+        # 2) 빈 STORAGE 로케이션 (재고 없는 활성 로케이션)
+        occupied_location_ids = (
+            InventoryBalance.objects
+            .filter(on_hand_qty__gt=0)
+            .values_list('location_id', flat=True)
+        )
+
+        empty_storage = (
+            Location.objects
+            .filter(
+                zone_type='STORAGE',
+                is_active=True,
+            )
+            .exclude(pk__in=occupied_location_ids)
+            .order_by('barcode')[:5]
+        )
+
+        empty_locations = [
+            {
+                'location_id': loc.pk,
+                'location_code': loc.barcode,
+                'zone_type': loc.zone_type,
+                'current_qty': 0,
+                'reason': 'empty',
+            }
+            for loc in empty_storage
+        ]
+
+        return Response({
+            'suggestions': empty_locations,
+            'reason': '빈 보관 로케이션' if empty_locations else '추천 로케이션 없음',
+        })
