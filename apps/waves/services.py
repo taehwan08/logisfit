@@ -1,15 +1,21 @@
 """
 웨이브 서비스 레이어
 """
+import logging
+
 from django.db import transaction
 from django.db.models import Sum
+from django.utils import timezone
 
 from apps.inventory.models import Location, InventoryBalance
+from apps.inventory.services import InventoryService
 
 from .models import (
     Wave, OutboundOrder, OutboundOrderItem,
     TotalPickList, TotalPickListDetail,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class WaveService:
@@ -108,3 +114,123 @@ class WaveService:
         wave.save(update_fields=['total_orders', 'total_skus'])
 
         return wave
+
+
+class ShipmentService:
+
+    @staticmethod
+    @transaction.atomic
+    def confirm_shipment(order, tracking_number=None, performed_by=None):
+        """출고 확정
+
+        1. 상태 검증: INSPECTED 상태만 출고 가능
+        2. 각 OutboundOrderItem에 대해 InventoryService.ship_stock() 호출
+        3. OutboundOrder 업데이트 (SHIPPED, tracking_number, shipped_at)
+        4. Wave.shipped_count += 1
+        5. 웨이브 내 모든 주문 출고 완료 시 웨이브 완료 처리
+        """
+        # 1. 상태 검증
+        if order.status != 'INSPECTED':
+            raise ValueError(
+                f'INSPECTED 상태의 주문만 출고 가능합니다. '
+                f'현재 상태: {order.get_status_display()}'
+            )
+
+        wave = order.wave
+        if not wave:
+            raise ValueError('웨이브에 배정되지 않은 주문입니다.')
+
+        outbound_zone = wave.outbound_zone
+
+        # 2. 각 품목 출고 처리 (출고존에서 차감)
+        for item in order.items.select_related('product').all():
+            if outbound_zone:
+                InventoryService.ship_stock(
+                    product=item.product,
+                    location=outbound_zone,
+                    client=order.client,
+                    qty=item.qty,
+                    reference_id=order.wms_order_id,
+                    performed_by=performed_by,
+                    brand=order.brand,
+                )
+
+        # 3. 주문 업데이트
+        order.status = 'SHIPPED'
+        if tracking_number:
+            order.tracking_number = tracking_number
+        order.shipped_at = timezone.now()
+        order.save(update_fields=[
+            'status', 'tracking_number', 'shipped_at', 'updated_at',
+        ])
+
+        # 4. Wave.shipped_count 증가
+        wave = Wave.objects.select_for_update().get(pk=wave.pk)
+        wave.shipped_count += 1
+
+        if wave.status in ('DISTRIBUTING', 'INSPECTED'):
+            wave.status = 'SHIPPING'
+
+        wave.save(update_fields=['shipped_count', 'status'])
+
+        # Webhook 이벤트 발행 (webhooks 앱 구현 전 stub)
+        _emit_order_shipped_event(order)
+
+        # 5. 웨이브 완료 확인
+        all_shipped = not wave.orders.exclude(status='SHIPPED').exists()
+        if all_shipped:
+            ShipmentService._complete_wave(wave, performed_by=performed_by)
+
+        return order
+
+    @staticmethod
+    def _complete_wave(wave, performed_by=None):
+        """웨이브 완료 처리
+
+        1. 출고존 잔여 재고 → 보관존 복귀
+        2. Wave.status = COMPLETED
+        """
+        outbound_zone = wave.outbound_zone
+
+        # 잔여 재고 복귀
+        if outbound_zone:
+            leftover_balances = InventoryBalance.objects.filter(
+                location=outbound_zone,
+                on_hand_qty__gt=0,
+            ).select_related('product', 'client')
+
+            # 복귀 대상 보관존 (첫 번째 활성 STORAGE)
+            return_location = (
+                Location.objects
+                .filter(zone_type='STORAGE', is_active=True)
+                .first()
+            )
+
+            if return_location:
+                for balance in leftover_balances:
+                    InventoryService.move_stock(
+                        product=balance.product,
+                        from_location=outbound_zone,
+                        to_location=return_location,
+                        client=balance.client,
+                        qty=balance.on_hand_qty,
+                        reference_id=wave.wave_id,
+                        performed_by=performed_by,
+                        transaction_type='WV_RTN',
+                        reference_type='WAVE',
+                    )
+
+        wave.status = 'COMPLETED'
+        wave.completed_at = timezone.now()
+        wave.save(update_fields=['status', 'completed_at'])
+
+
+def _emit_order_shipped_event(order):
+    """ORDER_SHIPPED 웹훅 이벤트 발행 (stub)
+
+    webhooks 앱 구현 후 실제 이벤트 발행으로 교체 예정.
+    """
+    logger.info(
+        'ORDER_SHIPPED event: order=%s tracking=%s',
+        order.wms_order_id, order.tracking_number,
+    )

@@ -255,3 +255,11 @@ class InspectionItemSerializer(serializers.ModelSerializer):
 
 class InspectScanSerializer(serializers.Serializer):
     product_barcode = serializers.CharField(max_length=100)
+
+
+# ------------------------------------------------------------------
+# 출고 확정
+# ------------------------------------------------------------------
+
+class ShipConfirmSerializer(serializers.Serializer):
+    tracking_number = serializers.CharField(max_length=50, required=False, default='')

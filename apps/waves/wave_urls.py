@@ -45,4 +45,16 @@ urlpatterns = [
         views.InspectScanView.as_view(),
         name='inspect-scan',
     ),
+
+    # 출고 확정
+    path(
+        'orders/<str:wms_order_id>/ship/',
+        views.ShipConfirmView.as_view(),
+        name='ship-confirm',
+    ),
+    path(
+        '<str:wave_id>/bulk-ship/',
+        views.BulkShipView.as_view(),
+        name='bulk-ship',
+    ),
 ]

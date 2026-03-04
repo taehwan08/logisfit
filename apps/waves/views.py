@@ -33,8 +33,9 @@ from .serializers import (
     InspectionOrderSerializer,
     InspectionItemSerializer,
     InspectScanSerializer,
+    ShipConfirmSerializer,
 )
-from .services import WaveService
+from .services import WaveService, ShipmentService
 from .signals import order_inspected
 
 logger = logging.getLogger(__name__)
@@ -763,4 +764,112 @@ class InspectScanView(APIView):
             'inspected_qty': item.inspected_qty,
             'remaining': item.qty - item.inspected_qty,
             'order_completed': order_completed,
+        })
+
+
+# ------------------------------------------------------------------
+# 출고 확정
+# ------------------------------------------------------------------
+
+class ShipConfirmView(APIView):
+    """출고 확정 API
+
+    POST /api/v1/waves/orders/{wms_order_id}/ship/
+    INSPECTED 상태의 주문을 출고 확정합니다.
+    """
+
+    permission_classes = [IsFieldStaff]
+
+    def post(self, request, wms_order_id):
+        serializer = ShipConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            order = OutboundOrder.objects.select_related(
+                'wave', 'client', 'brand',
+            ).get(wms_order_id=wms_order_id)
+        except OutboundOrder.DoesNotExist:
+            return Response(
+                {'detail': '주문을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            ShipmentService.confirm_shipment(
+                order=order,
+                tracking_number=serializer.validated_data.get('tracking_number'),
+                performed_by=request.user,
+            )
+        except ValueError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except InsufficientStockError as e:
+            return Response(
+                {'detail': f'출고존 재고 부족: {e}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.refresh_from_db()
+        return Response({
+            'success': True,
+            'wms_order_id': order.wms_order_id,
+            'status': order.status,
+            'tracking_number': order.tracking_number,
+            'shipped_at': order.shipped_at,
+        })
+
+
+class BulkShipView(APIView):
+    """일괄 출고 확정 API
+
+    POST /api/v1/waves/{wave_id}/bulk-ship/
+    해당 웨이브의 INSPECTED 상태 주문 전체 출고 확정.
+    """
+
+    permission_classes = [IsOfficeStaff]
+
+    def post(self, request, wave_id):
+        try:
+            wave = Wave.objects.get(wave_id=wave_id)
+        except Wave.DoesNotExist:
+            return Response(
+                {'detail': '웨이브를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        orders = wave.orders.filter(
+            status='INSPECTED',
+        ).select_related('client', 'brand')
+
+        if not orders.exists():
+            return Response(
+                {'detail': 'INSPECTED 상태의 주문이 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        shipped = []
+        errors = []
+        for order in orders:
+            try:
+                ShipmentService.confirm_shipment(
+                    order=order,
+                    performed_by=request.user,
+                )
+                shipped.append(order.wms_order_id)
+            except (ValueError, InsufficientStockError) as e:
+                errors.append({
+                    'wms_order_id': order.wms_order_id,
+                    'error': str(e),
+                })
+
+        wave.refresh_from_db()
+        return Response({
+            'success': True,
+            'wave_id': wave.wave_id,
+            'wave_status': wave.status,
+            'shipped_count': len(shipped),
+            'shipped_orders': shipped,
+            'errors': errors,
         })
