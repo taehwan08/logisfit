@@ -7,6 +7,7 @@ from django.utils.html import format_html
 from .models import (
     Product, ProductBarcode, SetProduct,
     Location, InventorySession, InventoryRecord, InboundRecord, InboundImage,
+    InventoryBalance,
 )
 
 
@@ -222,3 +223,30 @@ class InboundImageAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="max-height:300px; border-radius:8px;" />', obj.image.url)
         return '-'
     image_preview_large.short_description = '이미지 미리보기'
+
+
+@admin.register(InventoryBalance)
+class InventoryBalanceAdmin(admin.ModelAdmin):
+    list_display = (
+        'client', 'product', 'location',
+        'on_hand_qty', 'allocated_qty', 'reserved_qty', 'get_available_qty',
+        'lot_number', 'expiry_date', 'updated_at',
+    )
+    list_filter = ('client',)
+    search_fields = (
+        'product__name', 'product__barcode',
+        'location__barcode', 'lot_number',
+        'client__company_name',
+    )
+    raw_id_fields = ('product', 'location', 'client')
+    readonly_fields = ('updated_at',)
+    list_per_page = 50
+
+    @admin.display(description='가용재고')
+    def get_available_qty(self, obj):
+        return obj.available_qty
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'product', 'location', 'client',
+        )

@@ -278,3 +278,63 @@ class InboundImage(models.Model):
 
     def __str__(self):
         return f'입고이미지 #{self.pk} (입고기록 #{self.inbound_record_id})'
+
+
+class InventoryBalance(models.Model):
+    """재고 잔량 (5단 재고 구조)
+
+    상품 × 로케이션 × 거래처 × 로트 단위로 실물/할당/예약 재고를 관리합니다.
+    가용재고 = 실물재고 - 할당재고 - 예약재고
+
+    기존 InventoryRecord는 실사(재고조사) 용도로 유지됩니다.
+    """
+
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='balances', verbose_name='상품',
+    )
+    location = models.ForeignKey(
+        Location, on_delete=models.CASCADE,
+        related_name='balances', verbose_name='로케이션',
+    )
+    client = models.ForeignKey(
+        'clients.Client', on_delete=models.CASCADE,
+        related_name='inventory_balances', verbose_name='거래처',
+    )
+
+    on_hand_qty = models.IntegerField('실물재고', default=0)
+    allocated_qty = models.IntegerField('할당재고', default=0)
+    reserved_qty = models.IntegerField('예약재고', default=0)
+
+    lot_number = models.CharField('로트번호', max_length=100, blank=True, default='')
+    expiry_date = models.DateField('유통기한', null=True, blank=True)
+
+    updated_at = models.DateTimeField('수정일시', auto_now=True)
+
+    class Meta:
+        verbose_name = '재고 잔량'
+        verbose_name_plural = '재고 잔량'
+        db_table = 'inventory_balances'
+        unique_together = ['product', 'location', 'client', 'lot_number']
+        indexes = [
+            models.Index(
+                fields=['client', 'product'],
+                name='idx_balance_client_product',
+            ),
+            models.Index(
+                fields=['location'],
+                name='idx_balance_location',
+            ),
+            models.Index(
+                fields=['client'],
+                name='idx_balance_client',
+            ),
+        ]
+
+    @property
+    def available_qty(self):
+        """가용재고 = 실물 - 할당 - 예약"""
+        return self.on_hand_qty - self.allocated_qty - self.reserved_qty
+
+    def __str__(self):
+        return f'{self.client} | {self.product} @ {self.location} : {self.on_hand_qty}'
