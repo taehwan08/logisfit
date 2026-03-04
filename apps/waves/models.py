@@ -7,6 +7,26 @@ from django.db import models
 from django.utils import timezone
 
 
+def generate_wave_id():
+    """웨이브번호 자동 채번: WV-YYYYMMDD-NN (2자리 시퀀스, 일별 리셋)"""
+    today = timezone.localtime(timezone.now()).strftime('%Y%m%d')
+    prefix = f'WV-{today}-'
+
+    last = (
+        Wave.objects
+        .filter(wave_id__startswith=prefix)
+        .order_by('-wave_id')
+        .values_list('wave_id', flat=True)
+        .first()
+    )
+    if last:
+        seq = int(last.split('-')[-1]) + 1
+    else:
+        seq = 1
+
+    return f'{prefix}{seq:02d}'
+
+
 def generate_wms_order_id():
     """WMS 주문번호 자동 채번: WO-YYYYMMDD-NNNNN (5자리 시퀀스, 일별 리셋)"""
     today = timezone.localtime(timezone.now()).strftime('%Y%m%d')
@@ -28,31 +48,55 @@ def generate_wms_order_id():
 
 
 class Wave(models.Model):
-    """웨이브 배치 (스텁)
+    """웨이브 배치
 
-    Step 3-4 이후에서 상세 구현 예정.
-    현재는 OutboundOrder FK 참조를 위한 최소 정의.
+    ALLOCATED 주문들을 묶어 피킹 → 분배 → 출고 단위로 관리합니다.
     """
 
-    WAVE_STATUS_CHOICES = [
+    STATUS_CHOICES = [
         ('CREATED', '생성'),
         ('PICKING', '피킹중'),
+        ('DISTRIBUTING', '분배중'),
+        ('SHIPPING', '출고중'),
         ('COMPLETED', '완료'),
     ]
 
-    wave_id = models.CharField('웨이브번호', max_length=30, unique=True)
+    wave_id = models.CharField('웨이브번호', max_length=20, unique=True)
     status = models.CharField(
-        '상태', max_length=20, choices=WAVE_STATUS_CHOICES, default='CREATED',
+        '상태', max_length=20, choices=STATUS_CHOICES, default='CREATED',
     )
-    created_at = models.DateTimeField('등록일시', auto_now_add=True)
+    wave_time = models.CharField('웨이브 시간', max_length=5, default='')
+    outbound_zone = models.ForeignKey(
+        'inventory.Location', on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name='출고존',
+    )
+
+    total_orders = models.IntegerField('총 주문수', default=0)
+    total_skus = models.IntegerField('총 SKU수', default=0)
+    picked_count = models.IntegerField('피킹완료 주문수', default=0)
+    inspected_count = models.IntegerField('검수완료 주문수', default=0)
+    shipped_count = models.IntegerField('출고완료 주문수', default=0)
+
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True,
+        verbose_name='생성자',
+    )
+    created_at = models.DateTimeField('생성일시', auto_now_add=True)
+    completed_at = models.DateTimeField('완료일시', null=True, blank=True)
 
     class Meta:
         verbose_name = '웨이브'
         verbose_name_plural = '웨이브'
         db_table = 'waves'
+        ordering = ['-created_at']
 
     def __str__(self):
-        return self.wave_id
+        return f'{self.wave_id} ({self.get_status_display()})'
+
+    def save(self, *args, **kwargs):
+        if not self.wave_id:
+            self.wave_id = generate_wave_id()
+        super().save(*args, **kwargs)
 
 
 class OutboundOrder(models.Model):
@@ -184,3 +228,73 @@ class OutboundOrderItem(models.Model):
 
     def __str__(self):
         return f'{self.order.wms_order_id} - {self.product} x{self.qty}'
+
+
+class TotalPickList(models.Model):
+    """토탈피킹 리스트
+
+    웨이브 내 주문들의 SKU별 합산 피킹 목록.
+    """
+
+    STATUS_CHOICES = [
+        ('PENDING', '대기'),
+        ('IN_PROGRESS', '진행중'),
+        ('COMPLETED', '완료'),
+    ]
+
+    wave = models.ForeignKey(
+        Wave, on_delete=models.CASCADE,
+        related_name='pick_lists', verbose_name='웨이브',
+    )
+    product = models.ForeignKey(
+        'inventory.Product', on_delete=models.CASCADE,
+        verbose_name='상품',
+    )
+    total_qty = models.IntegerField('합산수량')
+    picked_qty = models.IntegerField('피킹수량', default=0)
+    status = models.CharField(
+        '상태', max_length=20, choices=STATUS_CHOICES, default='PENDING',
+    )
+
+    class Meta:
+        verbose_name = '토탈피킹 리스트'
+        verbose_name_plural = '토탈피킹 리스트'
+        db_table = 'total_pick_lists'
+
+    def __str__(self):
+        return f'{self.wave.wave_id} - {self.product} x{self.total_qty}'
+
+
+class TotalPickListDetail(models.Model):
+    """토탈피킹 상세
+
+    SKU별 어느 로케이션에서 몇 개를 피킹하는지 상세 정보.
+    """
+
+    pick_list = models.ForeignKey(
+        TotalPickList, on_delete=models.CASCADE,
+        related_name='details', verbose_name='피킹리스트',
+    )
+    from_location = models.ForeignKey(
+        'inventory.Location', on_delete=models.CASCADE,
+        related_name='+', verbose_name='출발 로케이션',
+    )
+    to_location = models.ForeignKey(
+        'inventory.Location', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='+', verbose_name='도착 로케이션',
+    )
+    qty = models.IntegerField('수량')
+    picked_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name='피킹 작업자',
+    )
+    picked_at = models.DateTimeField('피킹일시', null=True, blank=True)
+
+    class Meta:
+        verbose_name = '토탈피킹 상세'
+        verbose_name_plural = '토탈피킹 상세'
+        db_table = 'total_pick_list_details'
+
+    def __str__(self):
+        return f'{self.pick_list} @ {self.from_location} x{self.qty}'

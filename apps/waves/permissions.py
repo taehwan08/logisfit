@@ -1,0 +1,17 @@
+"""
+웨이브 관리 퍼미션
+"""
+from rest_framework.permissions import IsAuthenticated
+
+
+class IsOfficeStaff(IsAuthenticated):
+    """오피스팀 퍼미션
+
+    ADMIN, OFFICE 역할만 접근 허용.
+    """
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        user = request.user
+        return user.is_admin or user.is_office or user.is_superuser

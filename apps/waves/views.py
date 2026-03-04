@@ -14,11 +14,17 @@ from apps.inventory.models import Product
 from apps.inventory.services import InventoryService
 from apps.inventory.exceptions import InsufficientStockError
 
-from .models import OutboundOrder, OutboundOrderItem
+from .models import OutboundOrder, OutboundOrderItem, Wave
+from .permissions import IsOfficeStaff
 from .serializers import (
     OrderReceiveSerializer,
     OutboundOrderDetailSerializer,
+    WaveCreateSerializer,
+    WaveListSerializer,
+    WaveDetailSerializer,
+    WaveProgressSerializer,
 )
+from .services import WaveService
 
 logger = logging.getLogger(__name__)
 
@@ -212,3 +218,116 @@ class OrderCancelView(APIView):
 
         result = OutboundOrderDetailSerializer(order).data
         return Response(result)
+
+
+# ------------------------------------------------------------------
+# 웨이브 API
+# ------------------------------------------------------------------
+
+class WaveCreateView(APIView):
+    """웨이브 생성 API
+
+    POST /api/v1/waves/create/
+    ALLOCATED + wave 미배정 주문을 수집하여 웨이브를 생성합니다.
+    """
+
+    permission_classes = [IsOfficeStaff]
+
+    def post(self, request):
+        serializer = WaveCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            wave = WaveService.create_wave(
+                wave_time=serializer.validated_data['wave_time'],
+                created_by=request.user,
+            )
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = WaveDetailSerializer(wave).data
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class WaveListView(APIView):
+    """웨이브 목록 API
+
+    GET /api/v1/waves/
+    """
+
+    permission_classes = [IsOfficeStaff]
+
+    def get(self, request):
+        waves = Wave.objects.select_related('outbound_zone', 'created_by').all()
+
+        # 상태 필터
+        wave_status = request.query_params.get('status')
+        if wave_status:
+            waves = waves.filter(status=wave_status)
+
+        data = WaveListSerializer(waves, many=True).data
+        return Response(data)
+
+
+class WaveDetailView(APIView):
+    """웨이브 상세 API
+
+    GET /api/v1/waves/{wave_id}/
+    """
+
+    permission_classes = [IsOfficeStaff]
+
+    def get(self, request, wave_id):
+        try:
+            wave = (
+                Wave.objects
+                .select_related('outbound_zone', 'created_by')
+                .prefetch_related(
+                    'pick_lists__product',
+                    'pick_lists__details__from_location',
+                    'pick_lists__details__to_location',
+                    'pick_lists__details__picked_by',
+                    'orders__client',
+                )
+                .get(wave_id=wave_id)
+            )
+        except Wave.DoesNotExist:
+            return Response(
+                {'error': '웨이브를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(WaveDetailSerializer(wave).data)
+
+
+class WaveProgressView(APIView):
+    """웨이브 진행률 API
+
+    GET /api/v1/waves/{wave_id}/progress/
+    """
+
+    permission_classes = [IsOfficeStaff]
+
+    def get(self, request, wave_id):
+        try:
+            wave = (
+                Wave.objects
+                .prefetch_related(
+                    'pick_lists__product',
+                    'pick_lists__details__from_location',
+                    'pick_lists__details__to_location',
+                    'pick_lists__details__picked_by',
+                )
+                .get(wave_id=wave_id)
+            )
+        except Wave.DoesNotExist:
+            return Response(
+                {'error': '웨이브를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(WaveProgressSerializer(wave).data)

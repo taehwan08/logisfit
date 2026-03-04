@@ -3,7 +3,10 @@
 """
 from rest_framework import serializers
 
-from .models import OutboundOrder, OutboundOrderItem
+from .models import (
+    OutboundOrder, OutboundOrderItem,
+    Wave, TotalPickList, TotalPickListDetail,
+)
 
 
 # ------------------------------------------------------------------
@@ -84,3 +87,112 @@ class OutboundOrderDetailSerializer(serializers.ModelSerializer):
             'hold_reason', 'ordered_at', 'shipped_at',
             'items', 'created_at', 'updated_at',
         ]
+
+
+# ------------------------------------------------------------------
+# 웨이브
+# ------------------------------------------------------------------
+
+class WaveCreateSerializer(serializers.Serializer):
+    wave_time = serializers.RegexField(
+        regex=r'^\d{2}:\d{2}$',
+        help_text='HH:MM 형식 (예: 09:00)',
+    )
+
+
+class TotalPickListDetailSerializer(serializers.ModelSerializer):
+    from_location_code = serializers.CharField(
+        source='from_location.barcode', read_only=True,
+    )
+    to_location_code = serializers.CharField(
+        source='to_location.barcode', read_only=True, default=None,
+    )
+    picked_by_name = serializers.CharField(
+        source='picked_by.name', read_only=True, default=None,
+    )
+
+    class Meta:
+        model = TotalPickListDetail
+        fields = [
+            'id', 'from_location', 'from_location_code',
+            'to_location', 'to_location_code',
+            'qty', 'picked_by', 'picked_by_name', 'picked_at',
+        ]
+
+
+class TotalPickListSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_barcode = serializers.CharField(source='product.barcode', read_only=True)
+    details = TotalPickListDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = TotalPickList
+        fields = [
+            'id', 'product', 'product_name', 'product_barcode',
+            'total_qty', 'picked_qty', 'status', 'details',
+        ]
+
+
+class WaveListSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(
+        source='created_by.name', read_only=True, default=None,
+    )
+    outbound_zone_code = serializers.CharField(
+        source='outbound_zone.barcode', read_only=True, default=None,
+    )
+
+    class Meta:
+        model = Wave
+        fields = [
+            'id', 'wave_id', 'status', 'wave_time',
+            'outbound_zone', 'outbound_zone_code',
+            'total_orders', 'total_skus',
+            'picked_count', 'inspected_count', 'shipped_count',
+            'created_by', 'created_by_name',
+            'created_at', 'completed_at',
+        ]
+
+
+class WaveDetailSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(
+        source='created_by.name', read_only=True, default=None,
+    )
+    outbound_zone_code = serializers.CharField(
+        source='outbound_zone.barcode', read_only=True, default=None,
+    )
+    pick_lists = TotalPickListSerializer(many=True, read_only=True)
+    orders = OutboundOrderListSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Wave
+        fields = [
+            'id', 'wave_id', 'status', 'wave_time',
+            'outbound_zone', 'outbound_zone_code',
+            'total_orders', 'total_skus',
+            'picked_count', 'inspected_count', 'shipped_count',
+            'created_by', 'created_by_name',
+            'created_at', 'completed_at',
+            'pick_lists', 'orders',
+        ]
+
+
+class WaveProgressSerializer(serializers.ModelSerializer):
+    pick_lists = TotalPickListSerializer(many=True, read_only=True)
+    progress = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Wave
+        fields = [
+            'wave_id', 'status',
+            'total_orders', 'total_skus',
+            'picked_count', 'inspected_count', 'shipped_count',
+            'progress', 'pick_lists',
+        ]
+
+    def get_progress(self, obj):
+        total = obj.total_orders or 1
+        return {
+            'picking': round(obj.picked_count / total * 100, 1),
+            'inspection': round(obj.inspected_count / total * 100, 1),
+            'shipping': round(obj.shipped_count / total * 100, 1),
+        }
