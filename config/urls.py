@@ -52,6 +52,7 @@ urlpatterns = [
     path('api/v1/waves/', include('apps.waves.wave_urls')),
     path('api/v1/printing/', include('apps.printing.urls')),
     path('api/v1/adapters/', include('apps.adapters.urls')),
+    path('api/v1/webhooks/', include('apps.webhooks.urls')),
 
     # 거래처 관리
     path('clients/', include('apps.clients.urls')),

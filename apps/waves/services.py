@@ -173,8 +173,17 @@ class ShipmentService:
 
         wave.save(update_fields=['shipped_count', 'status'])
 
-        # Webhook 이벤트 발행 (webhooks 앱 구현 전 stub)
-        _emit_order_shipped_event(order)
+        # Webhook 이벤트 발행
+        from apps.webhooks.services import publish_event
+        from apps.webhooks.models import WebhookEvents
+        publish_event(WebhookEvents.ORDER_SHIPPED, {
+            'wms_order_id': order.wms_order_id,
+            'source': order.source,
+            'source_order_id': order.source_order_id,
+            'tracking_number': order.tracking_number,
+            'carrier': order.carrier.code if order.carrier else None,
+            'shipped_at': str(order.shipped_at),
+        })
 
         # 5. 웨이브 완료 확인
         all_shipped = not wave.orders.exclude(status='SHIPPED').exists()
@@ -225,12 +234,3 @@ class ShipmentService:
         wave.save(update_fields=['status', 'completed_at'])
 
 
-def _emit_order_shipped_event(order):
-    """ORDER_SHIPPED 웹훅 이벤트 발행 (stub)
-
-    webhooks 앱 구현 후 실제 이벤트 발행으로 교체 예정.
-    """
-    logger.info(
-        'ORDER_SHIPPED event: order=%s tracking=%s',
-        order.wms_order_id, order.tracking_number,
-    )
