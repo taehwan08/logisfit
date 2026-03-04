@@ -3,7 +3,7 @@
 """
 from rest_framework import serializers
 
-from .models import InventoryBalance, SafetyStock, ReservedStock
+from .models import InventoryBalance, SafetyStock, ReservedStock, Product
 
 
 class InventoryBalanceSerializer(serializers.ModelSerializer):
@@ -64,3 +64,43 @@ class ReservedStockSerializer(serializers.ModelSerializer):
             'created_by', 'created_at', 'released_at', 'is_active',
         ]
         read_only_fields = ['created_at']
+
+
+# ============================================================================
+# 외부 제공 재고 API 시리얼라이저
+# ============================================================================
+
+class LocationStockSerializer(serializers.Serializer):
+    """로케이션별 재고 상세"""
+    location_code = serializers.CharField()
+    zone_type = serializers.CharField()
+    qty = serializers.IntegerField()
+
+
+class InventoryDetailSerializer(serializers.Serializer):
+    """상품별 5단 재고 집계 + 로케이션별 상세"""
+    sku = serializers.CharField()
+    product_name = serializers.CharField()
+    client_id = serializers.IntegerField()
+    brand_id = serializers.IntegerField(allow_null=True)
+    on_hand = serializers.IntegerField()
+    allocated = serializers.IntegerField()
+    reserved = serializers.IntegerField()
+    available = serializers.IntegerField()
+    safety_stock = serializers.IntegerField(allow_null=True)
+    is_below_safety = serializers.BooleanField()
+    locations = LocationStockSerializer(many=True)
+
+
+class InventoryBulkSerializer(serializers.Serializer):
+    """상품별 재고 요약 (로케이션 상세 제외)"""
+    sku = serializers.CharField()
+    product_name = serializers.CharField()
+    client_id = serializers.IntegerField()
+    brand_id = serializers.IntegerField(allow_null=True)
+    on_hand = serializers.IntegerField()
+    allocated = serializers.IntegerField()
+    reserved = serializers.IntegerField()
+    available = serializers.IntegerField()
+    safety_stock = serializers.IntegerField(allow_null=True)
+    is_below_safety = serializers.BooleanField()

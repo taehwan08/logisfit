@@ -46,6 +46,7 @@ urlpatterns = [
     path('api/v1/', include('apps.accounts.api_urls')),
     path('api/v1/', include('apps.clients.api_urls')),
     path('api/v1/history/', include('apps.history.urls')),
+    path('api/v1/inventory/', include('apps.inventory.api_urls')),
 
     # 거래처 관리
     path('clients/', include('apps.clients.urls')),
