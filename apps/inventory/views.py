@@ -14,6 +14,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord, InboundImage
+from .services import InventoryService
+from .exceptions import InsufficientStockError
 from .slack import send_inbound_notification_async
 from apps.clients.models import Client, Brand
 
@@ -1564,6 +1566,16 @@ def move_record(request):
                         worker=request.user.name if hasattr(request.user, 'name') else str(request.user),
                     )
 
+            # ── InventoryBalance + 히스토리 연동 ──
+            _sync_move_to_balance(
+                barcode=record.barcode,
+                lot_number=record.lot_number or '',
+                from_location=Location.objects.get(barcode=source_location_barcode),
+                to_location=target_location,
+                qty=move_quantity,
+                performed_by=request.user,
+            )
+
             return JsonResponse({
                 'success': True,
                 'message': f'{move_quantity}개를 {target_location.barcode}로 이동했습니다.',
@@ -1577,9 +1589,58 @@ def move_record(request):
         return JsonResponse({'error': '기록을 찾을 수 없습니다.'}, status=404)
     except Location.DoesNotExist:
         return JsonResponse({'error': '대상 로케이션을 찾을 수 없습니다.'}, status=404)
+    except InsufficientStockError as e:
+        logger.warning('재고 이동 — InventoryBalance 부족(무시): %s', e)
+        # InventoryRecord 이동은 이미 완료, Balance 부족은 경고만 남김
+        return JsonResponse({
+            'success': True,
+            'message': f'{move_quantity}개를 {target_location.barcode}로 이동했습니다.',
+            'source_location_barcode': source_location_barcode,
+            'target_location_barcode': target_location.barcode,
+            'source_record': _record_to_dict(record) if record.pk else None,
+            'target_record': _record_to_dict(result_record),
+        })
     except Exception as e:
         logger.error('재고 이동 실패: %s', e, exc_info=True)
         return JsonResponse({'error': f'이동 처리 중 오류: {str(e)}'}, status=500)
+
+
+def _sync_move_to_balance(*, barcode, lot_number, from_location,
+                          to_location, qty, performed_by):
+    """InventoryRecord 이동 시 InventoryBalance + 히스토리 연동
+
+    바코드로 Product를 찾고, 해당 상품의 InventoryBalance가 존재하면
+    InventoryService.move_stock()을 호출합니다.
+    매칭 실패 시 경고 로그만 남기고 기존 기능을 방해하지 않습니다.
+    """
+    from .models import InventoryBalance
+
+    product = Product.objects.filter(barcode=barcode).first()
+    if not product:
+        logger.info('이동 히스토리 연동 스킵: 상품 미매칭 (barcode=%s)', barcode)
+        return
+
+    # 출발지 InventoryBalance에서 client 결정
+    balance = InventoryBalance.objects.filter(
+        product=product, location=from_location, lot_number=lot_number,
+    ).first()
+    if not balance:
+        logger.info(
+            '이동 히스토리 연동 스킵: InventoryBalance 없음 '
+            '(product=%s, location=%s)', product, from_location,
+        )
+        return
+
+    InventoryService.move_stock(
+        product=product,
+        from_location=from_location,
+        to_location=to_location,
+        client=balance.client,
+        qty=qty,
+        lot_number=lot_number,
+        reason='로케이션 이동 (UI)',
+        performed_by=performed_by,
+    )
 
 
 @login_required
