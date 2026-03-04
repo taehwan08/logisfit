@@ -338,3 +338,112 @@ class InventoryBalance(models.Model):
 
     def __str__(self):
         return f'{self.client} | {self.product} @ {self.location} : {self.on_hand_qty}'
+
+
+class SafetyStock(models.Model):
+    """안전재고
+
+    상품 × 거래처 단위로 최소 유지 수량을 설정합니다.
+    알림 활성화 시 실물재고가 최소 수량 미만이면 알림을 발송합니다.
+    """
+
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='safety_stocks', verbose_name='상품',
+    )
+    client = models.ForeignKey(
+        'clients.Client', on_delete=models.CASCADE,
+        related_name='safety_stocks', verbose_name='거래처',
+    )
+    min_qty = models.IntegerField('최소 유지 수량')
+    alert_enabled = models.BooleanField('알림 활성화', default=True)
+
+    class Meta:
+        verbose_name = '안전재고'
+        verbose_name_plural = '안전재고'
+        db_table = 'safety_stocks'
+        unique_together = ['product', 'client']
+
+    def __str__(self):
+        return f'{self.client} | {self.product} : 최소 {self.min_qty}'
+
+
+class ReservedStock(models.Model):
+    """예약재고
+
+    특정 사유로 일시적으로 묶어둔 재고입니다.
+    해제 시 released_at을 기록하고 is_active를 False로 변경합니다.
+    """
+
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='reserved_stocks', verbose_name='상품',
+    )
+    client = models.ForeignKey(
+        'clients.Client', on_delete=models.CASCADE,
+        related_name='reserved_stocks', verbose_name='거래처',
+    )
+    brand = models.ForeignKey(
+        'clients.Brand', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reserved_stocks', verbose_name='브랜드',
+    )
+    reserved_qty = models.IntegerField('예약 수량')
+    reason = models.CharField('사유', max_length=200)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL,
+        null=True, verbose_name='등록자',
+    )
+    created_at = models.DateTimeField('등록일시', auto_now_add=True)
+    released_at = models.DateTimeField('해제 일시', null=True, blank=True)
+    is_active = models.BooleanField('활성 여부', default=True)
+
+    class Meta:
+        verbose_name = '예약재고'
+        verbose_name_plural = '예약재고'
+        db_table = 'reserved_stocks'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        status = '활성' if self.is_active else '해제'
+        return f'{self.client} | {self.product} : {self.reserved_qty} ({status})'
+
+
+def check_safety_stock_alerts(client_id=None):
+    """안전재고 미달 상품 목록 반환
+
+    InventoryBalance의 on_hand_qty 합계와 SafetyStock.min_qty를 비교하여
+    미달 상품 리스트를 반환합니다.
+
+    Args:
+        client_id: 특정 거래처 ID (None이면 전체 조회)
+
+    Returns:
+        list[dict]: 미달 상품 목록
+            - safety_stock: SafetyStock 인스턴스
+            - total_on_hand: 실물재고 합계
+            - shortage: 부족 수량
+    """
+    from django.db.models import Sum
+
+    qs = SafetyStock.objects.filter(alert_enabled=True).select_related(
+        'product', 'client',
+    )
+    if client_id:
+        qs = qs.filter(client_id=client_id)
+
+    alerts = []
+    for ss in qs:
+        total = InventoryBalance.objects.filter(
+            product=ss.product,
+            client=ss.client,
+        ).aggregate(total=Sum('on_hand_qty'))['total'] or 0
+
+        if total < ss.min_qty:
+            alerts.append({
+                'safety_stock': ss,
+                'total_on_hand': total,
+                'shortage': ss.min_qty - total,
+            })
+
+    return alerts

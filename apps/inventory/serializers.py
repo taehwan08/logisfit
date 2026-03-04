@@ -3,7 +3,7 @@
 """
 from rest_framework import serializers
 
-from .models import InventoryBalance
+from .models import InventoryBalance, SafetyStock, ReservedStock
 
 
 class InventoryBalanceSerializer(serializers.ModelSerializer):
@@ -30,3 +30,37 @@ class InventoryBalanceSerializer(serializers.ModelSerializer):
 
     def get_available_qty(self, obj):
         return obj.available_qty
+
+
+class SafetyStockSerializer(serializers.ModelSerializer):
+    """안전재고 시리얼라이저"""
+
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    client_name = serializers.CharField(source='client.company_name', read_only=True)
+
+    class Meta:
+        model = SafetyStock
+        fields = [
+            'id', 'product', 'product_name',
+            'client', 'client_name',
+            'min_qty', 'alert_enabled',
+        ]
+
+
+class ReservedStockSerializer(serializers.ModelSerializer):
+    """예약재고 시리얼라이저"""
+
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    client_name = serializers.CharField(source='client.company_name', read_only=True)
+    brand_name = serializers.CharField(source='brand.name', read_only=True, default='')
+
+    class Meta:
+        model = ReservedStock
+        fields = [
+            'id', 'product', 'product_name',
+            'client', 'client_name',
+            'brand', 'brand_name',
+            'reserved_qty', 'reason',
+            'created_by', 'created_at', 'released_at', 'is_active',
+        ]
+        read_only_fields = ['created_at']

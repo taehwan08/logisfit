@@ -7,7 +7,7 @@ from django.utils.html import format_html
 from .models import (
     Product, ProductBarcode, SetProduct,
     Location, InventorySession, InventoryRecord, InboundRecord, InboundImage,
-    InventoryBalance,
+    InventoryBalance, SafetyStock, ReservedStock,
 )
 
 
@@ -77,6 +77,14 @@ class SetProductInline(admin.TabularInline):
     verbose_name_plural = '세트 구성'
 
 
+class SafetyStockInline(admin.TabularInline):
+    """안전재고 인라인 (상품 상세에서 편집)"""
+    model = SafetyStock
+    extra = 0
+    fields = ('client', 'min_qty', 'alert_enabled')
+    raw_id_fields = ('client',)
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -88,7 +96,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ('client', 'is_set', 'category')
     raw_id_fields = ('client', 'brand')
     ordering = ('name',)
-    inlines = [ProductBarcodeInline, SetProductInline]
+    inlines = [ProductBarcodeInline, SetProductInline, SafetyStockInline]
 
 
 @admin.register(Location)
@@ -249,4 +257,33 @@ class InventoryBalanceAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
             'product', 'location', 'client',
+        )
+
+
+@admin.register(SafetyStock)
+class SafetyStockAdmin(admin.ModelAdmin):
+    list_display = ('product', 'client', 'min_qty', 'alert_enabled')
+    list_filter = ('alert_enabled', 'client')
+    search_fields = ('product__name', 'product__barcode', 'client__company_name')
+    raw_id_fields = ('product', 'client')
+    list_editable = ('min_qty', 'alert_enabled')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('product', 'client')
+
+
+@admin.register(ReservedStock)
+class ReservedStockAdmin(admin.ModelAdmin):
+    list_display = (
+        'product', 'client', 'brand', 'reserved_qty',
+        'reason', 'is_active', 'created_by', 'created_at', 'released_at',
+    )
+    list_filter = ('is_active', 'client')
+    search_fields = ('product__name', 'product__barcode', 'reason', 'client__company_name')
+    raw_id_fields = ('product', 'client', 'brand', 'created_by')
+    readonly_fields = ('created_at',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'product', 'client', 'brand', 'created_by',
         )
