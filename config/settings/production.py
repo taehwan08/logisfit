@@ -95,6 +95,7 @@ if REDIS_URL:
     # Celery 설정
     CELERY_BROKER_URL = REDIS_URL
     CELERY_RESULT_BACKEND = REDIS_URL
+    CELERY_TASK_ALWAYS_EAGER = False
 else:
     # Redis 없을 경우 기본 캐시/세션
     CACHES = {
