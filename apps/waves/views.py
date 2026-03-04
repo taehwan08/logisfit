@@ -174,6 +174,9 @@ class OrderReceiveView(APIView):
                     )
                 except InsufficientStockError:
                     pass  # 할당이 안 된 건이므로 무시
+            # 주문 보류 알림
+            from apps.notifications.tasks import send_order_held_alert_task
+            send_order_held_alert_task.delay(order.id)
         else:
             order.status = 'ALLOCATED'
             order.save(update_fields=['status', 'updated_at'])

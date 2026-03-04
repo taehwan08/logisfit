@@ -99,6 +99,8 @@ class PrintService:
             print_job.status = 'FAILED'
             print_job.error_message = '할당된 프린터가 없습니다.'
             print_job.save(update_fields=['status', 'error_message'])
+            from apps.notifications.tasks import send_printer_error_alert_task
+            send_printer_error_alert_task.delay(print_job.id)
             return
 
         # 라벨 데이터 생성
@@ -130,6 +132,9 @@ class PrintService:
                 'Print failed: job=%s attempt=%d/%d error=%s',
                 print_job.id, print_job.attempts, MAX_ATTEMPTS, error_msg,
             )
+            if print_job.status == 'FAILED':
+                from apps.notifications.tasks import send_printer_error_alert_task
+                send_printer_error_alert_task.delay(print_job.id)
 
 
 def _generate_dummy_tracking(carrier=None):

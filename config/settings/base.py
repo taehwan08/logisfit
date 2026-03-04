@@ -69,6 +69,7 @@ LOCAL_APPS = [
     'apps.webhooks',
     'apps.printing',
     'apps.reports',
+    'apps.notifications',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -248,6 +249,8 @@ REST_FRAMEWORK = {
 # Celery 설정
 # ============================================================================
 
+from celery.schedules import crontab  # noqa: E402
+
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
@@ -264,6 +267,18 @@ CELERY_BEAT_SCHEDULE = {
     'poll-sabangnet-orders': {
         'task': 'apps.adapters.tasks.poll_sabangnet_orders',
         'schedule': 300,  # 5분마다 (SystemConfig로 동적 변경 가능)
+    },
+    'check-safety-stock': {
+        'task': 'apps.notifications.tasks.check_safety_stock_task',
+        'schedule': 3600,  # 1시간마다
+    },
+    'check-wave-delays': {
+        'task': 'apps.notifications.tasks.check_wave_delays_task',
+        'schedule': 1800,  # 30분마다
+    },
+    'daily-shipment-summary': {
+        'task': 'apps.notifications.tasks.send_daily_shipment_summary_task',
+        'schedule': crontab(hour=18, minute=0),
     },
 }
 
@@ -292,6 +307,7 @@ SLACK_WEBHOOK_SIGNUP = env('SLACK_WEBHOOK_SIGNUP', default='')          # 회원
 SLACK_WEBHOOK_INSPECTION = env('SLACK_WEBHOOK_INSPECTION', default='')  # 검수 완료
 SLACK_WEBHOOK_FULFILLMENT = env('SLACK_WEBHOOK_FULFILLMENT', default='')  # 출고 관리
 SLACK_WEBHOOK_INBOUND = env('SLACK_WEBHOOK_INBOUND', default='')        # 입고 관리
+SLACK_WEBHOOK_ALERTS = env('SLACK_WEBHOOK_ALERTS', default='')          # 운영 알림
 
 SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
 SITE_URL = env('SITE_URL', default='http://localhost:8000')

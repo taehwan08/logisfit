@@ -13,10 +13,15 @@ def poll_sabangnet_orders(self):
     """사방넷 주문 수집 (periodic task)"""
     from .sabangnet.order_poller import SabangnetOrderPoller
 
-    poller = SabangnetOrderPoller()
-    result = poller.poll_orders()
-    logger.info('poll_sabangnet_orders 결과: %s', result)
-    return result
+    try:
+        poller = SabangnetOrderPoller()
+        result = poller.poll_orders()
+        logger.info('poll_sabangnet_orders 결과: %s', result)
+        return result
+    except Exception as exc:
+        from apps.notifications.tasks import send_api_error_alert_task
+        send_api_error_alert_task.delay('사방넷', str(exc))
+        raise
 
 
 @app.task(bind=True, max_retries=2, default_retry_delay=30)

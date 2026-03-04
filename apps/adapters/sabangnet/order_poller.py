@@ -164,6 +164,9 @@ class SabangnetOrderPoller:
                     )
                 except InsufficientStockError:
                     pass
+            # 주문 보류 알림
+            from apps.notifications.tasks import send_order_held_alert_task
+            send_order_held_alert_task.delay(order.id)
         else:
             order.status = 'ALLOCATED'
             order.save(update_fields=['status', 'updated_at'])
