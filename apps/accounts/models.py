@@ -25,7 +25,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         """사용자 역할"""
         ADMIN = 'admin', '관리자'
         CLIENT = 'client', '거래처'
-        WORKER = 'worker', '작업자'
+        OFFICE = 'office', '오피스팀'
+        FIELD = 'field', '필드팀'
+        WORKER = 'worker', '작업자'  # 하위호환 유지
 
     # 기본 정보
     email = models.EmailField(
@@ -127,9 +129,57 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.role == self.Role.CLIENT
 
     @property
+    def is_office(self):
+        """오피스팀 여부를 확인합니다."""
+        return self.role == self.Role.OFFICE
+
+    @property
+    def is_field(self):
+        """필드팀 여부를 확인합니다."""
+        return self.role == self.Role.FIELD
+
+    @property
     def is_worker(self):
-        """작업자 여부를 확인합니다."""
-        return self.role == self.Role.WORKER
+        """작업자 여부를 확인합니다 (오피스팀/필드팀/기존 작업자 모두 포함)."""
+        return self.role in (self.Role.WORKER, self.Role.OFFICE, self.Role.FIELD)
+
+
+class WorkerProfile(models.Model):
+    """
+    작업자 프로필 모델
+
+    오피스팀/필드팀/작업자의 추가 정보를 관리합니다.
+    프린터 할당, PDA 기기 연결 등을 포함합니다.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='worker_profile',
+        verbose_name='사용자',
+    )
+    assigned_printer = models.ForeignKey(
+        'printing.Printer',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name='할당 프린터',
+        related_name='assigned_workers',
+    )
+    pda_device_id = models.CharField(
+        'PDA 기기 ID',
+        max_length=100,
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '작업자 프로필'
+        verbose_name_plural = '작업자 프로필'
+        db_table = 'accounts_worker_profiles'
+
+    def __str__(self):
+        return f'{self.user.name} 프로필'
 
 
 class PasswordResetCode(models.Model):
@@ -192,3 +242,46 @@ class PasswordResetCode(models.Model):
         """실패 시도 횟수를 증가시킵니다."""
         self.attempt_count += 1
         self.save(update_fields=['attempt_count'])
+
+
+class SystemConfig(models.Model):
+    """
+    시스템 설정 모델
+
+    키-값 기반의 글로벌 설정을 관리합니다.
+    웨이브 시간, 할당 규칙, 아카이빙 기준 등 시스템 전역 설정을 저장합니다.
+    """
+
+    key = models.CharField('설정 키', max_length=100, unique=True)
+    value = models.JSONField('설정 값')
+    description = models.CharField('설명', max_length=200, blank=True, default='')
+    updated_at = models.DateTimeField('수정일시', auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name='수정자',
+        related_name='+',
+    )
+
+    class Meta:
+        verbose_name = '시스템 설정'
+        verbose_name_plural = '시스템 설정'
+        db_table = 'system_configs'
+
+    def __str__(self):
+        return f'{self.key}: {self.value}'
+
+
+def get_config(key, default=None):
+    """시스템 설정 조회 헬퍼
+
+    사용 예:
+        from apps.accounts.models import get_config
+        wave_times = get_config('wave_times', ["09:00", "15:00"])
+    """
+    try:
+        return SystemConfig.objects.get(key=key).value
+    except SystemConfig.DoesNotExist:
+        return default

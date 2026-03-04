@@ -6,7 +6,7 @@ Django Admin에서 거래처, 단가 계약을 관리합니다.
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Client, Brand, PriceContract
+from .models import Client, Brand, PriceContract, ClientWMSConfig
 
 
 class BrandInline(admin.TabularInline):
@@ -15,6 +15,14 @@ class BrandInline(admin.TabularInline):
     extra = 1
     readonly_fields = ('created_at', 'created_by')
     fields = ('name', 'code', 'is_active', 'memo', 'created_by', 'created_at')
+
+
+class ClientWMSConfigInline(admin.StackedInline):
+    """화주사 WMS 설정 인라인"""
+    model = ClientWMSConfig
+    can_delete = False
+    verbose_name = '화주사 WMS 설정'
+    verbose_name_plural = '화주사 WMS 설정'
 
 
 class PriceContractInline(admin.TabularInline):
@@ -35,7 +43,7 @@ class ClientAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'created_at', 'contract_start_date')
     search_fields = ('company_name', 'business_number', 'contact_person', 'contact_email')
     readonly_fields = ('created_at', 'updated_at', 'created_by')
-    inlines = [BrandInline, PriceContractInline]
+    inlines = [ClientWMSConfigInline, BrandInline, PriceContractInline]
 
     fieldsets = (
         ('기본 정보', {
@@ -49,6 +57,9 @@ class ClientAdmin(admin.ModelAdmin):
         }),
         ('청구서 정보', {
             'fields': ('invoice_email', 'invoice_day'),
+        }),
+        ('WMS 설정', {
+            'fields': ('allow_merge_packing', 'default_carrier', 'allocation_rule', 'safety_stock_alert'),
         }),
         ('주소', {
             'classes': ('collapse',),

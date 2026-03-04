@@ -54,16 +54,21 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    # 기존 앱
     'apps.accounts',
     'apps.clients',
     'apps.inspection',
     'apps.inventory',
     'apps.fulfillment',
-    # Phase 3 이후 추가될 앱들
-    # 'apps.works',
-    # 'apps.storage',
-    # 'apps.invoices',
-    # 'apps.contracts',
+    # 신규 앱 (Phase 2~3)
+    'apps.inbound',
+    'apps.waves',
+    'apps.returns',
+    'apps.history',
+    'apps.adapters',
+    'apps.webhooks',
+    'apps.printing',
+    'apps.reports',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

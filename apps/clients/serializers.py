@@ -4,7 +4,7 @@
 DRF API용 시리얼라이저를 정의합니다.
 """
 from rest_framework import serializers
-from .models import Client, PriceContract
+from .models import Client, PriceContract, ClientWMSConfig
 
 
 class ClientListSerializer(serializers.ModelSerializer):
@@ -46,3 +46,13 @@ class PriceContractSerializer(serializers.ModelSerializer):
         if valid_from and valid_to and valid_from > valid_to:
             raise serializers.ValidationError('종료일은 시작일 이후여야 합니다.')
         return data
+
+
+class ClientWMSConfigSerializer(serializers.ModelSerializer):
+    """화주사 WMS 설정 시리얼라이저"""
+    client_name = serializers.CharField(source='client.company_name', read_only=True)
+
+    class Meta:
+        model = ClientWMSConfig
+        fields = '__all__'
+        read_only_fields = ['client']

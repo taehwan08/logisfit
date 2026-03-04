@@ -24,6 +24,24 @@ class Product(models.Model):
         null=True, blank=True,
         related_name='products', verbose_name='브랜드',
     )
+
+    # 물류 속성
+    weight = models.DecimalField(
+        '중량(g)', max_digits=10, decimal_places=2,
+        null=True, blank=True,
+    )
+    dimensions = models.JSONField(
+        '규격(L/W/H)', null=True, blank=True,
+    )
+    cbm = models.DecimalField(
+        'CBM', max_digits=10, decimal_places=6,
+        null=True, blank=True,
+    )
+    category = models.CharField(
+        '카테고리', max_length=100, blank=True, default='',
+    )
+    is_set = models.BooleanField('세트상품 여부', default=False)
+
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
     updated_at = models.DateTimeField('수정일시', auto_now=True)
 
@@ -38,15 +56,83 @@ class Product(models.Model):
         return f'{self.name} ({self.barcode})'
 
 
+class ProductBarcode(models.Model):
+    """상품 바코드 (1:N)
+
+    하나의 상품에 여러 바코드(대표, 보조, 박스 바코드 등)를 연결합니다.
+    기존 Product.barcode 필드는 하위호환을 위해 유지됩니다.
+    """
+
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='barcodes', verbose_name='상품',
+    )
+    barcode = models.CharField('바코드', max_length=100, unique=True, db_index=True)
+    is_primary = models.BooleanField('대표 바코드', default=False)
+
+    class Meta:
+        db_table = 'product_barcodes'
+        verbose_name = '상품 바코드'
+        verbose_name_plural = '상품 바코드 목록'
+
+    def __str__(self):
+        primary = ' [대표]' if self.is_primary else ''
+        return f'{self.product.name} - {self.barcode}{primary}'
+
+
+class SetProduct(models.Model):
+    """세트상품 구성
+
+    세트 상품(parent)을 구성하는 단품(child)과 수량을 정의합니다.
+    """
+
+    parent = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='set_children', verbose_name='세트 상품',
+    )
+    child = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='set_parents', verbose_name='구성 단품',
+    )
+    qty = models.IntegerField('구성 수량', default=1)
+
+    class Meta:
+        db_table = 'set_products'
+        verbose_name = '세트상품 구성'
+        verbose_name_plural = '세트상품 구성 목록'
+        unique_together = ['parent', 'child']
+
+    def __str__(self):
+        return f'{self.parent.name} → {self.child.name} x{self.qty}'
+
+
 class Location(models.Model):
     """로케이션 (선반/구역)
 
     바코드 스캔 시 자동 등록됩니다.
     바코드는 저장 시 자동으로 대문자로 변환됩니다.
     """
+
+    ZONE_TYPE_CHOICES = [
+        ('INBOUND_STAGING', '입고 스테이징'),
+        ('STORAGE', '보관존'),
+        ('PICKING', '피킹존'),
+        ('OUTBOUND_STAGING', '출고존'),
+        ('DEFECT', '불량존'),
+        ('RETURN', '반품존'),
+    ]
+
     barcode = models.CharField('로케이션 바코드', max_length=50, unique=True, db_index=True)
     name = models.CharField('로케이션명', max_length=100, blank=True, default='')
     zone = models.CharField('구역', max_length=50, blank=True, default='')
+    zone_type = models.CharField(
+        '구역 유형',
+        max_length=20,
+        choices=ZONE_TYPE_CHOICES,
+        default='STORAGE',
+    )
+    is_active = models.BooleanField('활성 여부', default=True)
+    max_capacity = models.IntegerField('최대 적재량', null=True, blank=True)
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
 
     class Meta:

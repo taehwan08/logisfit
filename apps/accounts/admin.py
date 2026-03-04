@@ -6,7 +6,23 @@ Django 관리자 사이트에서 사용자 모델을 관리할 수 있도록 등
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import User
+from .models import User, WorkerProfile, SystemConfig
+
+
+class WorkerProfileInline(admin.StackedInline):
+    """사용자 상세 페이지에서 작업자 프로필을 인라인 편집"""
+    model = WorkerProfile
+    can_delete = False
+    verbose_name = '작업자 프로필'
+    verbose_name_plural = '작업자 프로필'
+
+
+@admin.register(WorkerProfile)
+class WorkerProfileAdmin(admin.ModelAdmin):
+    """작업자 프로필 관리"""
+    list_display = ['user', 'pda_device_id', 'assigned_printer']
+    search_fields = ['user__name', 'user__email', 'pda_device_id']
+    raw_id_fields = ['user']
 
 
 @admin.register(User)
@@ -67,6 +83,9 @@ class UserAdmin(BaseUserAdmin):
     # 다대다 필드 UI
     filter_horizontal = ('clients', 'groups', 'user_permissions')
 
+    # 인라인
+    inlines = [WorkerProfileInline]
+
     # 목록 액션
     actions = ['approve_users', 'deactivate_users']
 
@@ -83,3 +102,15 @@ class UserAdmin(BaseUserAdmin):
         queryset = queryset.exclude(pk=request.user.pk)
         updated = queryset.update(is_active=False)
         self.message_user(request, f'{updated}명의 사용자가 비활성화되었습니다.')
+
+
+@admin.register(SystemConfig)
+class SystemConfigAdmin(admin.ModelAdmin):
+    """시스템 설정 관리"""
+    list_display = ['key', 'value', 'description', 'updated_at', 'updated_by']
+    search_fields = ['key', 'description']
+    readonly_fields = ['updated_at']
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)

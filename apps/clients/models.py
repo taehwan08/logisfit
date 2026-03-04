@@ -179,6 +179,33 @@ class Client(models.Model):
     address = models.CharField('주소', max_length=500, blank=True)
     address_detail = models.CharField('상세 주소', max_length=200, blank=True)
 
+    # WMS 관련 설정
+    allow_merge_packing = models.BooleanField(
+        '합포장 허용',
+        default=True,
+    )
+    default_carrier = models.ForeignKey(
+        'printing.Carrier',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name='기본 택배사',
+        related_name='default_clients',
+    )
+    allocation_rule = models.CharField(
+        '할당 규칙',
+        max_length=20,
+        choices=[
+            ('FIFO', '선입선출'),
+            ('LOCATION_PRIORITY', '로케이션 우선'),
+        ],
+        default='FIFO',
+    )
+    safety_stock_alert = models.BooleanField(
+        '안전재고 알림',
+        default=True,
+    )
+
     # 메모 및 상태
     memo = models.TextField('메모', blank=True)
     is_active = models.BooleanField('활성 상태', default=True)
@@ -260,6 +287,17 @@ class Brand(models.Model):
     )
     is_active = models.BooleanField('활성 상태', default=True)
     memo = models.TextField('메모', blank=True)
+
+    # WMS 관련 설정
+    packaging_rule = models.JSONField(
+        '포장 규칙',
+        null=True,
+        blank=True,
+    )
+    allow_cross_brand_merge = models.BooleanField(
+        '브랜드간 합포장 허용',
+        default=True,
+    )
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -378,3 +416,36 @@ class PriceContract(models.Model):
         """현재 유효한 계약인지 확인"""
         today = timezone.now().date()
         return self.valid_from <= today <= self.valid_to
+
+
+class ClientWMSConfig(models.Model):
+    """
+    화주사 WMS 설정 모델
+
+    거래처별 WMS 동작 방식을 설정합니다.
+    웨이브 자동 포함, 출고 우선순위 등을 관리합니다.
+    """
+
+    client = models.OneToOneField(
+        Client,
+        on_delete=models.CASCADE,
+        related_name='wms_config',
+        verbose_name='거래처',
+    )
+    wave_auto_include = models.BooleanField(
+        '웨이브 자동 포함',
+        default=True,
+    )
+    priority_level = models.IntegerField(
+        '출고 우선순위',
+        default=0,
+        help_text='숫자가 높을수록 우선 출고',
+    )
+
+    class Meta:
+        verbose_name = '화주사 WMS 설정'
+        verbose_name_plural = '화주사 WMS 설정'
+        db_table = 'client_wms_configs'
+
+    def __str__(self):
+        return f'{self.client.company_name} WMS 설정'

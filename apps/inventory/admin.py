@@ -4,7 +4,10 @@ from django.shortcuts import render, redirect
 from django.urls import path
 from django.utils.html import format_html
 
-from .models import Product, Location, InventorySession, InventoryRecord, InboundRecord, InboundImage
+from .models import (
+    Product, ProductBarcode, SetProduct,
+    Location, InventorySession, InventoryRecord, InboundRecord, InboundImage,
+)
 
 
 # ============================================================================
@@ -55,20 +58,43 @@ class BulkLocationForm(forms.Form):
         return [x.strip() for x in raw.split(',') if x.strip()]
 
 
+class ProductBarcodeInline(admin.TabularInline):
+    """상품 바코드 인라인"""
+    model = ProductBarcode
+    extra = 1
+    fields = ('barcode', 'is_primary')
+
+
+class SetProductInline(admin.TabularInline):
+    """세트상품 구성 인라인 (부모 → 자식)"""
+    model = SetProduct
+    fk_name = 'parent'
+    extra = 1
+    fields = ('child', 'qty')
+    raw_id_fields = ('child',)
+    verbose_name = '구성 단품'
+    verbose_name_plural = '세트 구성'
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('barcode', 'name', 'display_name', 'option_code', 'client', 'brand', 'created_at', 'updated_at')
-    search_fields = ('barcode', 'name', 'display_name', 'option_code')
-    list_filter = ('client',)
+    list_display = (
+        'barcode', 'name', 'display_name', 'option_code',
+        'client', 'brand', 'category', 'is_set',
+        'weight', 'cbm', 'created_at',
+    )
+    search_fields = ('barcode', 'name', 'display_name', 'option_code', 'barcodes__barcode')
+    list_filter = ('client', 'is_set', 'category')
     raw_id_fields = ('client', 'brand')
     ordering = ('name',)
+    inlines = [ProductBarcodeInline, SetProductInline]
 
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
-    list_display = ('barcode', 'name', 'zone', 'created_at')
+    list_display = ('barcode', 'name', 'zone', 'zone_type', 'is_active', 'max_capacity', 'created_at')
     search_fields = ('barcode', 'name')
-    list_filter = ('zone',)
+    list_filter = ('zone_type', 'is_active', 'zone')
 
     # ── 커스텀 URL 추가 ──
     def get_urls(self):
