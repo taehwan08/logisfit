@@ -3,6 +3,14 @@
 """
 from django.urls import path
 
+from . import views
+
 app_name = 'adapters'
 
-urlpatterns = []
+urlpatterns = [
+    path(
+        'b2b/upload/',
+        views.B2BUploadView.as_view(),
+        name='b2b-upload',
+    ),
+]

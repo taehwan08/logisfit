@@ -259,6 +259,14 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30분
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=True)
 CELERY_TASK_EAGER_PROPAGATES = True
 
+# Celery Beat 스케줄 (주기적 태스크)
+CELERY_BEAT_SCHEDULE = {
+    'poll-sabangnet-orders': {
+        'task': 'apps.adapters.tasks.poll_sabangnet_orders',
+        'schedule': 300,  # 5분마다 (SystemConfig로 동적 변경 가능)
+    },
+}
+
 
 # ============================================================================
 # 이메일 설정 (Resend)
