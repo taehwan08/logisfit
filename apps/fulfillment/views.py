@@ -5,6 +5,7 @@ B2B 출고 주문 목록, 등록, 수정, 삭제, 상태변경, 벌크 붙여넣
 """
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from functools import wraps
@@ -23,6 +24,14 @@ from apps.accounts.email import send_shipment_notification_async, send_shipment_
 from apps.clients.models import Client, Brand
 
 logger = logging.getLogger(__name__)
+
+# 댓글 첨부파일 설정
+COMMENT_ALLOWED_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',  # 이미지
+    '.pdf', '.xlsx', '.xls', '.doc', '.docx',  # 문서
+}
+COMMENT_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+COMMENT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 # ============================================================================
@@ -249,12 +258,17 @@ def get_orders(request):
     if status:
         qs = qs.filter(status=status)
     if search:
-        qs = qs.filter(
+        q = (
             Q(order_number__icontains=search) |
             Q(product_name__icontains=search) |
             Q(barcode__icontains=search) |
             Q(sku_id__icontains=search)
         )
+        # FF-XXXXX 자체코드 검색 지원
+        ff_match = re.match(r'^FF-?(\d+)$', search.strip(), re.IGNORECASE)
+        if ff_match:
+            q |= Q(id=int(ff_match.group(1)))
+        qs = qs.filter(q)
     if date_from:
         qs = qs.filter(order_date__gte=date_from)
     if date_to:
@@ -279,6 +293,7 @@ def get_orders(request):
     for order in page_obj:
         orders.append({
             'id': order.id,
+            'internal_code': order.internal_code,
             'client_id': order.client_id,
             'client_name': order.client.company_name,
             'brand_id': order.brand_id,
@@ -808,12 +823,16 @@ def export_excel(request):
     if status:
         qs = qs.filter(status=status)
     if search:
-        qs = qs.filter(
+        q = (
             Q(order_number__icontains=search) |
             Q(product_name__icontains=search) |
             Q(barcode__icontains=search) |
             Q(sku_id__icontains=search)
         )
+        ff_match = re.match(r'^FF-?(\d+)$', search.strip(), re.IGNORECASE)
+        if ff_match:
+            q |= Q(id=int(ff_match.group(1)))
+        qs = qs.filter(q)
     if date_from:
         qs = qs.filter(order_date__gte=date_from)
     if date_to:
@@ -846,7 +865,7 @@ def export_excel(request):
 
     # 헤더
     headers = [
-        '거래처', '브랜드', '플랫폼', '발주번호', '발주유형', '발주확정',
+        '자체코드', '거래처', '브랜드', '플랫폼', '발주번호', '발주유형', '발주확정',
         'SKU ID', '상품명', '바코드', '센터', '입고일', '발주일시',
         '발주수량', '확정수량', '상태', '비고',
     ]
@@ -864,6 +883,7 @@ def export_excel(request):
     # 데이터
     for row_idx, order in enumerate(qs, 2):
         row_data = [
+            order.internal_code,
             order.client.company_name,
             order.brand.name if order.brand else '',
             order.get_platform_display(),
@@ -893,7 +913,7 @@ def export_excel(request):
             cell.alignment = Alignment(vertical='center')
 
     # 컬럼 너비 조정
-    col_widths = [15, 12, 12, 15, 10, 10, 15, 30, 15, 12, 12, 16, 10, 10, 10, 20]
+    col_widths = [12, 15, 12, 12, 15, 10, 10, 15, 30, 15, 12, 12, 16, 10, 10, 10, 20]
     # 플랫폼 커스텀 컬럼 너비 추가
     for _ in platform_cols:
         col_widths.append(15)
@@ -939,7 +959,7 @@ def get_comments(request, order_id):
     comments = order.comments.select_related('author').all()
     comment_list = []
     for c in comments:
-        comment_list.append({
+        comment_data = {
             'id': c.id,
             'author_name': c.author.name if c.author else '시스템',
             'author_role': c.author.get_role_display() if c.author else '',
@@ -948,7 +968,18 @@ def get_comments(request, order_id):
             'is_system': c.is_system,
             'created_at': timezone.localtime(c.created_at).strftime('%Y-%m-%d %H:%M'),
             'is_mine': c.author_id == request.user.id if c.author else False,
-        })
+        }
+        # 첨부파일 정보
+        if c.file:
+            ext = os.path.splitext(c.file.name)[1].lower()
+            comment_data['file_url'] = c.file.url
+            comment_data['file_name'] = os.path.basename(c.file.name)
+            try:
+                comment_data['file_size'] = c.file.size
+            except Exception:
+                comment_data['file_size'] = 0
+            comment_data['is_image'] = ext in COMMENT_IMAGE_EXTENSIONS
+        comment_list.append(comment_data)
 
     return JsonResponse({'comments': comment_list})
 
@@ -956,7 +987,7 @@ def get_comments(request, order_id):
 @fulfillment_access_required
 @require_http_methods(["POST"])
 def add_comment(request, order_id):
-    """댓글 등록"""
+    """댓글 등록 (텍스트 + 선택적 파일 첨부)"""
     try:
         order = FulfillmentOrder.objects.get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
@@ -966,34 +997,66 @@ def add_comment(request, order_id):
     if not _check_order_access(request.user, order):
         return JsonResponse({'error': '접근 권한이 없습니다.'}, status=403)
 
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+    # multipart/form-data 또는 JSON 모두 지원
+    content_type = request.content_type or ''
+    if 'multipart/form-data' in content_type:
+        content = request.POST.get('content', '').strip()
+        uploaded_file = request.FILES.get('file')
+    else:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+        content = data.get('content', '').strip()
+        uploaded_file = None
 
-    content = data.get('content', '').strip()
-    if not content:
-        return JsonResponse({'error': '댓글 내용을 입력해주세요.'}, status=400)
+    if not content and not uploaded_file:
+        return JsonResponse({'error': '댓글 내용을 입력하거나 파일을 첨부해주세요.'}, status=400)
+
+    # 파일 검증
+    if uploaded_file:
+        ext = os.path.splitext(uploaded_file.name)[1].lower()
+        if ext not in COMMENT_ALLOWED_EXTENSIONS:
+            allowed = ', '.join(sorted(COMMENT_ALLOWED_EXTENSIONS))
+            return JsonResponse(
+                {'error': f'허용되지 않는 파일 형식입니다. ({allowed})'},
+                status=400,
+            )
+        if uploaded_file.size > COMMENT_MAX_FILE_SIZE:
+            return JsonResponse({'error': '파일 크기는 10MB 이하여야 합니다.'}, status=400)
 
     comment = FulfillmentComment.objects.create(
         order=order,
         author=request.user,
-        content=content,
+        content=content or '',
     )
+
+    if uploaded_file:
+        comment.file = uploaded_file
+        comment.save(update_fields=['file'])
+
+    # 응답 데이터
+    response_data = {
+        'id': comment.id,
+        'author_name': comment.author.name,
+        'author_role': comment.author.get_role_display(),
+        'author_id': comment.author.id,
+        'content': comment.content,
+        'is_system': False,
+        'created_at': timezone.localtime(comment.created_at).strftime('%Y-%m-%d %H:%M'),
+        'is_mine': True,
+    }
+    if comment.file:
+        file_ext = os.path.splitext(comment.file.name)[1].lower()
+        response_data['file_url'] = comment.file.url
+        response_data['file_name'] = os.path.basename(comment.file.name)
+        response_data['file_size'] = comment.file.size
+        response_data['is_image'] = file_ext in COMMENT_IMAGE_EXTENSIONS
 
     return JsonResponse({
         'success': True,
         'message': '댓글이 등록되었습니다.',
-        'comment': {
-            'id': comment.id,
-            'author_name': comment.author.name,
-            'author_role': comment.author.get_role_display(),
-            'author_id': comment.author.id,
-            'content': comment.content,
-            'is_system': False,
-            'created_at': timezone.localtime(comment.created_at).strftime('%Y-%m-%d %H:%M'),
-            'is_mine': True,
-        },
+        'comment': response_data,
     })
 
 
@@ -1010,6 +1073,13 @@ def delete_comment(request, order_id, comment_id):
     # 본인 댓글이거나 관리자만 삭제 가능
     if comment.author_id != user.id and not (user.is_admin or user.is_superuser):
         return JsonResponse({'error': '삭제 권한이 없습니다.'}, status=403)
+
+    # 첨부파일 삭제
+    if comment.file:
+        try:
+            comment.file.delete(save=False)
+        except Exception:
+            pass  # 파일 삭제 실패해도 댓글은 삭제
 
     comment.delete()
     return JsonResponse({

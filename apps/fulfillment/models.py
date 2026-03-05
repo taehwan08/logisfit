@@ -229,6 +229,11 @@ class FulfillmentOrder(models.Model):
         return f"[{self.get_platform_display()}] {self.order_number} - {self.product_name}"
 
     @property
+    def internal_code(self):
+        """자체 관리코드 (FF-00001 형식)"""
+        return f"FF-{self.id:05d}"
+
+    @property
     def status_display_class(self):
         """상태별 CSS 클래스 반환"""
         return {
@@ -309,6 +314,13 @@ class FulfillmentComment(models.Model):
         '시스템 메시지',
         default=False,
         help_text='상태 변경 등 시스템 자동 생성 메시지 여부',
+    )
+    file = models.FileField(
+        '첨부파일',
+        upload_to='fulfillment/comments/%Y/%m/',
+        blank=True,
+        default='',
+        help_text='이미지(JPG, PNG, GIF, WEBP) 또는 문서(PDF, Excel, Word)',
     )
     created_at = models.DateTimeField('작성일시', auto_now_add=True)
     updated_at = models.DateTimeField('수정일시', auto_now=True)

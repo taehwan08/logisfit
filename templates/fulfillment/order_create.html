@@ -159,6 +159,24 @@
         font-size: 0.82rem;
         color: #adb5bd;
     }
+
+    /* 상품명 자동완성 */
+    .autocomplete-wrapper { position: relative; }
+    .autocomplete-dropdown {
+        position: absolute; top: 100%; left: 0; right: 0; z-index: 1050;
+        background: #fff; border: 1px solid #dee2e6; border-top: none;
+        border-radius: 0 0 6px 6px; max-height: 200px; overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none;
+    }
+    .autocomplete-dropdown.show { display: block; }
+    .autocomplete-item {
+        padding: 6px 10px; cursor: pointer; font-size: 0.78rem;
+        border-bottom: 1px solid #f5f5f5;
+    }
+    .autocomplete-item:hover, .autocomplete-item.active { background: #e8f4fd; }
+    .autocomplete-item .product-name { font-weight: 500; }
+    .autocomplete-item .product-detail { font-size: 0.7rem; color: #6c757d; }
+    .autocomplete-no-result { padding: 10px; text-align: center; color: #adb5bd; font-size: 0.78rem; }
 </style>
 {% endblock %}
 
@@ -544,12 +562,26 @@ function addRow(prefillData) {
             }
         }
         const inputType = col.type === 'number' ? 'number' : 'text';
-        html += `<td>
-            <input class="form-control" type="${inputType}" data-key="${col.key}"
-                   value="${escapeHtml(String(val))}"
-                   ${col.required ? 'required' : ''}
-                   style="min-width:${col.width}">
-        </td>`;
+
+        if (col.key === 'product_name') {
+            html += `<td>
+                <div class="autocomplete-wrapper">
+                    <input class="form-control product-name-input" type="text" data-key="${col.key}"
+                           value="${escapeHtml(String(val))}"
+                           ${col.required ? 'required' : ''}
+                           style="min-width:${col.width}"
+                           autocomplete="off" placeholder="상품명 검색...">
+                    <div class="autocomplete-dropdown"></div>
+                </div>
+            </td>`;
+        } else {
+            html += `<td>
+                <input class="form-control" type="${inputType}" data-key="${col.key}"
+                       value="${escapeHtml(String(val))}"
+                       ${col.required ? 'required' : ''}
+                       style="min-width:${col.width}">
+            </td>`;
+        }
     });
 
     const memo = prefillData ? (prefillData.memo || '') : '';
@@ -787,6 +819,134 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ============================================================================
+// 상품명 자동완성 (이벤트 위임 - 동적 행 자동 대응)
+// ============================================================================
+let acDebounceTimer = null;
+let acSelectedIndex = -1;
+
+// input 이벤트: 상품명 입력 시 자동완성 검색
+document.addEventListener('input', function(e) {
+    if (!e.target.classList.contains('product-name-input')) return;
+    const input = e.target;
+    const dropdown = input.parentElement.querySelector('.autocomplete-dropdown');
+    const query = input.value.trim();
+
+    acSelectedIndex = -1;
+
+    if (query.length < 1) {
+        dropdown.classList.remove('show');
+        return;
+    }
+
+    clearTimeout(acDebounceTimer);
+    acDebounceTimer = setTimeout(() => {
+        searchProducts(query, dropdown, input);
+    }, 300);
+});
+
+// 키보드 네비게이션
+document.addEventListener('keydown', function(e) {
+    if (!e.target.classList.contains('product-name-input')) return;
+    const dropdown = e.target.parentElement.querySelector('.autocomplete-dropdown');
+    if (!dropdown.classList.contains('show')) return;
+
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        acSelectedIndex = Math.min(acSelectedIndex + 1, items.length - 1);
+        items.forEach((item, idx) => item.classList.toggle('active', idx === acSelectedIndex));
+        if (items[acSelectedIndex]) items[acSelectedIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        acSelectedIndex = Math.max(acSelectedIndex - 1, 0);
+        items.forEach((item, idx) => item.classList.toggle('active', idx === acSelectedIndex));
+        if (items[acSelectedIndex]) items[acSelectedIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && acSelectedIndex >= 0) {
+        e.preventDefault();
+        items[acSelectedIndex]?.click();
+    } else if (e.key === 'Escape') {
+        dropdown.classList.remove('show');
+        acSelectedIndex = -1;
+    }
+});
+
+// 외부 클릭 시 드롭다운 닫기
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.autocomplete-wrapper')) {
+        document.querySelectorAll('.autocomplete-dropdown.show').forEach(d => d.classList.remove('show'));
+        acSelectedIndex = -1;
+    }
+});
+
+// 드롭다운 항목 클릭 (이벤트 위임)
+document.addEventListener('mousedown', function(e) {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    e.preventDefault();  // input blur 방지
+
+    const wrapper = item.closest('.autocomplete-wrapper');
+    const input = wrapper.querySelector('.product-name-input');
+    const dropdown = wrapper.querySelector('.autocomplete-dropdown');
+    const row = input.closest('tr');
+
+    // 상품명 채우기
+    input.value = item.dataset.name;
+
+    // 바코드 필드 찾아서 채우기
+    const barcodeInput = row.querySelector('input[data-key="barcode"]');
+    if (barcodeInput) barcodeInput.value = item.dataset.barcode || '';
+
+    // option_code → sku_id 채우기
+    const skuInput = row.querySelector('input[data-key="sku_id"]');
+    if (skuInput && item.dataset.optionCode) skuInput.value = item.dataset.optionCode;
+
+    dropdown.classList.remove('show');
+    acSelectedIndex = -1;
+
+    // 다음 입력으로 포커스 이동
+    const barcodeEl = row.querySelector('input[data-key="barcode"]');
+    if (barcodeEl) barcodeEl.focus();
+});
+
+function searchProducts(query, dropdown, input) {
+    const clientId = document.getElementById('createClient').value;
+    if (!clientId) {
+        dropdown.innerHTML = '<div class="autocomplete-no-result">거래처를 먼저 선택하세요</div>';
+        dropdown.classList.add('show');
+        return;
+    }
+
+    const params = new URLSearchParams({ search: query, client_id: clientId });
+    fetch(`/inventory/api/products/?${params.toString()}`)
+        .then(r => r.json())
+        .then(data => {
+            const products = (data.products || []).slice(0, 15);
+            if (products.length === 0) {
+                dropdown.innerHTML = '<div class="autocomplete-no-result">검색 결과 없음</div>';
+            } else {
+                dropdown.innerHTML = products.map(p => `
+                    <div class="autocomplete-item"
+                         data-name="${escapeHtml(p.name)}"
+                         data-barcode="${escapeHtml(p.barcode || '')}"
+                         data-option-code="${escapeHtml(p.option_code || '')}">
+                        <div>
+                            <div class="product-name">${escapeHtml(p.name)}</div>
+                            <div class="product-detail">
+                                ${p.barcode ? escapeHtml(p.barcode) : '바코드 없음'}${p.option_code ? ' | ' + escapeHtml(p.option_code) : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            dropdown.classList.add('show');
+        })
+        .catch(() => {
+            dropdown.innerHTML = '<div class="autocomplete-no-result">검색 오류</div>';
+            dropdown.classList.add('show');
+        });
 }
 </script>
 {% endblock %}
