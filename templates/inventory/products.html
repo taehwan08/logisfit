@@ -597,7 +597,13 @@ async function uploadExcel(file) {
             if (data.skipped) {
                 msg += `<span class="badge bg-warning text-dark">스킵 ${data.skipped}건</span>`;
             }
-            resultEl.innerHTML = `<div class="alert alert-success mb-0">${msg}</div>`;
+            if (data.errors && data.errors.length > 0) {
+                msg += `<div class="mt-2" style="font-size:0.82rem;color:#856404;">`;
+                msg += data.errors.map(e => `<div><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(e)}</div>`).join('');
+                msg += `</div>`;
+            }
+            const alertType = (data.errors && data.errors.length > 0) ? 'alert-warning' : 'alert-success';
+            resultEl.innerHTML = `<div class="alert ${alertType} mb-0">${msg}</div>`;
             loadProducts();
         } else {
             resultEl.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(data.error)}</div>`;

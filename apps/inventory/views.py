@@ -493,16 +493,42 @@ def upload_products_excel(request):
             # 거래처/브랜드 해석
             client_val = str(row[client_idx] or '').strip() if client_idx is not None and client_idx < len(row) else ''
             brand_val = str(row[brand_idx] or '').strip() if brand_idx is not None and brand_idx < len(row) else ''
+            # 숫자로 읽힌 경우 정수 변환 (예: 123.0 → '123')
+            if client_val and '.' in client_val:
+                try:
+                    client_val = str(int(float(client_val)))
+                except (ValueError, OverflowError):
+                    pass
             resolved_client_id = None
             resolved_brand_id = None
             if client_val:
+                # 1차: 정확한 매칭 (대소문자 무시)
                 client_obj = Client.objects.filter(company_name__iexact=client_val, is_active=True).first()
+                # 2차: 공백 제거 후 매칭 시도
+                if not client_obj:
+                    normalized = client_val.replace(' ', '').lower()
+                    for c in Client.objects.filter(is_active=True):
+                        if c.company_name.replace(' ', '').lower() == normalized:
+                            client_obj = c
+                            break
+                # 3차: 포함 매칭 (입력값이 거래처명에 포함되거나, 거래처명이 입력값에 포함)
+                if not client_obj:
+                    client_obj = Client.objects.filter(
+                        company_name__icontains=client_val, is_active=True
+                    ).first()
+                if not client_obj:
+                    for c in Client.objects.filter(is_active=True):
+                        if c.company_name.lower() in client_val.lower():
+                            client_obj = c
+                            break
                 if client_obj:
                     resolved_client_id = client_obj.id
                     if brand_val:
                         brand_obj = Brand.objects.filter(client=client_obj, name__iexact=brand_val, is_active=True).first()
                         if brand_obj:
                             resolved_brand_id = brand_obj.id
+                else:
+                    errors.append(f'{row_num}행: 거래처 "{client_val}" 매칭 실패')
 
             try:
                 defaults = {}
