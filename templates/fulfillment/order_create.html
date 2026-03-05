@@ -171,7 +171,7 @@
     <div class="row g-2 align-items-end">
         <div class="col-md-3 col-6">
             <label>거래처 <span class="text-danger">*</span></label>
-            <select class="form-select" id="createClient" onchange="onClientChange()" {% if is_client %}disabled{% endif %}>
+            <select class="form-select" id="createClient" onchange="onClientChange()" {% if is_client and clients|length == 1 %}disabled{% endif %}>
                 <option value="">선택</option>
                 {% for c in clients %}
                 <option value="{{ c.id }}">{{ c.company_name }}</option>

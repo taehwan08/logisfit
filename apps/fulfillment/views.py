@@ -111,6 +111,11 @@ def get_brands(request):
     if not client_id:
         return JsonResponse({'brands': []})
 
+    # 거래처 사용자는 자기 거래처의 브랜드만 조회 가능
+    user = request.user
+    if user.is_client and not user.clients.filter(id=client_id).exists():
+        return JsonResponse({'brands': []})
+
     brands = Brand.objects.filter(
         client_id=client_id,
         is_active=True,
