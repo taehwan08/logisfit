@@ -1,5 +1,8 @@
 """
 검수 시스템 뷰
+
+DEPRECATED: get_order, scan_product, complete_inspection은 OutboundOrder 브릿지를 통해
+waves 검수 로직을 우선 실행합니다. OutboundOrder에 없으면 기존 inspection Order로 fallback.
 """
 import logging
 import re
@@ -19,6 +22,52 @@ from .models import Order, OrderProduct, InspectionLog, UploadBatch
 from .slack import send_batch_complete_notification
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# OutboundOrder 브릿지 헬퍼
+# ============================================================================
+
+def _get_outbound_order(tracking_number):
+    """tracking_number로 OutboundOrder 조회 (없으면 None)"""
+    from apps.waves.models import OutboundOrder
+    return OutboundOrder.objects.filter(
+        tracking_number=tracking_number,
+    ).first()
+
+
+def _map_outbound_status(status):
+    """OutboundOrder 상태를 inspection 상태로 매핑"""
+    if status in ('INSPECTED', 'SHIPPED'):
+        return '완료'
+    if status == 'PICKING':
+        return '검수중'
+    return '대기중'
+
+
+def _outbound_order_response(order, alert_code):
+    """OutboundOrder를 inspection JSON 형식으로 변환"""
+    items = order.items.select_related('product').all()
+    return {
+        'success': True,
+        'alert_code': alert_code,
+        'source': 'wms',
+        'order': {
+            'tracking_number': order.tracking_number,
+            'seller': order.source,
+            'receiver_name': order.recipient_name,
+            'receiver_phone': order.recipient_phone,
+            'receiver_address': order.recipient_address,
+            'status': _map_outbound_status(order.status),
+        },
+        'products': [{
+            'id': item.id,
+            'barcode': item.product.barcode,
+            'product_name': item.product.name,
+            'quantity': item.qty,
+            'scanned_quantity': item.inspected_qty,
+        } for item in items],
+    }
 
 
 # ============================================================================
@@ -419,9 +468,25 @@ def upload_excel(request):
 
 @require_GET
 def get_order(request, tracking_number):
-    """송장 조회"""
+    """송장 조회 (OutboundOrder 우선, inspection Order fallback)"""
     worker = request.user.name if request.user.is_authenticated else None
 
+    # --- OutboundOrder 브릿지 ---
+    outbound = _get_outbound_order(tracking_number)
+    if outbound:
+        if outbound.status in ('INSPECTED', 'SHIPPED'):
+            alert_code = '기처리배송'
+        else:
+            alert_code = '정상'
+        InspectionLog.objects.create(
+            tracking_number=tracking_number,
+            scan_type='송장',
+            alert_code=alert_code,
+            worker=worker,
+        )
+        return JsonResponse(_outbound_order_response(outbound, alert_code))
+
+    # --- 기존 inspection Order fallback ---
     try:
         order = Order.objects.prefetch_related('products').get(
             tracking_number=tracking_number
@@ -507,7 +572,7 @@ def get_order(request, tracking_number):
 @csrf_exempt
 @require_POST
 def scan_product(request):
-    """상품 스캔 처리"""
+    """상품 스캔 처리 (OutboundOrder 우선, inspection Order fallback)"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -520,6 +585,128 @@ def scan_product(request):
     if not tracking_number or not barcode:
         return JsonResponse({'success': False, 'message': '송장번호와 바코드가 필요합니다.'}, status=400)
 
+    # --- OutboundOrder 브릿지 ---
+    outbound = _get_outbound_order(tracking_number)
+    if outbound:
+        return _scan_product_outbound(outbound, tracking_number, barcode, worker, request.user)
+
+    # --- 기존 inspection Order fallback ---
+    return _scan_product_legacy(tracking_number, barcode, worker)
+
+
+def _scan_product_outbound(order, tracking_number, barcode, worker, user):
+    """OutboundOrder 기반 상품 스캔 처리"""
+    from apps.waves.models import Wave
+    from apps.waves.signals import order_inspected
+    from apps.waves.views import _resolve_product_by_barcode
+
+    with transaction.atomic():
+        from apps.waves.models import OutboundOrder
+        order = OutboundOrder.objects.select_for_update().get(pk=order.pk)
+
+        # 바코드로 상품 조회
+        product = _resolve_product_by_barcode(barcode)
+        if not product:
+            InspectionLog.objects.create(
+                tracking_number=tracking_number,
+                barcode=barcode,
+                scan_type='상품',
+                alert_code='상품오류',
+                worker=worker,
+            )
+            return JsonResponse({
+                'success': False,
+                'alert_code': '상품오류',
+                'message': '해당 송장에 없는 상품입니다.',
+            })
+
+        # 주문 품목에서 해당 상품 찾기
+        item = order.items.select_for_update().filter(product=product).first()
+        if not item:
+            InspectionLog.objects.create(
+                tracking_number=tracking_number,
+                barcode=barcode,
+                scan_type='상품',
+                alert_code='상품오류',
+                worker=worker,
+            )
+            return JsonResponse({
+                'success': False,
+                'alert_code': '상품오류',
+                'message': '해당 송장에 없는 상품입니다.',
+            })
+
+        # 수량 초과 확인
+        if item.inspected_qty >= item.qty:
+            InspectionLog.objects.create(
+                tracking_number=tracking_number,
+                barcode=barcode,
+                scan_type='상품',
+                alert_code='중복스캔',
+                worker=worker,
+            )
+            return JsonResponse({
+                'success': False,
+                'alert_code': '중복스캔',
+                'message': '이미 스캔 완료된 상품입니다.',
+            })
+
+        # 검수수량 +1
+        item.inspected_qty += 1
+        item.save(update_fields=['inspected_qty'])
+
+        # 남은 수량
+        remaining = item.qty - item.inspected_qty
+
+        # 전체 완료 체크
+        all_items = list(order.items.all())
+        all_completed = all(oi.inspected_qty >= oi.qty for oi in all_items)
+
+        if all_completed:
+            order.status = 'INSPECTED'
+            order.save(update_fields=['status'])
+
+            # Wave inspected_count 증가
+            if order.wave_id:
+                wave = Wave.objects.select_for_update().get(pk=order.wave_id)
+                wave.inspected_count += 1
+                wave.save(update_fields=['inspected_count'])
+
+            # 시그널 발행 (송장 출력 트리거)
+            from apps.waves.models import OutboundOrder as OO
+            order_inspected.send(sender=OO, order=order, user=user)
+
+            InspectionLog.objects.create(
+                tracking_number=tracking_number,
+                barcode=barcode,
+                scan_type='상품',
+                alert_code='완료',
+                worker=worker,
+            )
+
+            resp = _outbound_order_response(order, '완료')
+            resp['all_completed'] = True
+            return JsonResponse(resp)
+
+        # 남은 수량에 따른 알림코드
+        alert_code = '숫자' if remaining > 0 else '정상'
+
+        InspectionLog.objects.create(
+            tracking_number=tracking_number,
+            barcode=barcode,
+            scan_type='상품',
+            alert_code=alert_code,
+            worker=worker,
+        )
+
+        resp = _outbound_order_response(order, alert_code)
+        resp['all_completed'] = False
+        resp['remaining'] = remaining
+        return JsonResponse(resp)
+
+
+def _scan_product_legacy(tracking_number, barcode, worker):
+    """기존 inspection Order 기반 상품 스캔 처리"""
     try:
         with transaction.atomic():
             order = Order.objects.select_for_update().get(tracking_number=tracking_number)
@@ -669,7 +856,7 @@ def scan_product(request):
 @csrf_exempt
 @require_POST
 def complete_inspection(request):
-    """검수 완료 처리"""
+    """검수 완료 처리 (OutboundOrder 우선, inspection Order fallback)"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -681,6 +868,12 @@ def complete_inspection(request):
     if not tracking_number:
         return JsonResponse({'success': False, 'message': '송장번호가 필요합니다.'}, status=400)
 
+    # --- OutboundOrder 브릿지 ---
+    outbound = _get_outbound_order(tracking_number)
+    if outbound:
+        return _complete_inspection_outbound(outbound, tracking_number, worker, request.user)
+
+    # --- 기존 inspection Order fallback ---
     try:
         with transaction.atomic():
             order = Order.objects.select_for_update().get(tracking_number=tracking_number)
@@ -717,6 +910,58 @@ def complete_inspection(request):
         return JsonResponse({
             'success': False,
             'message': '등록되지 않은 송장번호입니다.',
+        })
+
+
+def _complete_inspection_outbound(order, tracking_number, worker, user):
+    """OutboundOrder 기반 검수 완료 처리"""
+    from apps.waves.models import OutboundOrder, Wave
+    from apps.waves.signals import order_inspected
+
+    with transaction.atomic():
+        order = OutboundOrder.objects.select_for_update().get(pk=order.pk)
+
+        # 이미 검수 완료
+        if order.status == 'INSPECTED':
+            return JsonResponse({
+                'success': True,
+                'message': '검수가 완료되었습니다.',
+                'tracking_number': tracking_number,
+            })
+
+        # 미완료 품목 확인
+        all_items = order.items.all()
+        incomplete = [item for item in all_items if item.inspected_qty < item.qty]
+
+        if incomplete:
+            return JsonResponse({
+                'success': False,
+                'message': f'아직 스캔하지 않은 상품이 {len(incomplete)}건 있습니다.',
+            })
+
+        order.status = 'INSPECTED'
+        order.save(update_fields=['status'])
+
+        # Wave inspected_count 증가
+        if order.wave_id:
+            wave = Wave.objects.select_for_update().get(pk=order.wave_id)
+            wave.inspected_count += 1
+            wave.save(update_fields=['inspected_count'])
+
+        # 시그널 발행
+        order_inspected.send(sender=OutboundOrder, order=order, user=user)
+
+        InspectionLog.objects.create(
+            tracking_number=tracking_number,
+            scan_type='상품',
+            alert_code='완료',
+            worker=worker,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'message': '검수가 완료되었습니다.',
+            'tracking_number': tracking_number,
         })
 
 

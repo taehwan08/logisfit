@@ -536,10 +536,10 @@ def bulk_paste_orders(request):
     return JsonResponse(result)
 
 
-@admin_or_worker_required
+@admin_required
 @require_http_methods(["POST"])
 def update_order(request, order_id):
-    """주문 수정 (관리자/작업자)"""
+    """주문 수정 (관리자 전용)"""
     try:
         order = FulfillmentOrder.objects.get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
@@ -598,10 +598,10 @@ def update_order(request, order_id):
     })
 
 
-@admin_or_worker_required
+@admin_required
 @require_http_methods(["POST"])
 def delete_order(request, order_id):
-    """주문 삭제 (관리자/작업자)"""
+    """주문 삭제 (관리자 전용)"""
     try:
         order = FulfillmentOrder.objects.get(id=order_id)
     except FulfillmentOrder.DoesNotExist:
