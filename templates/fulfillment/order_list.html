@@ -183,6 +183,33 @@
     }
     .brand-item:last-child { border-bottom: none; }
 
+    /* 가이드 모달 */
+    .guide-modal .modal-body { max-height: 70vh; overflow-y: auto; }
+    .guide-section { margin-bottom: 24px; }
+    .guide-section:last-child { margin-bottom: 0; }
+    .guide-section-title {
+        font-size: 0.92rem; font-weight: 700; color: #2c3e50;
+        padding-bottom: 6px; border-bottom: 2px solid #3498db;
+        margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+    }
+    .guide-item {
+        padding: 8px 12px; margin-bottom: 6px;
+        background: #f8f9fa; border-radius: 8px; font-size: 0.82rem; line-height: 1.6;
+    }
+    .guide-item strong { color: #2c3e50; }
+    .guide-item .guide-label {
+        display: inline-block; padding: 1px 6px; border-radius: 4px;
+        font-size: 0.72rem; font-weight: 600; margin-right: 4px;
+    }
+    .guide-item .label-tip { background: #e8f4fd; color: #2980b9; }
+    .guide-item .label-step { background: #e8fdf0; color: #059669; }
+    .guide-item .label-warn { background: #fff3cd; color: #856404; }
+    .guide-item .label-info { background: #f3e8ff; color: #7c3aed; }
+    .guide-status-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0; }
+    .guide-status-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+    .guide-arrow { color: #adb5bd; font-size: 0.9rem; }
+    .guide-shortcut { display: inline-block; padding: 1px 6px; background: #e9ecef; border-radius: 4px; font-family: monospace; font-size: 0.75rem; }
+
     /* 일괄처리 바 */
     .bulk-action-bar {
         display: none;
@@ -287,6 +314,9 @@
             <span class="pagination-info" id="totalInfo">-</span>
         </div>
         <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark btn-sm" onclick="showGuideModal()" title="사용 가이드">
+                <i class="bi bi-question-circle me-1"></i>가이드
+            </button>
             <button class="btn btn-outline-success btn-sm" onclick="exportExcel()">
                 <i class="bi bi-file-earmark-excel me-1"></i>엑셀
             </button>
@@ -503,6 +533,151 @@
     <button class="btn btn-bulk-cancel" onclick="clearSelection()"><i class="bi bi-x-lg me-1"></i>취소</button>
 </div>
 {% endif %}
+
+<!-- ============================================================ -->
+<!-- 사용 가이드 모달 -->
+<!-- ============================================================ -->
+<div class="modal fade guide-modal" id="guideModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#2c3e50;color:#fff;">
+                <h5 class="modal-title"><i class="bi bi-question-circle me-2"></i>출고 현황 가이드</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+
+                <!-- 주문 상태 흐름 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-arrow-right-circle"></i> 주문 상태 흐름</div>
+                    <div class="guide-item">
+                        주문은 아래 4단계로 관리됩니다:
+                        <div class="guide-status-flow">
+                            <span class="guide-status-badge" style="background:#e9ecef;color:#6c757d;">대기</span>
+                            <span class="guide-arrow"><i class="bi bi-arrow-right"></i></span>
+                            <span class="guide-status-badge" style="background:#3498db;color:#fff;">확인완료</span>
+                            <span class="guide-arrow"><i class="bi bi-arrow-right"></i></span>
+                            <span class="guide-status-badge" style="background:#f39c12;color:#fff;">출고완료</span>
+                            <span class="guide-arrow"><i class="bi bi-arrow-right"></i></span>
+                            <span class="guide-status-badge" style="background:#2ecc71;color:#fff;">전산반영</span>
+                        </div>
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-tip">TIP</span>
+                        각 상태의 원형 아이콘(<i class="bi bi-check-lg" style="font-size:0.8rem;"></i>)을 클릭하면 다음 단계로 전환됩니다. 반드시 순서대로만 진행 가능합니다.
+                    </div>
+                </div>
+
+                <!-- 자체코드 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-hash"></i> 자체코드 (FF-XXXXX)</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-info">INFO</span>
+                        각 주문에 시스템이 자동 부여하는 내부 관리 코드입니다. 외부 발주번호와 별도로 관리되며, 검색창에서 <strong>FF-00001</strong> 형식으로 검색할 수 있습니다.
+                    </div>
+                </div>
+
+                <!-- 필터 및 검색 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-funnel"></i> 필터 및 검색</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-step">1</span>
+                        상단의 <strong>거래처, 브랜드, 플랫폼, 상태</strong> 필터를 조합하여 원하는 주문만 볼 수 있습니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-step">2</span>
+                        <strong>검색</strong> 입력란에 발주번호, 상품명, 바코드, SKU, 자체코드(FF-)를 입력하면 실시간 검색됩니다.
+                    </div>
+                </div>
+
+                <!-- 일괄 처리 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-check2-square"></i> 일괄 상태 변경</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-step">1</span>
+                        테이블 왼쪽의 <strong>체크박스</strong>로 여러 주문을 선택하세요. 상단 체크박스로 전체 선택도 가능합니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-step">2</span>
+                        선택하면 하단에 <strong>일괄처리 바</strong>가 나타납니다. <strong>확인처리 / 출고처리 / 전산처리</strong> 버튼을 눌러 선택된 주문의 상태를 일괄 변경할 수 있습니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-warn">주의</span>
+                        일괄 처리는 현재 상태에서 다음 단계로만 변경 가능합니다. 이미 해당 단계를 지난 주문은 자동으로 건너뜁니다.
+                    </div>
+                </div>
+
+                <!-- 댓글 & 파일 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-chat-dots"></i> 댓글 및 파일 첨부</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-step">1</span>
+                        주문을 클릭하면 <strong>상세 모달</strong>이 열립니다. 하단 댓글 영역에서 메시지를 남길 수 있습니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-step">2</span>
+                        <strong><i class="bi bi-paperclip"></i> 클립 아이콘</strong>을 클릭하여 파일을 첨부할 수 있습니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-info">지원 파일</span>
+                        이미지: JPG, PNG, GIF, WEBP &nbsp;|&nbsp; 문서: PDF, Excel, Word &nbsp;|&nbsp; 최대 <strong>10MB</strong>
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-tip">TIP</span>
+                        이미지 파일은 <strong>썸네일 미리보기</strong>로 표시되고, 문서 파일은 <strong>다운로드 링크</strong>로 표시됩니다.
+                    </div>
+                </div>
+
+                <!-- 엑셀 다운로드 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-file-earmark-excel"></i> 엑셀 다운로드</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-tip">TIP</span>
+                        <strong>엑셀</strong> 버튼을 클릭하면 현재 적용된 필터 조건에 맞는 주문 목록을 Excel 파일로 다운로드합니다. 자체코드, 플랫폼별 추가 컬럼도 함께 포함됩니다.
+                    </div>
+                </div>
+
+                <!-- 브랜드 관리 -->
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-tag"></i> 브랜드 관리</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-info">INFO</span>
+                        <strong>브랜드 관리</strong> 버튼에서 거래처별 브랜드를 추가/삭제할 수 있습니다. 브랜드를 설정하면 주문 등록 시 브랜드를 선택할 수 있고, 필터에서도 브랜드별 조회가 가능합니다.
+                    </div>
+                </div>
+
+                <!-- 플랫폼 컬럼 설정 -->
+                {% if is_admin %}
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-sliders"></i> 플랫폼 컬럼 설정 (관리자)</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-info">INFO</span>
+                        <strong>컬럼 설정</strong>에서 플랫폼별로 추가 컬럼(텍스트/숫자/날짜)을 정의할 수 있습니다. 설정된 컬럼은 주문 등록 폼과 목록 테이블에 자동 반영됩니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-warn">주의</span>
+                        컬럼 키는 영문으로 입력하며, 한 번 설정된 키는 변경 시 기존 데이터와의 연결이 끊길 수 있습니다.
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 주문 수정/삭제 -->
+                {% if is_admin %}
+                <div class="guide-section">
+                    <div class="guide-section-title"><i class="bi bi-pencil-square"></i> 주문 수정 / 삭제 (관리자)</div>
+                    <div class="guide-item">
+                        <span class="guide-label label-info">INFO</span>
+                        관리자는 테이블 우측의 <strong>작업</strong> 열에서 수정(<i class="bi bi-pencil" style="font-size:0.8rem;"></i>)/삭제(<i class="bi bi-trash" style="font-size:0.8rem;"></i>) 버튼으로 개별 주문을 관리할 수 있습니다.
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
@@ -1337,6 +1512,13 @@ function bulkAction(action) {
         btns.forEach(b => b.disabled = false);
         showToast('서버 오류', 'danger');
     });
+}
+
+// ============================================================================
+// 가이드
+// ============================================================================
+function showGuideModal() {
+    new bootstrap.Modal(document.getElementById('guideModal')).show();
 }
 
 // ============================================================================
