@@ -704,7 +704,11 @@
                     <div class="guide-section-title"><i class="bi bi-sliders"></i> 플랫폼 컬럼 설정 (관리자)</div>
                     <div class="guide-item">
                         <span class="guide-label label-info">INFO</span>
-                        <strong>컬럼 설정</strong>에서 플랫폼별로 추가 컬럼(텍스트/숫자/날짜)을 정의할 수 있습니다. 설정된 컬럼은 주문 등록 폼과 목록 테이블에 자동 반영됩니다.
+                        <strong>컬럼 설정</strong>에서 플랫폼별로 추가 컬럼(텍스트/숫자/날짜)을 정의할 수 있습니다. 설정된 컬럼은 주문 등록 폼, 상세 모달, 엑셀에 자동 반영됩니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-tip">TIP</span>
+                        키를 <strong>product_name</strong> 또는 <strong>quantity</strong>로 설정하면 상품명/수량의 표시 순서를 자유롭게 조정할 수 있습니다.
                     </div>
                     <div class="guide-item">
                         <span class="guide-label label-warn">주의</span>
@@ -1062,6 +1066,9 @@ function renderDetailModal(order, platformColumns) {
         synced: '<span class="badge bg-success">전산반영</span>',
     };
 
+    const WORKER_KEYS = new Set(['box_quantity', 'pallet_quantity', 'invoice_number']);
+
+    // ─── 1. 메타 섹션 (항상 고정) ───
     let html = `
     <table class="table table-sm mb-0" style="font-size:0.85rem;">
         <colgroup><col style="width:80px"><col><col style="width:80px"><col><col style="width:80px"><col></colgroup>
@@ -1074,15 +1081,81 @@ function renderDetailModal(order, platformColumns) {
             <td class="text-muted">브랜드</td><td>${escapeHtml(order.brand_name) || '-'}</td>
             <td class="text-muted">플랫폼</td><td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
         </tr>
-        <tr>
-            <td class="text-muted">상품명</td><td colspan="3">${escapeHtml(order.product_name)}</td>
-            <td class="text-muted">수량</td><td>${order.quantity != null ? order.quantity.toLocaleString() : '-'}</td>
-        </tr>
-        ${!IS_CLIENT ? `<tr>
+    </table>`;
+
+    // ─── 2. 통합 데이터 섹션 (PlatformColumnConfig 순서) ───
+    const pd = order.platform_data || {};
+    let dataItems = [];
+
+    // 값 조회 헬퍼
+    function getFieldValue(key) {
+        if (key === 'product_name') return order.product_name || '-';
+        if (key === 'quantity') return order.quantity != null ? order.quantity.toLocaleString() : '-';
+        return pd[key] != null ? String(pd[key]) : '-';
+    }
+
+    if (platformColumns.length > 0) {
+        const configuredKeys = new Set();
+
+        platformColumns.forEach(pc => {
+            if (WORKER_KEYS.has(pc.key)) return; // 작업자 전용 필드 제외
+            configuredKeys.add(pc.key);
+            dataItems.push({ label: pc.name, value: getFieldValue(pc.key) });
+        });
+
+        // product_name이 Config에 없으면 맨 앞에 추가
+        if (!configuredKeys.has('product_name')) {
+            dataItems.unshift({ label: '상품명', value: getFieldValue('product_name') });
+        }
+        // quantity가 Config에 없으면 product_name 바로 뒤에 추가
+        if (!configuredKeys.has('quantity')) {
+            const pnIdx = dataItems.findIndex(d => d.label === '상품명');
+            dataItems.splice((pnIdx >= 0 ? pnIdx : 0) + 1, 0,
+                { label: '수량', value: getFieldValue('quantity') }
+            );
+        }
+    } else {
+        // Config 없으면 기본 순서 + platform_data raw keys
+        dataItems.push({ label: '상품명', value: getFieldValue('product_name') });
+        dataItems.push({ label: '수량', value: getFieldValue('quantity') });
+        Object.keys(pd).forEach(k => {
+            dataItems.push({ label: k, value: pd[k] != null ? String(pd[k]) : '-' });
+        });
+    }
+
+    // 데이터 섹션 렌더링 (3열 레이아웃)
+    if (dataItems.length > 0) {
+        html += '<div class="mt-3 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>주문 정보</strong></div>';
+        html += '<table class="table table-sm mb-0" style="font-size:0.85rem;"><colgroup><col style="width:80px"><col><col style="width:80px"><col><col style="width:80px"><col></colgroup>';
+        for (let i = 0; i < dataItems.length; i += 3) {
+            html += '<tr>';
+            for (let j = 0; j < 3; j++) {
+                const item = dataItems[i + j];
+                if (item) {
+                    html += `<td class="text-muted">${escapeHtml(item.label)}</td><td>${escapeHtml(item.value)}</td>`;
+                } else {
+                    html += '<td></td><td></td>';
+                }
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+    }
+
+    // ─── 3. 작업자 섹션 + 상태 타임라인 ───
+    html += `
+    <table class="table table-sm mb-0 mt-3" style="font-size:0.85rem;">
+        <colgroup><col style="width:80px"><col><col style="width:80px"><col><col style="width:80px"><col></colgroup>`;
+
+    if (!IS_CLIENT) {
+        html += `<tr>
             <td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td>
             <td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td>
             <td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>
-        </tr>` : ''}
+        </tr>`;
+    }
+
+    html += `
         <tr><td colspan="6"><hr class="my-1"></td></tr>
         <tr>
             <td class="text-muted">확인</td><td>${order.confirmed_at || '-'}</td>
@@ -1094,32 +1167,7 @@ function renderDetailModal(order, platformColumns) {
         </tr>
     </table>`;
 
-    // 플랫폼 커스텀 컬럼 표시 (PlatformColumnConfig 기반, 3열 레이아웃)
-    let platformDataHtml = '';
-    const pd = order.platform_data || {};
-    const cols = platformColumns.length > 0
-        ? platformColumns.map(c => ({ label: c.name, value: pd[c.key] != null ? String(pd[c.key]) : '-' }))
-        : Object.keys(pd).map(k => ({ label: k, value: pd[k] != null ? String(pd[k]) : '-' }));
-
-    if (cols.length > 0) {
-        platformDataHtml += '<div class="mt-3 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
-        platformDataHtml += '<table class="table table-sm mb-0" style="font-size:0.85rem;"><colgroup><col style="width:80px"><col><col style="width:80px"><col><col style="width:80px"><col></colgroup>';
-        for (let i = 0; i < cols.length; i += 3) {
-            platformDataHtml += '<tr>';
-            for (let j = 0; j < 3; j++) {
-                const c = cols[i + j];
-                if (c) {
-                    platformDataHtml += `<td class="text-muted">${escapeHtml(c.label)}</td><td>${escapeHtml(c.value)}</td>`;
-                } else {
-                    platformDataHtml += '<td></td><td></td>';
-                }
-            }
-            platformDataHtml += '</tr>';
-        }
-        platformDataHtml += '</table>';
-    }
-
-    document.getElementById('detailModalBody').innerHTML = html + platformDataHtml;
+    document.getElementById('detailModalBody').innerHTML = html;
     document.getElementById('commentInput').value = '';
     new bootstrap.Modal(document.getElementById('detailModal')).show();
     loadComments(order.id);

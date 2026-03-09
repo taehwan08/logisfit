@@ -426,12 +426,16 @@
                 <div class="guide-section">
                     <div class="guide-section-title"><i class="bi bi-layout-three-columns"></i> 컬럼 구성</div>
                     <div class="guide-item">
-                        <span class="guide-label label-info">고정 컬럼</span>
-                        <strong>상품명, 수량, 박스수, 팔레트수, 송장번호</strong>는 모든 플랫폼에 공통으로 표시되는 고정 컬럼입니다.
+                        <span class="guide-label label-info">데이터 컬럼</span>
+                        <strong>상품명, 수량</strong>은 기본 컬럼입니다. 관리자가 플랫폼 컬럼 설정에서 <strong>상품명, 수량, 커스텀 컬럼</strong>의 순서를 자유롭게 정의할 수 있습니다.
                     </div>
                     <div class="guide-item">
-                        <span class="guide-label label-info">커스텀 컬럼</span>
-                        관리자가 설정한 플랫폼별 커스텀 컬럼이 있으면 고정 컬럼 뒤에 자동 추가됩니다. 컬럼 수는 상단의 배지로 확인할 수 있습니다.
+                        <span class="guide-label label-info">작업자 컬럼</span>
+                        <strong>박스수, 팔레트수, 송장번호</strong>는 작업자 전용 필드로 주로 출고 처리 시 입력합니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-tip">TIP</span>
+                        플랫폼 컬럼 설정에서 <strong>product_name</strong>, <strong>quantity</strong> 키를 사용하면 상품명/수량의 표시 순서도 변경할 수 있습니다.
                     </div>
                 </div>
 
@@ -460,21 +464,25 @@ let platformSelected = false;
 let rowCounter = 0;
 
 // ============================================================================
-// 고정 컬럼 (모델 필드에 직접 매핑)
+// 컬럼 정의
 // ============================================================================
-const ALL_FIXED_COLUMNS = [
-    { key: 'product_name',    name: '상품명',     required: true,  type: 'text',   width: '180px' },
-    { key: 'quantity',        name: '수량',       required: false, type: 'number', width: '80px' },
+// 작업자 전용 필드 (출고 처리 시 입력, 주문 등록 시 선택적 입력)
+const WORKER_COLUMNS = [
     { key: 'box_quantity',    name: '박스수',     required: false, type: 'number', width: '80px', workerOnly: true },
     { key: 'pallet_quantity', name: '팔레트수',   required: false, type: 'number', width: '80px', workerOnly: true },
     { key: 'invoice_number',  name: '송장번호',   required: false, type: 'text',   width: '120px', workerOnly: true },
 ];
-// 거래처 사용자에게는 작업자 전용 필드 숨김
-const FIXED_COLUMNS = IS_CLIENT
-    ? ALL_FIXED_COLUMNS.filter(c => !c.workerOnly)
-    : ALL_FIXED_COLUMNS;
 
-// 공통 모델 필드 키 (platform_data에 저장하지 않는 필드)
+// 기본 데이터 컬럼 (PlatformColumnConfig에 미설정 시 자동 추가)
+const DEFAULT_DATA_COLUMNS = [
+    { key: 'product_name', name: '상품명', required: true,  type: 'text',   width: '180px' },
+    { key: 'quantity',     name: '수량',   required: false, type: 'number', width: '80px' },
+];
+
+// 작업자 전용 필드 키 (PlatformColumnConfig에서 제외)
+const WORKER_FIELD_KEYS = new Set(['box_quantity', 'pallet_quantity', 'invoice_number']);
+
+// 모델에 직접 저장되는 필드 키 (platform_data가 아닌 모델 필드)
 const MODEL_FIELDS = ['product_name', 'quantity', 'box_quantity', 'pallet_quantity', 'invoice_number'];
 
 // ============================================================================
@@ -521,28 +529,68 @@ function onPlatformChange() {
         return;
     }
 
-    // API에서 PlatformColumnConfig 조회 시도
+    // API에서 PlatformColumnConfig 조회 → 전체 컬럼 순서 결정
     fetch(`{% url 'fulfillment:get_platform_columns' %}?platform=${platform}`)
         .then(r => r.json())
         .then(data => {
             const apiColumns = data.columns || [];
 
-            // 항상 고정 컬럼으로 시작
-            currentColumns = FIXED_COLUMNS.map(c => ({ ...c }));
-
-            // API에서 커스텀 컬럼이 있으면 뒤에 추가
             if (apiColumns.length > 0) {
+                // PlatformColumnConfig 기반 전체 순서 구성
+                currentColumns = [];
+                const configuredKeys = new Set();
+
                 apiColumns.forEach(pc => {
-                    currentColumns.push({
-                        key: 'pd_' + pc.key,
-                        name: pc.name,
-                        required: pc.is_required,
-                        type: pc.column_type,
-                        width: '100px',
-                        isPlatformCol: true,
-                        platformKey: pc.key,
-                    });
+                    // 작업자 전용 필드는 별도 처리 (PlatformColumnConfig에서 제외)
+                    if (WORKER_FIELD_KEYS.has(pc.key)) return;
+
+                    configuredKeys.add(pc.key);
+
+                    if (MODEL_FIELDS.includes(pc.key)) {
+                        // 모델 필드 (product_name, quantity)
+                        const defaultDef = DEFAULT_DATA_COLUMNS.find(d => d.key === pc.key);
+                        currentColumns.push({
+                            key: pc.key,
+                            name: pc.name,
+                            required: pc.is_required || (defaultDef?.required ?? false),
+                            type: pc.column_type,
+                            width: defaultDef?.width || '100px',
+                        });
+                    } else {
+                        // 커스텀 컬럼
+                        currentColumns.push({
+                            key: 'pd_' + pc.key,
+                            name: pc.name,
+                            required: pc.is_required,
+                            type: pc.column_type,
+                            width: '100px',
+                            isPlatformCol: true,
+                            platformKey: pc.key,
+                        });
+                    }
                 });
+
+                // product_name이 Config에 없으면 맨 앞에 추가
+                if (!configuredKeys.has('product_name')) {
+                    currentColumns.unshift(
+                        { key: 'product_name', name: '상품명', required: true, type: 'text', width: '180px' }
+                    );
+                }
+                // quantity가 Config에 없으면 product_name 바로 뒤에 추가
+                if (!configuredKeys.has('quantity')) {
+                    const pnIdx = currentColumns.findIndex(c => c.key === 'product_name');
+                    currentColumns.splice(pnIdx + 1, 0,
+                        { key: 'quantity', name: '수량', required: false, type: 'number', width: '80px' }
+                    );
+                }
+            } else {
+                // PlatformColumnConfig 없으면 기본 데이터 컬럼만
+                currentColumns = DEFAULT_DATA_COLUMNS.map(c => ({ ...c }));
+            }
+
+            // 작업자 전용 필드 추가 (끝에, 거래처 사용자에겐 숨김)
+            if (!IS_CLIENT) {
+                WORKER_COLUMNS.forEach(c => currentColumns.push({ ...c }));
             }
 
             // 테이블 활성화

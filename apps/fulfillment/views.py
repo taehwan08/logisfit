@@ -497,21 +497,33 @@ def bulk_paste_orders(request):
     ).order_by('display_order'))
 
     # 컬럼 순서 결정: 고정 필드 + 커스텀 필드
-    # 고정 필드 정의 (key, label, type)
-    fixed_column_defs = [
-        ('product_name', '상품명', 'text'),
-        ('quantity', '수량', 'number'),
-        ('box_quantity', '박스수', 'number'),
-        ('pallet_quantity', '팔레트수', 'number'),
-        ('invoice_number', '송장번호', 'text'),
-    ]
+    # 작업자 전용 필드 (PlatformColumnConfig 순서에서 제외)
+    worker_field_keys = {'box_quantity', 'pallet_quantity', 'invoice_number'}
 
-    # 전체 컬럼 맵핑 순서: 고정 필드 + 커스텀 필드
+    # PlatformColumnConfig 기반 전체 컬럼 순서 구성
     column_order = []
-    for key, label, col_type in fixed_column_defs:
-        column_order.append({'key': key, 'type': col_type, 'is_fixed': True})
+    configured_keys = set()
+
     for cc in custom_columns:
-        column_order.append({'key': cc.key, 'type': cc.column_type, 'is_fixed': False})
+        if cc.key in worker_field_keys:
+            continue  # 작업자 전용 필드는 별도 처리
+        configured_keys.add(cc.key)
+        is_fixed = cc.key in FIXED_MODEL_FIELDS
+        column_order.append({'key': cc.key, 'type': cc.column_type, 'is_fixed': is_fixed})
+
+    # product_name이 Config에 없으면 맨 앞에 추가
+    if 'product_name' not in configured_keys:
+        column_order.insert(0, {'key': 'product_name', 'type': 'text', 'is_fixed': True})
+    # quantity가 Config에 없으면 product_name 바로 뒤에 추가
+    if 'quantity' not in configured_keys:
+        pn_idx = next((i for i, c in enumerate(column_order) if c['key'] == 'product_name'), 0)
+        column_order.insert(pn_idx + 1, {'key': 'quantity', 'type': 'number', 'is_fixed': True})
+
+    # 작업자 전용 필드 추가 (끝에, 거래처 사용자 제외)
+    if not user.is_client:
+        for wkey, wtype in [('box_quantity', 'number'), ('pallet_quantity', 'number'), ('invoice_number', 'text')]:
+            if wkey not in configured_keys:
+                column_order.append({'key': wkey, 'type': wtype, 'is_fixed': True})
 
     # 탭 구분 텍스트 파싱
     lines = paste_text.strip().split('\n')
@@ -967,15 +979,36 @@ def export_excel(request):
             platform=platform, is_active=True
         ).order_by('display_order'))
 
-    # 헤더: 고정 필드 + 상태 + 커스텀 컬럼
-    headers = [
-        '자체코드', '거래처', '브랜드', '플랫폼',
-        '상품명', '수량', '박스수', '팔레트수', '송장번호',
-        '상태',
-    ]
-    # 플랫폼 커스텀 컬럼 헤더 추가
+    # 작업자 전용 필드 (데이터 순서에서 제외, 별도 고정)
+    worker_field_keys = {'box_quantity', 'pallet_quantity', 'invoice_number'}
+
+    # PlatformColumnConfig 기반 데이터 컬럼 순서 구성
+    data_col_order = []  # [{'key': ..., 'name': ..., 'is_model': bool}, ...]
+    configured_keys = set()
+
     for pc in platform_cols:
-        headers.append(pc.name)
+        if pc.key in worker_field_keys:
+            continue
+        configured_keys.add(pc.key)
+        data_col_order.append({
+            'key': pc.key,
+            'name': pc.name,
+            'is_model': pc.key in FIXED_MODEL_FIELDS,
+        })
+
+    # product_name이 Config에 없으면 맨 앞에 추가
+    if 'product_name' not in configured_keys:
+        data_col_order.insert(0, {'key': 'product_name', 'name': '상품명', 'is_model': True})
+    # quantity가 Config에 없으면 product_name 바로 뒤에 추가
+    if 'quantity' not in configured_keys:
+        pn_idx = next((i for i, c in enumerate(data_col_order) if c['key'] == 'product_name'), 0)
+        data_col_order.insert(pn_idx + 1, {'key': 'quantity', 'name': '수량', 'is_model': True})
+
+    # 헤더: 메타 + 데이터(PlatformColumnConfig 순서) + 작업자 + 상태
+    headers = ['자체코드', '거래처', '브랜드', '플랫폼']
+    for dc in data_col_order:
+        headers.append(dc['name'])
+    headers.extend(['박스수', '팔레트수', '송장번호', '상태'])
 
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -991,18 +1024,22 @@ def export_excel(request):
             order.client.company_name,
             order.brand.name if order.brand else '',
             order.get_platform_display(),
-            order.product_name,
-            order.quantity,
+        ]
+        # 데이터 컬럼 (PlatformColumnConfig 순서)
+        for dc in data_col_order:
+            if dc['is_model']:
+                row_data.append(getattr(order, dc['key'], ''))
+            else:
+                row_data.append(
+                    order.platform_data.get(dc['key'], '') if order.platform_data else ''
+                )
+        # 작업자 필드 + 상태
+        row_data.extend([
             order.box_quantity,
             order.pallet_quantity,
             order.invoice_number,
             order.get_status_display(),
-        ]
-        # 플랫폼 커스텀 컬럼 데이터 추가
-        for pc in platform_cols:
-            row_data.append(
-                order.platform_data.get(pc.key, '') if order.platform_data else ''
-            )
+        ])
 
         for col, value in enumerate(row_data, 1):
             cell = ws.cell(row=row_idx, column=col, value=value)
@@ -1010,10 +1047,10 @@ def export_excel(request):
             cell.alignment = Alignment(vertical='center')
 
     # 컬럼 너비 조정
-    col_widths = [12, 15, 12, 12, 30, 10, 10, 10, 15, 10]
-    # 플랫폼 커스텀 컬럼 너비 추가
-    for _ in platform_cols:
-        col_widths.append(15)
+    col_widths = [12, 15, 12, 12]  # 메타
+    for _ in data_col_order:
+        col_widths.append(15)  # 데이터 컬럼
+    col_widths.extend([10, 10, 15, 10])  # 작업자 + 상태
     for i, width in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
