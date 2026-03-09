@@ -75,6 +75,35 @@
             font-size: 14px;
         }
 
+        /* ── 탭 컨트롤 (화면용) ── */
+        .tab-controls {
+            display: flex;
+            gap: 0;
+            margin-bottom: 4mm;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .tab-btn {
+            padding: 8px 20px;
+            border: 1px solid #dee2e6;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            background: #f8f9fa;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.15s;
+            margin-bottom: -2px;
+        }
+        .tab-btn:hover {
+            background: #e9ecef;
+        }
+        .tab-btn.active {
+            background: #fff;
+            color: #333;
+            border-bottom: 2px solid #fff;
+        }
+
         /* ── 섹션 제목 ── */
         .section-title {
             font-size: 14px;
@@ -142,12 +171,6 @@
         .pl-table .group-detail td:nth-child(4) {
             border-top-color: #ccc;
         }
-        .pl-table .group-subtotal td {
-            background: #f8f8f8;
-            font-weight: 600;
-            font-size: 11px;
-            border-top: 1px solid #999;
-        }
 
         /* ── 푸터 ── */
         .pl-footer {
@@ -212,7 +235,11 @@
                 padding: 0;
                 box-shadow: none;
             }
-            .print-actions {
+            .print-actions, .tab-controls {
+                display: none !important;
+            }
+            /* 인쇄 시 숨김 처리된 섹션 */
+            .print-hidden {
                 display: none !important;
             }
             .pl-table tbody tr {
@@ -229,14 +256,15 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
-            .pl-table tfoot td,
-            .pl-table .group-subtotal td {
+            .pl-table tfoot td {
                 background: #f0f0f0 !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
             .pl-table .group-header td {
                 background: #e9ecef !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
@@ -244,7 +272,7 @@
 <body>
     <!-- 인쇄 버튼 -->
     <div class="print-actions">
-        <button class="btn-print" onclick="window.print()">인쇄</button>
+        <button class="btn-print" onclick="printPage()">인쇄</button>
         <button class="btn-close-page" onclick="window.close()">닫기</button>
     </div>
 
@@ -280,101 +308,111 @@
             </div>
         </div>
 
+        <!-- 탭 선택 (화면용, 인쇄 시 숨김) -->
+        <div class="tab-controls">
+            <button class="tab-btn active" data-tab="summary" onclick="switchTab('summary')">총 합계만</button>
+            <button class="tab-btn" data-tab="all" onclick="switchTab('all')">총 합계 + 그룹핑 상세</button>
+        </div>
+
         <!-- ===== 1. 총 합계 테이블 ===== -->
-        <div class="section-title">총 합계</div>
-        <table class="pl-table">
-            <thead>
-                <tr>
-                    <th class="col-no">No</th>
-                    <th class="col-barcode-num">바코드번호</th>
-                    <th class="col-barcode-img">바코드</th>
-                    <th class="col-name">매칭상품명</th>
-                    <th class="col-qty">매칭수량</th>
-                    <th class="col-check">비고</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for product in products %}
-                <tr>
-                    <td class="col-no">{{ forloop.counter }}</td>
-                    <td class="col-barcode-num">{{ product.barcode }}</td>
-                    <td class="col-barcode-img"><svg class="product-barcode" data-barcode="{{ product.barcode }}"></svg></td>
-                    <td class="col-name">{{ product.product_name }}</td>
-                    <td class="col-qty">{{ product.total_qty }}</td>
-                    <td class="col-check"></td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" style="text-align:center; padding:20px; color:#999;">
-                        상품 데이터가 없습니다.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="4" style="text-align:right; padding-right:10px;">합계</td>
-                    <td class="col-qty">{{ total_quantity }}</td>
-                    <td></td>
-                </tr>
-            </tfoot>
-        </table>
+        <div id="section-summary">
+            <div class="section-title">총 합계</div>
+            <table class="pl-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th class="col-barcode-num">바코드번호</th>
+                        <th class="col-barcode-img">바코드</th>
+                        <th class="col-name">매칭상품명</th>
+                        <th class="col-qty">매칭수량</th>
+                        <th class="col-check">비고</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td class="col-no">{{ forloop.counter }}</td>
+                        <td class="col-barcode-num">{{ product.barcode }}</td>
+                        <td class="col-barcode-img"><svg class="product-barcode" data-barcode="{{ product.barcode }}"></svg></td>
+                        <td class="col-name">{{ product.product_name }}</td>
+                        <td class="col-qty">{{ product.total_qty }}</td>
+                        <td class="col-check"></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align:center; padding:20px; color:#999;">
+                            상품 데이터가 없습니다.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4" style="text-align:right; padding-right:10px;">합계</td>
+                        <td class="col-qty">{{ total_quantity }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
 
         <!-- ===== 2. 그룹핑 상세 테이블 ===== -->
-        <div class="section-title page-break">수량별 그룹핑 상세</div>
-        <table class="pl-table">
-            <thead>
-                <tr>
-                    <th class="col-no">No</th>
-                    <th class="col-barcode-num">바코드번호</th>
-                    <th class="col-barcode-img">바코드</th>
-                    <th class="col-name">매칭상품명</th>
-                    <th class="col-qty">수량</th>
-                    <th class="col-count">건수</th>
-                    <th class="col-subtotal">소계</th>
-                    <th class="col-check">비고</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for group in grouped_products %}
-                <!-- 상품 그룹 헤더 -->
-                <tr class="group-header">
-                    <td>{{ forloop.counter }}</td>
-                    <td class="col-barcode-num">{{ group.barcode }}</td>
-                    <td class="col-barcode-img"><svg class="product-barcode" data-barcode="{{ group.barcode }}"></svg></td>
-                    <td class="col-name">{{ group.product_name }}</td>
-                    <td colspan="3" style="text-align:right; padding-right:8px;">합계: {{ group.total_qty }}</td>
-                    <td></td>
-                </tr>
-                <!-- 수량별 상세 -->
-                {% for detail in group.details %}
-                <tr class="group-detail">
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td class="col-name" style="padding-left:20px; color:#555;">ㄴ {{ detail.quantity }}개짜리</td>
-                    <td class="col-qty">{{ detail.quantity }}</td>
-                    <td class="col-count">{{ detail.order_count }}건</td>
-                    <td class="col-subtotal">{{ detail.subtotal }}</td>
-                    <td></td>
-                </tr>
-                {% endfor %}
-                {% empty %}
-                <tr>
-                    <td colspan="8" style="text-align:center; padding:20px; color:#999;">
-                        상품 데이터가 없습니다.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="6" style="text-align:right; padding-right:10px;">총합계</td>
-                    <td class="col-subtotal">{{ total_quantity }}</td>
-                    <td></td>
-                </tr>
-            </tfoot>
-        </table>
+        <div id="section-grouped" style="display:none;">
+            <div class="section-title page-break">수량별 그룹핑 상세</div>
+            <table class="pl-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th class="col-barcode-num">바코드번호</th>
+                        <th class="col-barcode-img">바코드</th>
+                        <th class="col-name">매칭상품명</th>
+                        <th class="col-qty">수량</th>
+                        <th class="col-count">건수</th>
+                        <th class="col-subtotal">소계</th>
+                        <th class="col-check">비고</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in grouped_products %}
+                    <!-- 상품 그룹 헤더 -->
+                    <tr class="group-header">
+                        <td>{{ forloop.counter }}</td>
+                        <td class="col-barcode-num">{{ group.barcode }}</td>
+                        <td class="col-barcode-img"><svg class="product-barcode" data-barcode="{{ group.barcode }}"></svg></td>
+                        <td class="col-name">{{ group.product_name }}</td>
+                        <td colspan="3" style="text-align:right; padding-right:8px;">합계: {{ group.total_qty }}</td>
+                        <td></td>
+                    </tr>
+                    <!-- 수량별 상세 -->
+                    {% for detail in group.details %}
+                    <tr class="group-detail">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td class="col-name" style="padding-left:20px; color:#555;">ㄴ {{ detail.quantity }}개짜리</td>
+                        <td class="col-qty">{{ detail.quantity }}</td>
+                        <td class="col-count">{{ detail.order_count }}건</td>
+                        <td class="col-subtotal">{{ detail.subtotal }}</td>
+                        <td></td>
+                    </tr>
+                    {% endfor %}
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" style="text-align:center; padding:20px; color:#999;">
+                            상품 데이터가 없습니다.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6" style="text-align:right; padding-right:10px;">총합계</td>
+                        <td class="col-subtotal">{{ total_quantity }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
 
         <!-- 푸터 -->
         <div class="pl-footer">
@@ -386,6 +424,39 @@
     <!-- JsBarcode CDN -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <script>
+        // 현재 탭 상태
+        let currentTab = 'summary';
+
+        function switchTab(tab) {
+            currentTab = tab;
+            // 탭 버튼 활성화
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+            });
+            // 섹션 표시/숨김 (화면용)
+            const summarySection = document.getElementById('section-summary');
+            const groupedSection = document.getElementById('section-grouped');
+
+            if (tab === 'summary') {
+                summarySection.style.display = '';
+                groupedSection.style.display = 'none';
+            } else {
+                summarySection.style.display = '';
+                groupedSection.style.display = '';
+            }
+        }
+
+        function printPage() {
+            // 인쇄 시 현재 탭에 따라 그룹핑 섹션에 print-hidden 클래스 토글
+            const groupedSection = document.getElementById('section-grouped');
+            if (currentTab === 'summary') {
+                groupedSection.classList.add('print-hidden');
+            } else {
+                groupedSection.classList.remove('print-hidden');
+            }
+            window.print();
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // 헤더 바코드 (출력일자+차수)
             try {
