@@ -14,7 +14,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Sum, Count
 from django.utils import timezone
 import openpyxl
 import xlrd
@@ -1103,17 +1103,53 @@ def picking_list_page(request, batch_id):
 
     UploadBatch 내 모든 OrderProduct를 바코드 기준으로 집계하여
     매칭상품명, 매칭수량 합계, 바코드번호를 표시한다.
+
+    두 가지 테이블:
+    1) 총 합계 테이블: 바코드별 전체 수량 합산
+    2) 그룹핑 테이블: 바코드+수량 조합별 건수 (예: A-20개짜리 17건)
     """
     batch = get_object_or_404(UploadBatch, pk=batch_id)
 
-    # OrderProduct를 바코드 기준으로 집계
+    base_qs = OrderProduct.objects.filter(order__upload_batch=batch)
+
+    # 1) 총 합계: 바코드별 수량 합산
     products = list(
-        OrderProduct.objects
-        .filter(order__upload_batch=batch)
+        base_qs
         .values('barcode', 'product_name')
         .annotate(total_qty=Sum('quantity'))
         .order_by('product_name')
     )
+
+    # 2) 그룹핑: 바코드+수량 조합별 건수
+    #    예: barcode=8800309590019, quantity=20 → order_count=17건, subtotal=340
+    grouped_rows = list(
+        base_qs
+        .values('barcode', 'product_name', 'quantity')
+        .annotate(order_count=Count('id'))
+        .order_by('product_name', 'barcode', '-quantity')
+    )
+
+    # 그룹핑 데이터를 바코드별로 묶기
+    grouped_products = {}
+    for row in grouped_rows:
+        key = row['barcode']
+        if key not in grouped_products:
+            grouped_products[key] = {
+                'barcode': row['barcode'],
+                'product_name': row['product_name'],
+                'details': [],
+                'total_qty': 0,
+            }
+        subtotal = row['quantity'] * row['order_count']
+        grouped_products[key]['details'].append({
+            'quantity': row['quantity'],
+            'order_count': row['order_count'],
+            'subtotal': subtotal,
+        })
+        grouped_products[key]['total_qty'] += subtotal
+
+    # product_name 기준 정렬
+    grouped_list = sorted(grouped_products.values(), key=lambda x: x['product_name'])
 
     # 출력차수: 배치에 저장된 값 또는 배치 ID 기반 fallback
     print_order = batch.print_order or str(batch.id)
@@ -1125,6 +1161,7 @@ def picking_list_page(request, batch_id):
     context = {
         'batch': batch,
         'products': products,
+        'grouped_products': grouped_list,
         'total_quantity': sum(p['total_qty'] for p in products),
         'total_sku_count': len(products),
         'print_order': print_order,
