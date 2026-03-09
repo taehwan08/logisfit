@@ -100,13 +100,20 @@ def _parse_excel(excel_file):
 
 
 def _get_col(row, col_map, key, default=''):
-    """행에서 컬럼 값을 안전하게 가져온다."""
+    """행에서 컬럼 값을 안전하게 가져온다.
+
+    xlrd(.xls)는 모든 숫자를 float으로 반환하므로 (예: 3 → 3.0)
+    정수값의 소수점을 제거하여 바코드, 송장번호 등이 정확히 매칭되도록 한다.
+    """
     idx = col_map.get(key)
     if idx is None or idx >= len(row):
         return default
     val = row[idx]
     if val is None:
         return default
+    # float이면서 정수값이면 소수점 제거 (3.0 → "3", 8800309590019.0 → "8800309590019")
+    if isinstance(val, float) and val == int(val):
+        return str(int(val))
     return str(val).strip()
 
 
