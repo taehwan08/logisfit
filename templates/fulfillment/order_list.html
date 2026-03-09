@@ -1064,18 +1064,25 @@ function renderDetailModal(order, platformColumns) {
 
     const html = `
     <table class="table table-sm" style="font-size:0.85rem;">
-        <tr><td class="text-muted" style="width:100px;">자체코드</td><td><strong style="font-family:monospace;">${escapeHtml(order.internal_code)}</strong></td>
-            <td class="text-muted" style="width:100px;">상태</td><td>${statusBadge[order.status]}</td></tr>
-        <tr><td class="text-muted">거래처</td><td>${escapeHtml(order.client_name)}</td>
-            <td class="text-muted">브랜드</td><td>${escapeHtml(order.brand_name) || '-'}</td></tr>
-        <tr><td class="text-muted">플랫폼</td><td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
-            ${!IS_CLIENT ? `<td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td>` : '<td></td><td></td>'}</tr>
-        <tr><td class="text-muted">상품명</td><td colspan="3">${escapeHtml(order.product_name)}</td></tr>
-        <tr><td class="text-muted">수량</td><td>${order.quantity != null ? order.quantity.toLocaleString() : '-'}</td>
-            ${!IS_CLIENT ? `<td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td>` : '<td></td><td></td>'}</tr>
-        ${!IS_CLIENT ? `<tr><td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>
-            <td></td><td></td></tr>` : ''}
+        <tr>
+            <td class="text-muted" style="width:100px;">자체코드</td><td><strong style="font-family:monospace;">${escapeHtml(order.internal_code)}</strong></td>
+            <td class="text-muted" style="width:100px;">상태</td><td>${statusBadge[order.status]}</td>
+        </tr>
+        <tr>
+            <td class="text-muted">거래처</td><td>${escapeHtml(order.client_name)}</td>
+            <td class="text-muted">브랜드</td><td>${escapeHtml(order.brand_name) || '-'}</td>
+            <td class="text-muted">플랫폼</td><td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
+        </tr>
+        <tr>
+            <td class="text-muted">상품명</td><td>${escapeHtml(order.product_name)}</td>
+            <td class="text-muted">수량</td><td>${order.quantity != null ? order.quantity.toLocaleString() : '-'}</td>
+        </tr>
         <tr><td colspan="4"><hr class="my-1"></td></tr>
+        <tr>
+            ${!IS_CLIENT ? `<td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td>` : '<td></td><td></td>'}
+            ${!IS_CLIENT ? `<td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>` : '<td></td><td></td>'}
+            ${!IS_CLIENT ? `<td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td>` : '<td></td><td></td>'}
+        </tr>
         <tr><td class="text-muted">확인</td><td>${order.confirmed_at || '-'}</td>
             <td class="text-muted">출고</td><td>${order.shipped_at || '-'}</td></tr>
         <tr><td class="text-muted">전산반영</td><td>${order.synced_at || '-'}</td>
