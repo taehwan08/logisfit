@@ -737,6 +737,29 @@ def update_status(request, order_id):
         return JsonResponse({'error': '잘못된 액션입니다.'}, status=400)
 
     cfg = status_actions[action]
+
+    # 출고처리 시 박스수/팔레트수/송장번호 업데이트
+    if action == 'ship':
+        ship_data = data.get('ship_data', {})
+        update_fields = []
+        if 'box_quantity' in ship_data:
+            try:
+                order.box_quantity = int(ship_data['box_quantity']) if ship_data['box_quantity'] not in (None, '') else 0
+                update_fields.append('box_quantity')
+            except (ValueError, TypeError):
+                pass
+        if 'pallet_quantity' in ship_data:
+            try:
+                order.pallet_quantity = int(ship_data['pallet_quantity']) if ship_data['pallet_quantity'] not in (None, '') else 0
+                update_fields.append('pallet_quantity')
+            except (ValueError, TypeError):
+                pass
+        if 'invoice_number' in ship_data:
+            order.invoice_number = str(ship_data['invoice_number'] or '')
+            update_fields.append('invoice_number')
+        if update_fields:
+            order.save(update_fields=update_fields + ['updated_at'])
+
     if cfg['method'](user):
         # 시스템 댓글 자동 추가
         FulfillmentComment.objects.create(
@@ -779,6 +802,8 @@ def bulk_update_status(request):
 
     order_ids = data.get('order_ids', [])
     action = data.get('action', '')
+    # 출고처리 시 주문별 박스수/팔레트수/송장번호 데이터 {order_id: {box_quantity, pallet_quantity, invoice_number}}
+    ship_data_map = data.get('ship_data_map', {})
 
     if not order_ids:
         return JsonResponse({'error': '선택된 주문이 없습니다.'}, status=400)
@@ -815,6 +840,28 @@ def bulk_update_status(request):
     shipped_orders = []
 
     for order in orders:
+        # 출고처리 시 박스수/팔레트수/송장번호 업데이트
+        if action == 'ship':
+            ship_data = ship_data_map.get(str(order.id), {})
+            update_fields = []
+            if 'box_quantity' in ship_data:
+                try:
+                    order.box_quantity = int(ship_data['box_quantity']) if ship_data['box_quantity'] not in (None, '') else 0
+                    update_fields.append('box_quantity')
+                except (ValueError, TypeError):
+                    pass
+            if 'pallet_quantity' in ship_data:
+                try:
+                    order.pallet_quantity = int(ship_data['pallet_quantity']) if ship_data['pallet_quantity'] not in (None, '') else 0
+                    update_fields.append('pallet_quantity')
+                except (ValueError, TypeError):
+                    pass
+            if 'invoice_number' in ship_data:
+                order.invoice_number = str(ship_data['invoice_number'] or '')
+                update_fields.append('invoice_number')
+            if update_fields:
+                order.save(update_fields=update_fields + ['updated_at'])
+
         method = getattr(order, cfg['method'])
         if method(user):
             FulfillmentComment.objects.create(

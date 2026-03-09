@@ -210,6 +210,18 @@
     .guide-arrow { color: #adb5bd; font-size: 0.9rem; }
     .guide-shortcut { display: inline-block; padding: 1px 6px; background: #e9ecef; border-radius: 4px; font-family: monospace; font-size: 0.75rem; }
 
+    /* 출고처리 모달 */
+    #shipModal .table input[type="number"],
+    #shipModal .table input[type="text"] {
+        font-size: 0.82rem;
+        padding: 4px 8px;
+        border-radius: 5px;
+        border: 1px solid #dee2e6;
+    }
+    #shipModal .table input[type="number"] { width: 80px; text-align: right; }
+    #shipModal .table input[type="text"] { width: 100%; }
+    #shipModal .table input:focus { border-color: #e67e22; box-shadow: 0 0 0 2px rgba(230,126,34,0.15); outline: none; }
+
     /* 일괄처리 바 */
     .bulk-action-bar {
         display: none;
@@ -527,6 +539,49 @@
     <button class="btn btn-warning" onclick="bulkAction('ship')"><i class="bi bi-truck me-1"></i>출고처리</button>
     <button class="btn btn-success" onclick="bulkAction('sync')"><i class="bi bi-cloud-check me-1"></i>전산처리</button>
     <button class="btn btn-bulk-cancel" onclick="clearSelection()"><i class="bi bi-x-lg me-1"></i>취소</button>
+</div>
+{% endif %}
+
+<!-- ============================================================ -->
+<!-- 출고처리 모달 (박스수/팔레트수/송장번호 입력) -->
+<!-- ============================================================ -->
+{% if is_admin or is_worker %}
+<div class="modal fade" id="shipModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#e67e22;color:#fff;">
+                <h5 class="modal-title"><i class="bi bi-truck me-2"></i>출고처리</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <p class="text-muted mb-3" style="font-size:0.85rem;">
+                    <i class="bi bi-info-circle me-1"></i>
+                    출고 처리할 주문의 <strong>박스수</strong>, <strong>팔레트수</strong>, <strong>송장번호</strong>를 입력하세요.
+                </p>
+                <div class="table-responsive" style="max-height:55vh;">
+                    <table class="table table-sm align-middle" style="font-size:0.82rem;">
+                        <thead style="position:sticky;top:0;background:#f8f9fa;z-index:1;">
+                            <tr>
+                                <th style="min-width:100px;">자체코드</th>
+                                <th style="min-width:140px;">상품명</th>
+                                <th class="text-end" style="min-width:70px;">수량</th>
+                                <th style="min-width:90px;">박스수</th>
+                                <th style="min-width:90px;">팔레트수</th>
+                                <th style="min-width:140px;">송장번호</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shipModalBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-warning" id="btnShipConfirm" onclick="submitShipModal()">
+                    <i class="bi bi-truck me-1"></i>출고 처리
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 {% endif %}
 
@@ -926,6 +981,12 @@ function renderPagination(data) {
 // 상태 변경
 // ============================================================================
 function changeStatus(orderId, action) {
+    // 출고처리는 모달로 박스수/팔레트수/송장번호 입력 받기
+    if (action === 'ship') {
+        showShipModal([orderId]);
+        return;
+    }
+
     const actionNames = {confirm: '확인완료', ship: '출고완료', sync: '전산반영'};
     if (!confirm(`해당 주문을 "${actionNames[action]}" 처리하시겠습니까?`)) return;
 
@@ -1471,10 +1532,16 @@ function bulkAction(action) {
     const checks = document.querySelectorAll('.row-check:checked');
     if (checks.length === 0) return;
 
+    const orderIds = Array.from(checks).map(c => parseInt(c.value));
+
+    // 출고처리는 모달로 박스수/팔레트수/송장번호 입력 받기
+    if (action === 'ship') {
+        showShipModal(orderIds);
+        return;
+    }
+
     const actionNames = { confirm: '확인완료', ship: '출고완료', sync: '전산반영' };
     if (!confirm(`선택된 ${checks.length}건을 "${actionNames[action]}" 처리하시겠습니까?`)) return;
-
-    const orderIds = Array.from(checks).map(c => parseInt(c.value));
 
     // 버튼 비활성화
     const bar = document.getElementById('bulkActionBar');
@@ -1501,6 +1568,114 @@ function bulkAction(action) {
         btns.forEach(b => b.disabled = false);
         showToast('서버 오류', 'danger');
     });
+}
+
+// ============================================================================
+// 출고처리 모달
+// ============================================================================
+let shipModalOrderIds = [];
+
+function showShipModal(orderIds) {
+    shipModalOrderIds = orderIds;
+    const tbody = document.getElementById('shipModalBody');
+    let html = '';
+
+    orderIds.forEach(id => {
+        const order = ordersData.find(o => o.id === id);
+        if (!order) return;
+
+        html += `
+        <tr data-order-id="${order.id}">
+            <td><span class="text-muted" style="font-size:0.75rem;font-family:monospace;">${escapeHtml(order.internal_code)}</span></td>
+            <td class="text-truncate" style="max-width:180px;" title="${escapeHtml(order.product_name)}">${escapeHtml(order.product_name)}</td>
+            <td class="text-end">${order.quantity != null ? order.quantity.toLocaleString() : ''}</td>
+            <td><input type="number" class="ship-box-qty" min="0" value="${order.box_quantity || 0}" data-id="${order.id}"></td>
+            <td><input type="number" class="ship-pallet-qty" min="0" value="${order.pallet_quantity || 0}" data-id="${order.id}"></td>
+            <td><input type="text" class="ship-invoice" value="${escapeHtml(order.invoice_number || '')}" data-id="${order.id}" placeholder="송장번호 입력"></td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+    new bootstrap.Modal(document.getElementById('shipModal')).show();
+}
+
+function submitShipModal() {
+    const btn = document.getElementById('btnShipConfirm');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>처리 중...';
+
+    const isSingle = shipModalOrderIds.length === 1;
+
+    if (isSingle) {
+        // 단건 출고처리
+        const orderId = shipModalOrderIds[0];
+        const shipData = {
+            box_quantity: document.querySelector(`.ship-box-qty[data-id="${orderId}"]`)?.value || 0,
+            pallet_quantity: document.querySelector(`.ship-pallet-qty[data-id="${orderId}"]`)?.value || 0,
+            invoice_number: document.querySelector(`.ship-invoice[data-id="${orderId}"]`)?.value || '',
+        };
+
+        fetch(`/fulfillment/api/orders/${orderId}/status/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ action: 'ship', ship_data: shipData }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-truck me-1"></i>출고 처리';
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('shipModal')).hide();
+                showToast(data.message, 'success');
+                loadOrders();
+            } else {
+                showToast(data.error || '처리 실패', 'danger');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-truck me-1"></i>출고 처리';
+            showToast('서버 오류', 'danger');
+        });
+    } else {
+        // 다건 일괄 출고처리
+        const shipDataMap = {};
+        shipModalOrderIds.forEach(id => {
+            shipDataMap[String(id)] = {
+                box_quantity: document.querySelector(`.ship-box-qty[data-id="${id}"]`)?.value || 0,
+                pallet_quantity: document.querySelector(`.ship-pallet-qty[data-id="${id}"]`)?.value || 0,
+                invoice_number: document.querySelector(`.ship-invoice[data-id="${id}"]`)?.value || '',
+            };
+        });
+
+        fetch('{% url "fulfillment:bulk_update_status" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({
+                order_ids: shipModalOrderIds,
+                action: 'ship',
+                ship_data_map: shipDataMap,
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-truck me-1"></i>출고 처리';
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('shipModal')).hide();
+                showToast(data.message, data.fail_count ? 'warning' : 'success');
+                clearSelection();
+                loadOrders();
+            } else {
+                showToast(data.error || '처리 실패', 'danger');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-truck me-1"></i>출고 처리';
+            showToast('서버 오류', 'danger');
+        });
+    }
 }
 
 // ============================================================================
