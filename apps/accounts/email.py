@@ -142,14 +142,14 @@ def _build_shipment_email(data):
 
     Args:
         data: dict — 이메일에 필요한 데이터
-            to_email, order_number, client_name, platform_display,
-            product_name, order_quantity, confirmed_quantity,
+            to_email, internal_code, client_name, platform_display,
+            product_name, quantity,
             shipped_at, shipped_by_name
 
     Returns:
         tuple: (to_email, subject, html_content)
     """
-    subject = f'[LogisFit] 출고완료 알림 - {data["order_number"]}'
+    subject = f'[LogisFit] 출고완료 알림 - {data["internal_code"]}'
 
     html_content = f"""
     <!DOCTYPE html>
@@ -185,8 +185,8 @@ def _build_shipment_email(data):
                                 <!-- 주문 정보 테이블 -->
                                 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; margin-bottom:24px;">
                                     <tr>
-                                        <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">발주번호</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; font-weight:500; border-bottom:1px solid #e2e8f0;">{data['order_number']}</td>
+                                        <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">자체코드</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; font-weight:500; border-bottom:1px solid #e2e8f0;">{data['internal_code']}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">거래처</td>
@@ -201,12 +201,8 @@ def _build_shipment_email(data):
                                         <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['product_name']}</td>
                                     </tr>
                                     <tr>
-                                        <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">발주수량</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['order_quantity']}개</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">확정수량</td>
-                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['confirmed_quantity']}개</td>
+                                        <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; border-bottom:1px solid #e2e8f0; width:120px;">수량</td>
+                                        <td style="padding:12px 16px; color:#1e293b; font-size:14px; border-bottom:1px solid #e2e8f0;">{data['quantity']}개</td>
                                     </tr>
                                     <tr>
                                         <td style="padding:12px 16px; color:#64748b; font-size:13px; font-weight:600; width:120px;">출고일시</td>
@@ -251,20 +247,19 @@ def _extract_shipment_data(order):
         dict 또는 None (등록자 없거나 이메일 없으면)
     """
     if not order.created_by:
-        logger.warning('출고 알림 발송 스킵: 등록자(created_by) 없음 (주문 #%s)', order.order_number)
+        logger.warning('출고 알림 발송 스킵: 등록자(created_by) 없음 (주문 #%s)', order.internal_code)
         return None
     if not order.created_by.email:
-        logger.warning('출고 알림 발송 스킵: 등록자 이메일 없음 (주문 #%s, 등록자=%s)', order.order_number, order.created_by.name)
+        logger.warning('출고 알림 발송 스킵: 등록자 이메일 없음 (주문 #%s, 등록자=%s)', order.internal_code, order.created_by.name)
         return None
 
     return {
         'to_email': order.created_by.email,
-        'order_number': order.order_number,
+        'internal_code': order.internal_code,
         'client_name': order.client.company_name if order.client else '-',
         'platform_display': order.get_platform_display(),
         'product_name': order.product_name,
-        'order_quantity': f'{order.order_quantity:,}',
-        'confirmed_quantity': f'{order.confirmed_quantity:,}',
+        'quantity': f'{order.quantity:,}',
         'shipped_at': timezone.localtime(order.shipped_at).strftime('%Y-%m-%d %H:%M') if order.shipped_at else '-',
         'shipped_by_name': order.shipped_by.name if order.shipped_by else '-',
     }
@@ -304,7 +299,7 @@ def send_shipment_notification_async(order):
             to_email, subject, html_content = _build_shipment_email(data)
             send_email(to_email, subject, html_content)
         except Exception as e:
-            logger.error('출고 알림 비동기 발송 실패 (주문 #%s): %s', data['order_number'], e, exc_info=True)
+            logger.error('출고 알림 비동기 발송 실패 (주문 #%s): %s', data['internal_code'], e, exc_info=True)
 
     thread = threading.Thread(target=_send, daemon=True)
     thread.start()
@@ -333,7 +328,7 @@ def send_shipment_notifications_async(orders):
                 to_email, subject, html_content = _build_shipment_email(data)
                 send_email(to_email, subject, html_content)
             except Exception as e:
-                logger.error('출고 알림 비동기 발송 실패 (주문 #%s): %s', data['order_number'], e, exc_info=True)
+                logger.error('출고 알림 비동기 발송 실패 (주문 #%s): %s', data['internal_code'], e, exc_info=True)
 
     logger.info('출고 알림 비동기 일괄 발송 시작: %d건', len(email_data_list))
     thread = threading.Thread(target=_send_all, daemon=True)

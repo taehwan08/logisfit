@@ -33,6 +33,9 @@ COMMENT_ALLOWED_EXTENSIONS = {
 COMMENT_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 COMMENT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
+# 고정 모델 필드 (platform_data가 아닌 모델에 직접 저장)
+FIXED_MODEL_FIELDS = {'product_name', 'quantity', 'box_quantity', 'pallet_quantity', 'invoice_number'}
+
 
 # ============================================================================
 # 권한 데코레이터
@@ -259,10 +262,8 @@ def get_orders(request):
         qs = qs.filter(status=status)
     if search:
         q = (
-            Q(order_number__icontains=search) |
             Q(product_name__icontains=search) |
-            Q(barcode__icontains=search) |
-            Q(sku_id__icontains=search)
+            Q(invoice_number__icontains=search)
         )
         # FF-XXXXX 자체코드 검색 지원
         ff_match = re.match(r'^FF-?(\d+)$', search.strip(), re.IGNORECASE)
@@ -270,9 +271,9 @@ def get_orders(request):
             q |= Q(id=int(ff_match.group(1)))
         qs = qs.filter(q)
     if date_from:
-        qs = qs.filter(order_date__gte=date_from)
+        qs = qs.filter(created_at__gte=date_from)
     if date_to:
-        qs = qs.filter(order_date__lte=date_to)
+        qs = qs.filter(created_at__lte=date_to)
 
     # 정렬
     qs = qs.order_by('-created_at')
@@ -289,8 +290,41 @@ def get_orders(request):
     except Exception:
         page_obj = paginator.page(1)
 
+    # platform_data JSON 값 내 검색 (DB 필터 이후 Python 레벨)
+    orders_list = list(page_obj)
+    if search and not ff_match:
+        # DB 쿼리에서 이미 product_name/invoice_number 매칭된 결과가 있으므로,
+        # platform_data 검색은 전체 queryset에서 추가 매칭을 위해 별도 처리
+        # 간단한 접근: DB 결과에 이미 포함되지 않은 항목을 platform_data에서 추가 검색
+        search_lower = search.lower()
+        db_ids = {o.id for o in orders_list}
+
+        # platform_data 내에서도 검색하여 추가 매칭
+        extra_qs = FulfillmentOrder.objects.select_related('client', 'brand', 'created_by')
+        extra_qs = extra_qs.filter(_get_client_filter(user))
+        if client_id:
+            extra_qs = extra_qs.filter(client_id=client_id)
+        if brand_id:
+            extra_qs = extra_qs.filter(brand_id=brand_id)
+        if platform:
+            extra_qs = extra_qs.filter(platform=platform)
+        if status:
+            extra_qs = extra_qs.filter(status=status)
+        if date_from:
+            extra_qs = extra_qs.filter(created_at__gte=date_from)
+        if date_to:
+            extra_qs = extra_qs.filter(created_at__lte=date_to)
+        extra_qs = extra_qs.exclude(id__in=db_ids).order_by('-created_at')
+
+        for order in extra_qs[:200]:
+            if order.platform_data:
+                for val in order.platform_data.values():
+                    if search_lower in str(val).lower():
+                        orders_list.append(order)
+                        break
+
     orders = []
-    for order in page_obj:
+    for order in orders_list:
         orders.append({
             'id': order.id,
             'internal_code': order.internal_code,
@@ -300,24 +334,13 @@ def get_orders(request):
             'brand_name': order.brand.name if order.brand else '',
             'platform': order.platform,
             'platform_display': order.get_platform_display(),
-            'order_number': order.order_number,
-            'order_type': order.order_type,
-            'order_confirmed': order.order_confirmed,
-            'sku_id': order.sku_id,
             'product_name': order.product_name,
-            'barcode': order.barcode,
-            'center': order.center,
-            'receiving_date': order.receiving_date,
-            'order_date': order.order_date,
-            'order_quantity': order.order_quantity,
-            'confirmed_quantity': order.confirmed_quantity,
+            'quantity': order.quantity,
+            'box_quantity': order.box_quantity,
+            'pallet_quantity': order.pallet_quantity,
+            'invoice_number': order.invoice_number,
             'status': order.status,
             'status_display': order.get_status_display(),
-            'manager': order.manager,
-            'expiry_date': order.expiry_date,
-            'box_quantity': order.box_quantity,
-            'address': order.address,
-            'memo': order.memo,
             'platform_data': order.platform_data,
             'confirmed_at': timezone.localtime(order.confirmed_at).strftime('%Y-%m-%d %H:%M') if order.confirmed_at else '',
             'shipped_at': timezone.localtime(order.shipped_at).strftime('%Y-%m-%d %H:%M') if order.shipped_at else '',
@@ -372,13 +395,10 @@ def create_order(request):
 
     # 필수 필드 검증
     platform = data.get('platform', '')
-    order_number = data.get('order_number', '').strip()
     product_name = data.get('product_name', '').strip()
 
     if not platform:
         return JsonResponse({'error': '플랫폼을 선택해주세요.'}, status=400)
-    if not order_number:
-        return JsonResponse({'error': '발주번호를 입력해주세요.'}, status=400)
     if not product_name:
         return JsonResponse({'error': '상품명을 입력해주세요.'}, status=400)
 
@@ -388,27 +408,31 @@ def create_order(request):
         except (ValueError, TypeError):
             return default
 
+    # 고정 필드와 platform_data 분리
+    # 요청 데이터에서 시스템/관계 필드를 제외한 나머지를 분류
+    system_keys = {'client_id', 'brand_id', 'platform', 'status'}
+    platform_data = data.get('platform_data', {})
+
+    # data에서 고정 필드가 아니고, 시스템 키도 아닌 것들은 platform_data에 추가
+    for key, val in data.items():
+        if key in system_keys or key in FIXED_MODEL_FIELDS or key == 'platform_data':
+            continue
+        # 문자열 값이면 platform_data에 넣기
+        if isinstance(val, str):
+            val = val.strip()
+        if val not in (None, ''):
+            platform_data[key] = val
+
     order = FulfillmentOrder.objects.create(
         client=client,
         brand=brand,
         platform=platform,
-        order_number=order_number,
-        order_type=data.get('order_type', '').strip(),
-        order_confirmed=data.get('order_confirmed', '').strip(),
-        sku_id=data.get('sku_id', '').strip(),
         product_name=product_name,
-        barcode=data.get('barcode', '').strip(),
-        center=data.get('center', '').strip(),
-        receiving_date=data.get('receiving_date', '').strip(),
-        order_date=data.get('order_date', '').strip(),
-        order_quantity=safe_int(data.get('order_quantity')),
-        confirmed_quantity=safe_int(data.get('confirmed_quantity')),
-        manager=data.get('manager', '').strip(),
-        expiry_date=data.get('expiry_date', '').strip(),
+        quantity=safe_int(data.get('quantity')),
         box_quantity=safe_int(data.get('box_quantity')),
-        address=data.get('address', '').strip(),
-        memo=data.get('memo', '').strip(),
-        platform_data=data.get('platform_data', {}),
+        pallet_quantity=safe_int(data.get('pallet_quantity')),
+        invoice_number=data.get('invoice_number', '').strip(),
+        platform_data=platform_data,
         created_by=user,
     )
 
@@ -428,8 +452,9 @@ def bulk_paste_orders(request):
     """
     붙여넣기 벌크 주문 등록
 
-    쿠팡 등 플랫폼 표에서 복사한 텍스트를 탭 구분으로 파싱하여 일괄 등록.
-    컬럼 순서: 발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
+    PlatformColumnConfig 기반으로 컬럼 순서를 동적으로 결정합니다.
+    컬럼 순서: 고정 필드(product_name, quantity, box_quantity, pallet_quantity, invoice_number)
+              + 커스텀 필드(PlatformColumnConfig의 display_order 순)
     """
     try:
         data = json.loads(request.body)
@@ -466,6 +491,28 @@ def bulk_paste_orders(request):
         except Brand.DoesNotExist:
             pass
 
+    # PlatformColumnConfig에서 현재 플랫폼의 활성 컬럼 로드 (display_order 순)
+    custom_columns = list(PlatformColumnConfig.objects.filter(
+        platform=platform, is_active=True
+    ).order_by('display_order'))
+
+    # 컬럼 순서 결정: 고정 필드 + 커스텀 필드
+    # 고정 필드 정의 (key, label, type)
+    fixed_column_defs = [
+        ('product_name', '상품명', 'text'),
+        ('quantity', '수량', 'number'),
+        ('box_quantity', '박스수', 'number'),
+        ('pallet_quantity', '팔레트수', 'number'),
+        ('invoice_number', '송장번호', 'text'),
+    ]
+
+    # 전체 컬럼 맵핑 순서: 고정 필드 + 커스텀 필드
+    column_order = []
+    for key, label, col_type in fixed_column_defs:
+        column_order.append({'key': key, 'type': col_type, 'is_fixed': True})
+    for cc in custom_columns:
+        column_order.append({'key': cc.key, 'type': cc.column_type, 'is_fixed': False})
+
     # 탭 구분 텍스트 파싱
     lines = paste_text.strip().split('\n')
     created_count = 0
@@ -476,7 +523,6 @@ def bulk_paste_orders(request):
         if not val:
             return default
         try:
-            # 쉼표 제거 (1,000 → 1000)
             cleaned = str(val).strip().replace(',', '')
             return int(cleaned) if cleaned else default
         except (ValueError, TypeError):
@@ -489,24 +535,26 @@ def bulk_paste_orders(request):
 
         cols = line.split('\t')
 
-        # 최소 1개 컬럼 (발주번호)이 있어야 함
-        if not cols or not cols[0].strip():
-            errors.append(f'{row_idx}행: 발주번호가 비어있습니다.')
-            continue
-
         try:
-            order_number = cols[0].strip() if len(cols) > 0 else ''
-            order_type = cols[1].strip() if len(cols) > 1 else ''
-            order_confirmed = cols[2].strip() if len(cols) > 2 else ''
-            sku_id = cols[3].strip() if len(cols) > 3 else ''
-            product_name = cols[4].strip() if len(cols) > 4 else ''
-            barcode = cols[5].strip() if len(cols) > 5 else ''
-            center = cols[6].strip() if len(cols) > 6 else ''
-            receiving_date = cols[7].strip() if len(cols) > 7 else ''
-            order_date = cols[8].strip() if len(cols) > 8 else ''
-            order_quantity = safe_int(cols[9]) if len(cols) > 9 else 0
-            confirmed_quantity = safe_int(cols[10]) if len(cols) > 10 else 0
+            model_fields = {}
+            platform_data = {}
 
+            for col_idx, col_def in enumerate(column_order):
+                value = cols[col_idx].strip() if col_idx < len(cols) else ''
+                key = col_def['key']
+
+                if col_def['is_fixed']:
+                    # 고정 필드: 모델에 직접 설정
+                    if col_def['type'] == 'number':
+                        model_fields[key] = safe_int(value)
+                    else:
+                        model_fields[key] = value
+                else:
+                    # 커스텀 필드: platform_data에 저장
+                    if value:
+                        platform_data[key] = value
+
+            product_name = model_fields.get('product_name', '')
             if not product_name:
                 errors.append(f'{row_idx}행: 상품명이 비어있습니다.')
                 continue
@@ -515,17 +563,12 @@ def bulk_paste_orders(request):
                 client=client,
                 brand=brand,
                 platform=platform,
-                order_number=order_number,
-                order_type=order_type,
-                order_confirmed=order_confirmed,
-                sku_id=sku_id,
                 product_name=product_name,
-                barcode=barcode,
-                center=center,
-                receiving_date=receiving_date,
-                order_date=order_date,
-                order_quantity=order_quantity,
-                confirmed_quantity=confirmed_quantity,
+                quantity=model_fields.get('quantity', 0),
+                box_quantity=model_fields.get('box_quantity', 0),
+                pallet_quantity=model_fields.get('pallet_quantity', 0),
+                invoice_number=model_fields.get('invoice_number', ''),
+                platform_data=platform_data,
                 created_by=user,
             )
             created_count += 1
@@ -570,7 +613,7 @@ def update_order(request, order_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
 
-    # 수정 가능 필드
+    # 거래처 변경
     if 'client_id' in data:
         try:
             client = Client.objects.get(id=data['client_id'], is_active=True)
@@ -578,6 +621,7 @@ def update_order(request, order_id):
         except Client.DoesNotExist:
             return JsonResponse({'error': '유효하지 않은 거래처입니다.'}, status=400)
 
+    # 브랜드 변경
     if 'brand_id' in data:
         if data['brand_id']:
             try:
@@ -588,27 +632,42 @@ def update_order(request, order_id):
         else:
             order.brand = None
 
-    text_fields = [
-        'platform', 'order_number', 'order_type', 'order_confirmed',
-        'sku_id', 'product_name', 'barcode', 'center',
-        'receiving_date', 'order_date', 'manager', 'expiry_date',
-        'address', 'memo',
-    ]
-    for field in text_fields:
+    # 플랫폼 변경
+    if 'platform' in data:
+        val = data['platform']
+        order.platform = val.strip() if isinstance(val, str) else val
+
+    # 고정 텍스트 필드
+    fixed_text_fields = ['product_name', 'invoice_number']
+    for field in fixed_text_fields:
         if field in data:
             val = data[field]
             setattr(order, field, val.strip() if isinstance(val, str) else val)
 
-    int_fields = ['order_quantity', 'confirmed_quantity', 'box_quantity']
-    for field in int_fields:
+    # 고정 숫자 필드
+    fixed_int_fields = ['quantity', 'box_quantity', 'pallet_quantity']
+    for field in fixed_int_fields:
         if field in data:
             try:
                 setattr(order, field, int(data[field] or 0))
             except (ValueError, TypeError):
                 pass
 
+    # platform_data 업데이트
+    # platform_data를 직접 전달하면 그대로 사용
     if 'platform_data' in data:
         order.platform_data = data['platform_data']
+    else:
+        # data에서 고정/시스템 필드가 아닌 것들은 platform_data에 병합
+        system_keys = {'client_id', 'brand_id', 'platform', 'status', 'platform_data'}
+        current_pd = order.platform_data or {}
+        for key, val in data.items():
+            if key in system_keys or key in FIXED_MODEL_FIELDS:
+                continue
+            if isinstance(val, str):
+                val = val.strip()
+            current_pd[key] = val
+        order.platform_data = current_pd
 
     order.save()
 
@@ -824,19 +883,17 @@ def export_excel(request):
         qs = qs.filter(status=status)
     if search:
         q = (
-            Q(order_number__icontains=search) |
             Q(product_name__icontains=search) |
-            Q(barcode__icontains=search) |
-            Q(sku_id__icontains=search)
+            Q(invoice_number__icontains=search)
         )
         ff_match = re.match(r'^FF-?(\d+)$', search.strip(), re.IGNORECASE)
         if ff_match:
             q |= Q(id=int(ff_match.group(1)))
         qs = qs.filter(q)
     if date_from:
-        qs = qs.filter(order_date__gte=date_from)
+        qs = qs.filter(created_at__gte=date_from)
     if date_to:
-        qs = qs.filter(order_date__lte=date_to)
+        qs = qs.filter(created_at__lte=date_to)
 
     qs = qs.order_by('-created_at')
 
@@ -863,11 +920,11 @@ def export_excel(request):
             platform=platform, is_active=True
         ).order_by('display_order'))
 
-    # 헤더
+    # 헤더: 고정 필드 + 상태 + 커스텀 컬럼
     headers = [
-        '자체코드', '거래처', '브랜드', '플랫폼', '발주번호', '발주유형', '발주확정',
-        'SKU ID', '상품명', '바코드', '센터', '입고일', '발주일시',
-        '발주수량', '확정수량', '상태', '비고',
+        '자체코드', '거래처', '브랜드', '플랫폼',
+        '상품명', '수량', '박스수', '팔레트수', '송장번호',
+        '상태',
     ]
     # 플랫폼 커스텀 컬럼 헤더 추가
     for pc in platform_cols:
@@ -887,19 +944,12 @@ def export_excel(request):
             order.client.company_name,
             order.brand.name if order.brand else '',
             order.get_platform_display(),
-            order.order_number,
-            order.order_type,
-            order.order_confirmed,
-            order.sku_id,
             order.product_name,
-            order.barcode,
-            order.center,
-            order.receiving_date,
-            order.order_date,
-            order.order_quantity,
-            order.confirmed_quantity,
+            order.quantity,
+            order.box_quantity,
+            order.pallet_quantity,
+            order.invoice_number,
             order.get_status_display(),
-            order.memo,
         ]
         # 플랫폼 커스텀 컬럼 데이터 추가
         for pc in platform_cols:
@@ -913,7 +963,7 @@ def export_excel(request):
             cell.alignment = Alignment(vertical='center')
 
     # 컬럼 너비 조정
-    col_widths = [12, 15, 12, 12, 15, 10, 10, 15, 30, 15, 12, 12, 16, 10, 10, 10, 20]
+    col_widths = [12, 15, 12, 12, 30, 10, 10, 10, 15, 10]
     # 플랫폼 커스텀 컬럼 너비 추가
     for _ in platform_cols:
         col_widths.append(15)
@@ -1250,40 +1300,40 @@ def bulk_create_orders(request):
     errors = []
 
     for idx, row in enumerate(orders_data, 1):
-        order_number = (row.get('order_number') or '').strip()
         product_name = (row.get('product_name') or '').strip()
 
-        if not order_number:
-            errors.append(f'{idx}행: 발주번호가 비어있습니다.')
-            continue
         if not product_name:
             errors.append(f'{idx}행: 상품명이 비어있습니다.')
             continue
 
         try:
-            FulfillmentOrder.objects.create(
-                client=client,
-                brand=brand,
-                platform=platform,
-                order_number=order_number,
-                order_type=(row.get('order_type') or '').strip(),
-                order_confirmed=(row.get('order_confirmed') or '').strip(),
-                sku_id=(row.get('sku_id') or '').strip(),
-                product_name=product_name,
-                barcode=(row.get('barcode') or '').strip(),
-                center=(row.get('center') or '').strip(),
-                receiving_date=(row.get('receiving_date') or '').strip(),
-                order_date=(row.get('order_date') or '').strip(),
-                order_quantity=safe_int(row.get('order_quantity')),
-                confirmed_quantity=safe_int(row.get('confirmed_quantity')),
-                manager=(row.get('manager') or '').strip(),
-                expiry_date=(row.get('expiry_date') or '').strip(),
-                box_quantity=safe_int(row.get('box_quantity')),
-                address=(row.get('address') or '').strip(),
-                memo=(row.get('memo') or '').strip(),
-                platform_data=row.get('platform_data') or {},
-                created_by=user,
-            )
+            # 고정 필드 추출
+            model_kwargs = {
+                'client': client,
+                'brand': brand,
+                'platform': platform,
+                'product_name': product_name,
+                'quantity': safe_int(row.get('quantity')),
+                'box_quantity': safe_int(row.get('box_quantity')),
+                'pallet_quantity': safe_int(row.get('pallet_quantity')),
+                'invoice_number': (row.get('invoice_number') or '').strip(),
+                'created_by': user,
+            }
+
+            # 나머지 필드는 platform_data에 저장
+            platform_data = row.get('platform_data') or {}
+            system_keys = {'client_id', 'brand_id', 'platform', 'status', 'platform_data'}
+            for key, val in row.items():
+                if key in system_keys or key in FIXED_MODEL_FIELDS:
+                    continue
+                if isinstance(val, str):
+                    val = val.strip()
+                if val not in (None, ''):
+                    platform_data[key] = val
+
+            model_kwargs['platform_data'] = platform_data
+
+            FulfillmentOrder.objects.create(**model_kwargs)
             created_count += 1
         except Exception as e:
             errors.append(f'{idx}행: {str(e)}')

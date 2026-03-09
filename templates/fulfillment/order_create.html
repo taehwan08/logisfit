@@ -380,7 +380,7 @@
                     </div>
                     <div class="guide-item">
                         <span class="guide-label label-step">1</span>
-                        드롭다운에서 원하는 상품을 선택하면 <strong>바코드</strong>와 <strong>SKU ID</strong>가 자동으로 채워집니다.
+                        드롭다운에서 원하는 상품을 선택하면 상품명이 자동으로 채워집니다.
                     </div>
                     <div class="guide-item">
                         <span class="guide-label label-info">키보드</span>
@@ -418,16 +418,20 @@
                     </div>
                     <div class="guide-item">
                         <span class="guide-label label-info">필수 입력</span>
-                        <span style="color:#dc3545;">*</span> 표시가 있는 컬럼은 필수 입력 항목입니다. 발주번호와 상품명은 반드시 입력해야 합니다.
+                        <span style="color:#dc3545;">*</span> 표시가 있는 컬럼은 필수 입력 항목입니다. 상품명은 반드시 입력해야 합니다.
                     </div>
                 </div>
 
-                <!-- 플랫폼별 추가 컬럼 -->
+                <!-- 컬럼 구성 -->
                 <div class="guide-section">
-                    <div class="guide-section-title"><i class="bi bi-layout-three-columns"></i> 플랫폼별 추가 컬럼</div>
+                    <div class="guide-section-title"><i class="bi bi-layout-three-columns"></i> 컬럼 구성</div>
                     <div class="guide-item">
-                        <span class="guide-label label-info">INFO</span>
-                        관리자가 설정한 플랫폼별 커스텀 컬럼이 있으면 테이블 우측에 자동 추가됩니다. 컬럼 수는 상단의 배지로 확인할 수 있습니다.
+                        <span class="guide-label label-info">고정 컬럼</span>
+                        <strong>상품명, 수량, 박스수, 팔레트수, 송장번호</strong>는 모든 플랫폼에 공통으로 표시되는 고정 컬럼입니다.
+                    </div>
+                    <div class="guide-item">
+                        <span class="guide-label label-info">커스텀 컬럼</span>
+                        관리자가 설정한 플랫폼별 커스텀 컬럼이 있으면 고정 컬럼 뒤에 자동 추가됩니다. 컬럼 수는 상단의 배지로 확인할 수 있습니다.
                     </div>
                 </div>
 
@@ -456,81 +460,18 @@ let platformSelected = false;
 let rowCounter = 0;
 
 // ============================================================================
-// 플랫폼별 기본 컬럼 프리셋
-// PlatformColumnConfig DB에 설정이 없을 때 사용하는 기본값
-// 관리자가 주문목록 > 컬럼 설정에서 커스터마이즈 가능
+// 고정 컬럼 (모델 필드에 직접 매핑)
 // ============================================================================
-const PLATFORM_PRESETS = {
-    // 쿠팡: 발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
-    coupang: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'order_type',         name: '발주유형',   required: false, type: 'text',   width: '90px' },
-        { key: 'order_confirmed',    name: '발주확정',   required: false, type: 'text',   width: '90px' },
-        { key: 'sku_id',             name: 'SKU ID',     required: false, type: 'text',   width: '100px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'center',             name: '센터',       required: false, type: 'text',   width: '100px' },
-        { key: 'receiving_date',     name: '입고일',     required: false, type: 'text',   width: '100px' },
-        { key: 'order_date',         name: '발주일시',   required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-    // 컬리
-    kurly: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-    // 올리브영
-    oliveyoung: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-    // 스마트스토어
-    smartstore: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-    // 오프라인마트
-    offline: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-    // 해외수출
-    export: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-    // 기타
-    other: [
-        { key: 'order_number',       name: '발주번호',   required: true,  type: 'text',   width: '120px' },
-        { key: 'product_name',       name: '상품명',     required: true,  type: 'text',   width: '200px' },
-        { key: 'barcode',            name: '바코드',     required: false, type: 'text',   width: '120px' },
-        { key: 'order_quantity',     name: '발주수량',   required: false, type: 'number', width: '80px' },
-        { key: 'confirmed_quantity', name: '확정수량',   required: false, type: 'number', width: '80px' },
-    ],
-};
+const FIXED_COLUMNS = [
+    { key: 'product_name',    name: '상품명',     required: true,  type: 'text',   width: '180px' },
+    { key: 'quantity',        name: '수량',       required: false, type: 'number', width: '80px' },
+    { key: 'box_quantity',    name: '박스수',     required: false, type: 'number', width: '80px' },
+    { key: 'pallet_quantity', name: '팔레트수',   required: false, type: 'number', width: '80px' },
+    { key: 'invoice_number',  name: '송장번호',   required: false, type: 'text',   width: '120px' },
+];
 
 // 공통 모델 필드 키 (platform_data에 저장하지 않는 필드)
-const MODEL_FIELDS = [
-    'order_number', 'product_name', 'barcode', 'order_quantity', 'confirmed_quantity',
-    'order_type', 'order_confirmed', 'sku_id', 'center', 'receiving_date', 'order_date',
-    'manager', 'expiry_date', 'box_quantity', 'address', 'memo',
-];
+const MODEL_FIELDS = ['product_name', 'quantity', 'box_quantity', 'pallet_quantity', 'invoice_number'];
 
 // ============================================================================
 // 초기화
@@ -582,20 +523,22 @@ function onPlatformChange() {
         .then(data => {
             const apiColumns = data.columns || [];
 
+            // 항상 고정 컬럼으로 시작
+            currentColumns = FIXED_COLUMNS.map(c => ({ ...c }));
+
+            // API에서 커스텀 컬럼이 있으면 뒤에 추가
             if (apiColumns.length > 0) {
-                // DB에 설정된 컬럼이 있으면 그것을 사용
-                currentColumns = apiColumns.map(pc => ({
-                    key: MODEL_FIELDS.includes(pc.key) ? pc.key : 'pd_' + pc.key,
-                    name: pc.name,
-                    required: pc.is_required,
-                    type: pc.column_type,
-                    width: '100px',
-                    isPlatformCol: !MODEL_FIELDS.includes(pc.key),
-                    platformKey: pc.key,
-                }));
-            } else {
-                // DB에 없으면 프리셋 사용
-                currentColumns = [...(PLATFORM_PRESETS[platform] || PLATFORM_PRESETS.other)];
+                apiColumns.forEach(pc => {
+                    currentColumns.push({
+                        key: 'pd_' + pc.key,
+                        name: pc.name,
+                        required: pc.is_required,
+                        type: pc.column_type,
+                        width: '100px',
+                        isPlatformCol: true,
+                        platformKey: pc.key,
+                    });
+                });
             }
 
             // 테이블 활성화
@@ -1033,20 +976,20 @@ document.addEventListener('mousedown', function(e) {
     // 상품명 채우기
     input.value = item.dataset.name;
 
-    // 바코드 필드 찾아서 채우기
-    const barcodeInput = row.querySelector('input[data-key="barcode"]');
+    // 바코드 필드 찾아서 채우기 (커스텀 컬럼으로 존재할 수 있음)
+    const barcodeInput = row.querySelector('input[data-key="pd_barcode"]');
     if (barcodeInput) barcodeInput.value = item.dataset.barcode || '';
 
-    // option_code → sku_id 채우기
-    const skuInput = row.querySelector('input[data-key="sku_id"]');
+    // option_code → sku_id 채우기 (커스텀 컬럼으로 존재할 수 있음)
+    const skuInput = row.querySelector('input[data-key="pd_sku_id"]');
     if (skuInput && item.dataset.optionCode) skuInput.value = item.dataset.optionCode;
 
     dropdown.classList.remove('show');
     acSelectedIndex = -1;
 
-    // 다음 입력으로 포커스 이동
-    const barcodeEl = row.querySelector('input[data-key="barcode"]');
-    if (barcodeEl) barcodeEl.focus();
+    // 다음 입력으로 포커스 이동 (상품명 다음 컬럼)
+    const nextInput = input.closest('td').nextElementSibling?.querySelector('input');
+    if (nextInput) nextInput.focus();
 });
 
 function searchProducts(query, dropdown, input) {

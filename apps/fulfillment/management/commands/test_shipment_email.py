@@ -32,7 +32,7 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f'주문 정보:')
-        self.stdout.write(f'  - 발주번호: {order.order_number}')
+        self.stdout.write(f'  - 자체코드: {order.internal_code}')
         self.stdout.write(f'  - 상품명: {order.product_name}')
         self.stdout.write(f'  - 상태: {order.get_status_display()}')
         self.stdout.write(f'  - 플랫폼: {order.get_platform_display()}')

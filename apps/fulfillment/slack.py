@@ -39,12 +39,10 @@ def send_order_created_notification(order):
         f'*거래처:*  {order.client.company_name}',
         f'*브랜드:*  {brand_name}',
         f'*플랫폼:*  {platform_label}',
-        f'*발주번호:*  {order.order_number}',
+        f'*자체코드:*  {order.internal_code}',
         f'*상품명:*  {order.product_name}',
-        f'*발주수량:*  {order.order_quantity:,}',
+        f'*수량:*  {order.quantity:,}',
     ]
-    if order.confirmed_quantity:
-        info_parts.append(f'*확정수량:*  {order.confirmed_quantity:,}')
 
     blocks = [
         {
@@ -85,7 +83,7 @@ def send_order_created_notification(order):
     ]
 
     payload = {
-        'text': f'주문 등록: {order.client.company_name} / {order.product_name} ({order.order_quantity:,}개)',
+        'text': f'주문 등록: {order.client.company_name} / {order.product_name} ({order.quantity:,}개)',
         'blocks': blocks,
     }
 

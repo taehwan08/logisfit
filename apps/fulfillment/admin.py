@@ -10,13 +10,15 @@ class FulfillmentOrderAdmin(admin.ModelAdmin):
     """출고 주문 관리자 설정"""
 
     list_display = [
-        'order_number', 'client', 'brand', 'platform', 'product_name',
-        'order_quantity', 'confirmed_quantity', 'status', 'created_at',
+        'internal_code', 'client', 'brand', 'platform', 'product_name',
+        'quantity', 'box_quantity', 'pallet_quantity', 'invoice_number',
+        'status', 'created_at',
     ]
     list_filter = ['platform', 'status', 'client', 'brand']
-    search_fields = ['order_number', 'product_name', 'barcode', 'sku_id']
+    search_fields = ['product_name', 'invoice_number']
     ordering = ['-created_at']
     readonly_fields = [
+        'internal_code',
         'confirmed_at', 'confirmed_by',
         'shipped_at', 'shipped_by',
         'synced_at', 'synced_by',
@@ -27,25 +29,16 @@ class FulfillmentOrderAdmin(admin.ModelAdmin):
     fieldsets = (
         ('기본 정보', {
             'fields': (
-                'client', 'brand', 'platform', 'status',
+                'internal_code', 'client', 'brand', 'platform', 'status',
             ),
         }),
-        ('발주 정보', {
+        ('고정 필드', {
             'fields': (
-                'order_number', 'order_type', 'order_confirmed',
-                'sku_id', 'product_name', 'barcode',
-                'center', 'receiving_date', 'order_date',
-                'order_quantity', 'confirmed_quantity',
+                'product_name', 'quantity', 'box_quantity',
+                'pallet_quantity', 'invoice_number',
             ),
         }),
-        ('기타 정보', {
-            'fields': (
-                'manager', 'expiry_date', 'box_quantity',
-                'address', 'memo',
-            ),
-            'classes': ('collapse',),
-        }),
-        ('플랫폼별 데이터', {
+        ('커스텀 데이터 (JSON)', {
             'fields': ('platform_data',),
             'classes': ('collapse',),
         }),
@@ -80,7 +73,7 @@ class FulfillmentCommentAdmin(admin.ModelAdmin):
 
     list_display = ['order', 'author', 'content_short', 'is_system', 'created_at']
     list_filter = ['is_system', 'created_at']
-    search_fields = ['content', 'order__order_number']
+    search_fields = ['content']
     ordering = ['-created_at']
     raw_id_fields = ['order', 'author']
 

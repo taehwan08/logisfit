@@ -17,8 +17,8 @@ class FulfillmentOrder(models.Model):
     거래처 → 브랜드 하위 구조로 출고 주문을 관리합니다.
     3단계 상태 관리: 대기 → 확인완료 → 출고완료 → 전산반영
 
-    붙여넣기 컬럼 (쿠팡 기준):
-    발주번호, 발주유형, 발주확정, SKU ID, 상품명, 바코드, 센터, 입고일, 발주일시, 발주수량, 확정수량
+    고정 필드: 상품명, 수량, 박스수, 팔레트수, 송장번호
+    커스텀 필드: PlatformColumnConfig 기반, platform_data JSON에 저장
     """
 
     class Platform(models.TextChoices):
@@ -65,83 +65,29 @@ class FulfillmentOrder(models.Model):
         default=Status.PENDING,
     )
 
-    # ─── 붙여넣기 대응 필드 (쿠팡 등) ───
-    order_number = models.CharField(
-        '발주번호',
-        max_length=100,
-    )
-    order_type = models.CharField(
-        '발주유형',
-        max_length=100,
-        blank=True,
-    )
-    order_confirmed = models.CharField(
-        '발주확정',
-        max_length=100,
-        blank=True,
-    )
-    sku_id = models.CharField(
-        'SKU ID',
-        max_length=100,
-        blank=True,
-    )
+    # ─── 고정 필드 ───
     product_name = models.CharField(
         '상품명',
         max_length=300,
     )
-    barcode = models.CharField(
-        '바코드',
-        max_length=100,
-        blank=True,
-    )
-    center = models.CharField(
-        '센터',
-        max_length=100,
-        blank=True,
-    )
-    receiving_date = models.CharField(
-        '입고일',
-        max_length=50,
-        blank=True,
-    )
-    order_date = models.CharField(
-        '발주일시',
-        max_length=50,
-        blank=True,
-    )
-    order_quantity = models.IntegerField(
-        '발주수량',
+    quantity = models.IntegerField(
+        '수량',
         default=0,
         validators=[MinValueValidator(0)],
-    )
-    confirmed_quantity = models.IntegerField(
-        '확정수량',
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-
-    # 기존 유지 필드
-    manager = models.CharField(
-        '담당자',
-        max_length=100,
-        blank=True,
-    )
-    expiry_date = models.CharField(
-        '소비기한',
-        max_length=50,
-        blank=True,
     )
     box_quantity = models.IntegerField(
-        '박스수량',
+        '박스수',
         default=0,
         validators=[MinValueValidator(0)],
     )
-    address = models.TextField(
-        '주소지',
-        blank=True,
+    pallet_quantity = models.IntegerField(
+        '팔레트수',
+        default=0,
+        validators=[MinValueValidator(0)],
     )
-    memo = models.TextField(
-        '비고',
+    invoice_number = models.CharField(
+        '송장번호',
+        max_length=100,
         blank=True,
     )
 
@@ -219,14 +165,10 @@ class FulfillmentOrder(models.Model):
                 fields=['status'],
                 name='idx_fulfill_status',
             ),
-            models.Index(
-                fields=['order_number'],
-                name='idx_fulfill_order_number',
-            ),
         ]
 
     def __str__(self):
-        return f"[{self.get_platform_display()}] {self.order_number} - {self.product_name}"
+        return f"[{self.get_platform_display()}] {self.internal_code} - {self.product_name}"
 
     @property
     def internal_code(self):
@@ -333,7 +275,7 @@ class FulfillmentComment(models.Model):
 
     def __str__(self):
         author_name = self.author.name if self.author else '시스템'
-        return f"[{self.order.order_number}] {author_name}: {self.content[:30]}"
+        return f"[{self.order.internal_code}] {author_name}: {self.content[:30]}"
 
 
 class PlatformColumnConfig(models.Model):

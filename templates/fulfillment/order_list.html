@@ -300,7 +300,7 @@
         </div>
         <div class="col-md-2 col-6">
             <label>검색</label>
-            <input type="text" class="form-control" id="filterSearch" placeholder="발주번호/상품명/바코드/SKU"
+            <input type="text" class="form-control" id="filterSearch" placeholder="상품명/송장번호/자체코드(FF-)"
                    onkeyup="debounceSearch()">
         </div>
     </div>
@@ -356,18 +356,14 @@
                     </th>
                     {% endif %}
                     <th>자체코드</th>
-                    <th>등록일</th>
-                    <th>발주번호</th>
                     <th>거래처</th>
                     <th>브랜드</th>
                     <th>플랫폼</th>
                     <th>상품명</th>
-                    <th>바코드</th>
-                    <th>센터</th>
-                    <th>입고일</th>
-                    <th>발주일시</th>
-                    <th class="text-end">발주수량</th>
-                    <th class="text-end">확정수량</th>
+                    <th class="text-end">수량</th>
+                    <th class="text-end">박스수</th>
+                    <th class="text-end">팔레트수</th>
+                    <th>송장번호</th>
                     <!-- 동적 플랫폼 컬럼 (JS로 삽입) -->
                     <th class="text-center" style="width:40px" data-col="confirm">확인</th>
                     <th class="text-center" style="width:40px" data-col="ship">출고</th>
@@ -572,7 +568,7 @@
                     <div class="guide-section-title"><i class="bi bi-hash"></i> 자체코드 (FF-XXXXX)</div>
                     <div class="guide-item">
                         <span class="guide-label label-info">INFO</span>
-                        각 주문에 시스템이 자동 부여하는 내부 관리 코드입니다. 외부 발주번호와 별도로 관리되며, 검색창에서 <strong>FF-00001</strong> 형식으로 검색할 수 있습니다.
+                        각 주문에 시스템이 자동 부여하는 내부 관리 코드입니다. 검색창에서 <strong>FF-00001</strong> 형식으로 검색할 수 있습니다.
                     </div>
                 </div>
 
@@ -585,7 +581,7 @@
                     </div>
                     <div class="guide-item">
                         <span class="guide-label label-step">2</span>
-                        <strong>검색</strong> 입력란에 발주번호, 상품명, 바코드, SKU, 자체코드(FF-)를 입력하면 실시간 검색됩니다.
+                        <strong>검색</strong> 입력란에 상품명, 송장번호, 자체코드(FF-)를 입력하면 실시간 검색됩니다.
                     </div>
                 </div>
 
@@ -852,24 +848,18 @@ function renderOrders(data) {
         <tr class="${order.status === 'synced' ? 'row-synced' : ''}">
             ${CAN_MANAGE ? `<td class="text-center"><input class="form-check-input row-check" type="checkbox" value="${order.id}" onchange="updateBulkBar()"></td>` : ''}
             <td><span class="text-muted" style="font-size:0.72rem; font-family:monospace;">${escapeHtml(order.internal_code)}</span></td>
-            <td class="text-muted" style="font-size:0.8rem;">${escapeHtml(order.created_at)}</td>
-            <td>
-                <a href="javascript:void(0)" onclick="showDetail(${order.id})" class="text-decoration-none fw-semibold text-primary">
-                    ${escapeHtml(order.order_number)}
-                </a>
-            </td>
             <td>${escapeHtml(order.client_name)}</td>
             <td>${escapeHtml(order.brand_name)}</td>
             <td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
-            <td class="text-truncate" style="max-width:180px;" title="${escapeHtml(order.product_name)}">
-                ${escapeHtml(order.product_name)}
+            <td class="text-truncate" style="max-width:180px; cursor:pointer;" title="${escapeHtml(order.product_name)}" onclick="showDetail(${order.id})">
+                <a href="javascript:void(0)" class="text-decoration-none fw-semibold text-primary">
+                    ${escapeHtml(order.product_name)}
+                </a>
             </td>
-            <td>${escapeHtml(order.barcode)}</td>
-            <td>${escapeHtml(order.center)}</td>
-            <td>${escapeHtml(order.receiving_date)}</td>
-            <td>${escapeHtml(order.order_date)}</td>
-            <td class="text-end">${order.order_quantity.toLocaleString()}</td>
-            <td class="text-end">${order.confirmed_quantity.toLocaleString()}</td>
+            <td class="text-end">${order.quantity != null ? order.quantity.toLocaleString() : ''}</td>
+            <td class="text-end">${order.box_quantity != null ? order.box_quantity.toLocaleString() : ''}</td>
+            <td class="text-end">${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : ''}</td>
+            <td>${escapeHtml(order.invoice_number || '')}</td>
             ${currentPlatformColumns.map(col => {
                 const val = (order.platform_data && order.platform_data[col.key]) || '';
                 return `<td>${escapeHtml(String(val))}</td>`;
@@ -988,45 +978,44 @@ function showDetail(orderId) {
     const html = `
     <table class="table table-sm" style="font-size:0.85rem;">
         <tr><td class="text-muted" style="width:100px;">자체코드</td><td><strong style="font-family:monospace;">${escapeHtml(order.internal_code)}</strong></td>
-            <td class="text-muted" style="width:100px;">등록일</td><td>${escapeHtml(order.created_at)}</td></tr>
+            <td class="text-muted" style="width:100px;">상태</td><td>${statusBadge[order.status]}</td></tr>
         <tr><td class="text-muted">거래처</td><td>${escapeHtml(order.client_name)}</td>
             <td class="text-muted">브랜드</td><td>${escapeHtml(order.brand_name) || '-'}</td></tr>
         <tr><td class="text-muted">플랫폼</td><td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
-            <td class="text-muted">상태</td><td>${statusBadge[order.status]}</td></tr>
-        <tr><td class="text-muted">발주번호</td><td>${escapeHtml(order.order_number)}</td>
-            <td class="text-muted">발주유형</td><td>${escapeHtml(order.order_type)}</td></tr>
-        <tr><td class="text-muted">발주확정</td><td>${escapeHtml(order.order_confirmed)}</td>
-            <td class="text-muted">SKU ID</td><td>${escapeHtml(order.sku_id)}</td></tr>
+            <td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td></tr>
         <tr><td class="text-muted">상품명</td><td colspan="3">${escapeHtml(order.product_name)}</td></tr>
-        <tr><td class="text-muted">바코드</td><td>${escapeHtml(order.barcode)}</td>
-            <td class="text-muted">센터</td><td>${escapeHtml(order.center)}</td></tr>
-        <tr><td class="text-muted">입고일</td><td>${escapeHtml(order.receiving_date)}</td>
-            <td class="text-muted">발주일시</td><td>${escapeHtml(order.order_date)}</td></tr>
-        <tr><td class="text-muted">발주수량</td><td>${order.order_quantity.toLocaleString()}</td>
-            <td class="text-muted">확정수량</td><td>${order.confirmed_quantity.toLocaleString()}</td></tr>
+        <tr><td class="text-muted">수량</td><td>${order.quantity != null ? order.quantity.toLocaleString() : '-'}</td>
+            <td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td></tr>
+        <tr><td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>
+            <td></td><td></td></tr>
         <tr><td colspan="4"><hr class="my-1"></td></tr>
         <tr><td class="text-muted">확인</td><td>${order.confirmed_at || '-'}</td>
             <td class="text-muted">출고</td><td>${order.shipped_at || '-'}</td></tr>
         <tr><td class="text-muted">전산반영</td><td>${order.synced_at || '-'}</td>
             <td class="text-muted">등록자</td><td>${escapeHtml(order.created_by)}</td></tr>
-        ${order.memo ? `<tr><td class="text-muted">비고</td><td colspan="3">${escapeHtml(order.memo)}</td></tr>` : ''}
     </table>`;
 
-    // 플랫폼 추가 정보
+    // 플랫폼 추가 정보 (platform_data의 모든 키-값 표시)
     let platformDataHtml = '';
-    if (currentPlatformColumns.length > 0 && order.platform_data) {
+    if (order.platform_data && Object.keys(order.platform_data).length > 0) {
         platformDataHtml += '<div class="mt-2 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
         platformDataHtml += '<table class="table table-sm" style="font-size:0.85rem;">';
-        for (let i = 0; i < currentPlatformColumns.length; i += 2) {
-            const col1 = currentPlatformColumns[i];
-            const val1 = order.platform_data[col1.key] || '-';
-            const col2 = currentPlatformColumns[i + 1];
-            if (col2) {
-                const val2 = order.platform_data[col2.key] || '-';
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(col1.name)}</td><td>${escapeHtml(String(val1))}</td>
-                    <td class="text-muted" style="width:100px;">${escapeHtml(col2.name)}</td><td>${escapeHtml(String(val2))}</td></tr>`;
+        const keys = Object.keys(order.platform_data);
+        for (let i = 0; i < keys.length; i += 2) {
+            const key1 = keys[i];
+            const val1 = order.platform_data[key1] || '-';
+            // 컬럼 설정에서 이름 찾기 (없으면 key 그대로 사용)
+            const col1 = currentPlatformColumns.find(c => c.key === key1);
+            const label1 = col1 ? col1.name : key1;
+            const key2 = keys[i + 1];
+            if (key2) {
+                const val2 = order.platform_data[key2] || '-';
+                const col2 = currentPlatformColumns.find(c => c.key === key2);
+                const label2 = col2 ? col2.name : key2;
+                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(label1)}</td><td>${escapeHtml(String(val1))}</td>
+                    <td class="text-muted" style="width:100px;">${escapeHtml(label2)}</td><td>${escapeHtml(String(val2))}</td></tr>`;
             } else {
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(col1.name)}</td><td colspan="3">${escapeHtml(String(val1))}</td></tr>`;
+                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(label1)}</td><td colspan="3">${escapeHtml(String(val1))}</td></tr>`;
             }
         }
         platformDataHtml += '</table>';
