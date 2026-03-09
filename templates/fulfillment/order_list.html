@@ -1062,12 +1062,12 @@ function renderDetailModal(order, platformColumns) {
         synced: '<span class="badge bg-success">전산반영</span>',
     };
 
-    const html = `
-    <table class="table table-sm" style="font-size:0.85rem;">
+    let html = `
+    <table class="table table-sm mb-0" style="font-size:0.85rem;">
+        <colgroup><col style="width:80px"><col><col style="width:80px"><col><col style="width:80px"><col></colgroup>
         <tr>
-            <td class="text-muted" style="width:100px;">자체코드</td><td><strong style="font-family:monospace;">${escapeHtml(order.internal_code)}</strong></td>
-            <td></td>
-            <td class="text-muted" style="width:100px;">상태</td><td>${statusBadge[order.status]}</td>
+            <td class="text-muted">자체코드</td><td colspan="3"><strong style="font-family:monospace;">${escapeHtml(order.internal_code)}</strong></td>
+            <td class="text-muted">상태</td><td>${statusBadge[order.status]}</td>
         </tr>
         <tr>
             <td class="text-muted">거래처</td><td>${escapeHtml(order.client_name)}</td>
@@ -1075,60 +1075,46 @@ function renderDetailModal(order, platformColumns) {
             <td class="text-muted">플랫폼</td><td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
         </tr>
         <tr>
-            <td class="text-muted">상품명</td><td style="column-span: 4;">${escapeHtml(order.product_name)}</td>
+            <td class="text-muted">상품명</td><td colspan="3">${escapeHtml(order.product_name)}</td>
             <td class="text-muted">수량</td><td>${order.quantity != null ? order.quantity.toLocaleString() : '-'}</td>
         </tr>
+        ${!IS_CLIENT ? `<tr>
+            <td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td>
+            <td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td>
+            <td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>
+        </tr>` : ''}
         <tr><td colspan="6"><hr class="my-1"></td></tr>
-        <tr>
-            ${!IS_CLIENT ? `<td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td>` : '<td></td><td></td>'}
-            ${!IS_CLIENT ? `<td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td>` : '<td></td><td></td>'}
-            ${!IS_CLIENT ? `<td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>` : '<td></td><td></td>'}
-        </tr>
         <tr>
             <td class="text-muted">확인</td><td>${order.confirmed_at || '-'}</td>
             <td class="text-muted">출고</td><td>${order.shipped_at || '-'}</td>
             <td class="text-muted">전산반영</td><td>${order.synced_at || '-'}</td>
-            </tr>
+        </tr>
         <tr>
-            <td class="text-muted">등록자</td><td>${escapeHtml(order.created_by)}</td>
+            <td class="text-muted">등록자</td><td colspan="5">${escapeHtml(order.created_by)}</td>
         </tr>
     </table>`;
 
-    // 플랫폼 커스텀 컬럼 표시 (PlatformColumnConfig 기반)
+    // 플랫폼 커스텀 컬럼 표시 (PlatformColumnConfig 기반, 3열 레이아웃)
     let platformDataHtml = '';
-    if (platformColumns.length > 0) {
-        const pd = order.platform_data || {};
-        platformDataHtml += '<div class="mt-2 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
-        platformDataHtml += '<table class="table table-sm" style="font-size:0.85rem;">';
-        for (let i = 0; i < platformColumns.length; i += 2) {
-            const col1 = platformColumns[i];
-            const val1 = pd[col1.key] != null ? String(pd[col1.key]) : '-';
-            const col2 = platformColumns[i + 1];
-            if (col2) {
-                const val2 = pd[col2.key] != null ? String(pd[col2.key]) : '-';
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(col1.name)}</td><td>${escapeHtml(val1)}</td>
-                    <td class="text-muted" style="width:100px;">${escapeHtml(col2.name)}</td><td>${escapeHtml(val2)}</td></tr>`;
-            } else {
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(col1.name)}</td><td colspan="3">${escapeHtml(val1)}</td></tr>`;
+    const pd = order.platform_data || {};
+    const cols = platformColumns.length > 0
+        ? platformColumns.map(c => ({ label: c.name, value: pd[c.key] != null ? String(pd[c.key]) : '-' }))
+        : Object.keys(pd).map(k => ({ label: k, value: pd[k] != null ? String(pd[k]) : '-' }));
+
+    if (cols.length > 0) {
+        platformDataHtml += '<div class="mt-3 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
+        platformDataHtml += '<table class="table table-sm mb-0" style="font-size:0.85rem;"><colgroup><col style="width:80px"><col><col style="width:80px"><col><col style="width:80px"><col></colgroup>';
+        for (let i = 0; i < cols.length; i += 3) {
+            platformDataHtml += '<tr>';
+            for (let j = 0; j < 3; j++) {
+                const c = cols[i + j];
+                if (c) {
+                    platformDataHtml += `<td class="text-muted">${escapeHtml(c.label)}</td><td>${escapeHtml(c.value)}</td>`;
+                } else {
+                    platformDataHtml += '<td></td><td></td>';
+                }
             }
-        }
-        platformDataHtml += '</table>';
-    } else if (order.platform_data && Object.keys(order.platform_data).length > 0) {
-        // 컬럼 설정이 없는 경우 platform_data key를 그대로 표시
-        platformDataHtml += '<div class="mt-2 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
-        platformDataHtml += '<table class="table table-sm" style="font-size:0.85rem;">';
-        const keys = Object.keys(order.platform_data);
-        for (let i = 0; i < keys.length; i += 2) {
-            const key1 = keys[i];
-            const val1 = order.platform_data[key1] != null ? String(order.platform_data[key1]) : '-';
-            const key2 = keys[i + 1];
-            if (key2) {
-                const val2 = order.platform_data[key2] != null ? String(order.platform_data[key2]) : '-';
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(key1)}</td><td>${escapeHtml(val1)}</td>
-                    <td class="text-muted" style="width:100px;">${escapeHtml(key2)}</td><td>${escapeHtml(val2)}</td></tr>`;
-            } else {
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(key1)}</td><td colspan="3">${escapeHtml(val1)}</td></tr>`;
-            }
+            platformDataHtml += '</tr>';
         }
         platformDataHtml += '</table>';
     }
