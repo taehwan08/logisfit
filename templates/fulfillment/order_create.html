@@ -462,13 +462,17 @@ let rowCounter = 0;
 // ============================================================================
 // 고정 컬럼 (모델 필드에 직접 매핑)
 // ============================================================================
-const FIXED_COLUMNS = [
+const ALL_FIXED_COLUMNS = [
     { key: 'product_name',    name: '상품명',     required: true,  type: 'text',   width: '180px' },
     { key: 'quantity',        name: '수량',       required: false, type: 'number', width: '80px' },
-    { key: 'box_quantity',    name: '박스수',     required: false, type: 'number', width: '80px' },
-    { key: 'pallet_quantity', name: '팔레트수',   required: false, type: 'number', width: '80px' },
-    { key: 'invoice_number',  name: '송장번호',   required: false, type: 'text',   width: '120px' },
+    { key: 'box_quantity',    name: '박스수',     required: false, type: 'number', width: '80px', workerOnly: true },
+    { key: 'pallet_quantity', name: '팔레트수',   required: false, type: 'number', width: '80px', workerOnly: true },
+    { key: 'invoice_number',  name: '송장번호',   required: false, type: 'text',   width: '120px', workerOnly: true },
 ];
+// 거래처 사용자에게는 작업자 전용 필드 숨김
+const FIXED_COLUMNS = IS_CLIENT
+    ? ALL_FIXED_COLUMNS.filter(c => !c.workerOnly)
+    : ALL_FIXED_COLUMNS;
 
 // 공통 모델 필드 키 (platform_data에 저장하지 않는 필드)
 const MODEL_FIELDS = ['product_name', 'quantity', 'box_quantity', 'pallet_quantity', 'invoice_number'];

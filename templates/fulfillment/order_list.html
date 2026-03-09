@@ -373,9 +373,11 @@
                     <th>플랫폼</th>
                     <th>상품명</th>
                     <th class="text-end">수량</th>
+                    {% if not is_client %}
                     <th class="text-end">박스수</th>
                     <th class="text-end">팔레트수</th>
                     <th>송장번호</th>
+                    {% endif %}
                     <!-- 동적 플랫폼 컬럼 (JS로 삽입) -->
                     <th class="text-center" style="width:40px" data-col="confirm">확인</th>
                     <th class="text-center" style="width:40px" data-col="ship">출고</th>
@@ -912,9 +914,10 @@ function renderOrders(data) {
                 </a>
             </td>
             <td class="text-end">${order.quantity != null ? order.quantity.toLocaleString() : ''}</td>
+            ${!IS_CLIENT ? `
             <td class="text-end">${order.box_quantity != null ? order.box_quantity.toLocaleString() : ''}</td>
             <td class="text-end">${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : ''}</td>
-            <td>${escapeHtml(order.invoice_number || '')}</td>
+            <td>${escapeHtml(order.invoice_number || '')}</td>` : ''}
             ${currentPlatformColumns.map(col => {
                 const val = (order.platform_data && order.platform_data[col.key]) || '';
                 return `<td>${escapeHtml(String(val))}</td>`;
@@ -1043,12 +1046,12 @@ function showDetail(orderId) {
         <tr><td class="text-muted">거래처</td><td>${escapeHtml(order.client_name)}</td>
             <td class="text-muted">브랜드</td><td>${escapeHtml(order.brand_name) || '-'}</td></tr>
         <tr><td class="text-muted">플랫폼</td><td><span class="badge-platform ${order.platform}">${escapeHtml(order.platform_display)}</span></td>
-            <td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td></tr>
+            ${!IS_CLIENT ? `<td class="text-muted">송장번호</td><td>${escapeHtml(order.invoice_number || '-')}</td>` : '<td></td><td></td>'}</tr>
         <tr><td class="text-muted">상품명</td><td colspan="3">${escapeHtml(order.product_name)}</td></tr>
         <tr><td class="text-muted">수량</td><td>${order.quantity != null ? order.quantity.toLocaleString() : '-'}</td>
-            <td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td></tr>
-        <tr><td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>
-            <td></td><td></td></tr>
+            ${!IS_CLIENT ? `<td class="text-muted">박스수</td><td>${order.box_quantity != null ? order.box_quantity.toLocaleString() : '-'}</td>` : '<td></td><td></td>'}</tr>
+        ${!IS_CLIENT ? `<tr><td class="text-muted">팔레트수</td><td>${order.pallet_quantity != null ? order.pallet_quantity.toLocaleString() : '-'}</td>
+            <td></td><td></td></tr>` : ''}
         <tr><td colspan="4"><hr class="my-1"></td></tr>
         <tr><td class="text-muted">확인</td><td>${order.confirmed_at || '-'}</td>
             <td class="text-muted">출고</td><td>${order.shipped_at || '-'}</td></tr>
