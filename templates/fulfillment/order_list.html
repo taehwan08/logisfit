@@ -1027,11 +1027,34 @@ function deleteOrder(orderId) {
 // ============================================================================
 // 상세 보기
 // ============================================================================
+// 플랫폼별 컬럼 캐시 (상세 모달용)
+const platformColumnCache = {};
+
 function showDetail(orderId) {
     const order = ordersData.find(o => o.id === orderId);
     if (!order) return;
     currentDetailOrderId = orderId;
 
+    // 해당 주문의 플랫폼 컬럼을 가져와서 상세 렌더링
+    const platform = order.platform;
+    if (platform && !platformColumnCache[platform]) {
+        // 캐시에 없으면 API 호출 후 렌더링
+        fetch(`{% url 'fulfillment:get_platform_columns' %}?platform=${platform}`)
+            .then(r => r.json())
+            .then(data => {
+                platformColumnCache[platform] = data.columns || [];
+                renderDetailModal(order, platformColumnCache[platform]);
+            })
+            .catch(() => {
+                platformColumnCache[platform] = [];
+                renderDetailModal(order, []);
+            });
+    } else {
+        renderDetailModal(order, platformColumnCache[platform] || []);
+    }
+}
+
+function renderDetailModal(order, platformColumns) {
     const statusBadge = {
         pending: '<span class="badge bg-secondary">대기</span>',
         confirmed: '<span class="badge bg-primary">확인완료</span>',
@@ -1059,27 +1082,40 @@ function showDetail(orderId) {
             <td class="text-muted">등록자</td><td>${escapeHtml(order.created_by)}</td></tr>
     </table>`;
 
-    // 플랫폼 추가 정보 (platform_data의 모든 키-값 표시)
+    // 플랫폼 커스텀 컬럼 표시 (PlatformColumnConfig 기반)
     let platformDataHtml = '';
-    if (order.platform_data && Object.keys(order.platform_data).length > 0) {
+    if (platformColumns.length > 0) {
+        const pd = order.platform_data || {};
+        platformDataHtml += '<div class="mt-2 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
+        platformDataHtml += '<table class="table table-sm" style="font-size:0.85rem;">';
+        for (let i = 0; i < platformColumns.length; i += 2) {
+            const col1 = platformColumns[i];
+            const val1 = pd[col1.key] != null ? String(pd[col1.key]) : '-';
+            const col2 = platformColumns[i + 1];
+            if (col2) {
+                const val2 = pd[col2.key] != null ? String(pd[col2.key]) : '-';
+                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(col1.name)}</td><td>${escapeHtml(val1)}</td>
+                    <td class="text-muted" style="width:100px;">${escapeHtml(col2.name)}</td><td>${escapeHtml(val2)}</td></tr>`;
+            } else {
+                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(col1.name)}</td><td colspan="3">${escapeHtml(val1)}</td></tr>`;
+            }
+        }
+        platformDataHtml += '</table>';
+    } else if (order.platform_data && Object.keys(order.platform_data).length > 0) {
+        // 컬럼 설정이 없는 경우 platform_data key를 그대로 표시
         platformDataHtml += '<div class="mt-2 mb-2"><strong style="font-size:0.82rem; color:#495057;"><i class="bi bi-grid-3x3 me-1"></i>플랫폼 추가 정보</strong></div>';
         platformDataHtml += '<table class="table table-sm" style="font-size:0.85rem;">';
         const keys = Object.keys(order.platform_data);
         for (let i = 0; i < keys.length; i += 2) {
             const key1 = keys[i];
-            const val1 = order.platform_data[key1] || '-';
-            // 컬럼 설정에서 이름 찾기 (없으면 key 그대로 사용)
-            const col1 = currentPlatformColumns.find(c => c.key === key1);
-            const label1 = col1 ? col1.name : key1;
+            const val1 = order.platform_data[key1] != null ? String(order.platform_data[key1]) : '-';
             const key2 = keys[i + 1];
             if (key2) {
-                const val2 = order.platform_data[key2] || '-';
-                const col2 = currentPlatformColumns.find(c => c.key === key2);
-                const label2 = col2 ? col2.name : key2;
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(label1)}</td><td>${escapeHtml(String(val1))}</td>
-                    <td class="text-muted" style="width:100px;">${escapeHtml(label2)}</td><td>${escapeHtml(String(val2))}</td></tr>`;
+                const val2 = order.platform_data[key2] != null ? String(order.platform_data[key2]) : '-';
+                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(key1)}</td><td>${escapeHtml(val1)}</td>
+                    <td class="text-muted" style="width:100px;">${escapeHtml(key2)}</td><td>${escapeHtml(val2)}</td></tr>`;
             } else {
-                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(label1)}</td><td colspan="3">${escapeHtml(String(val1))}</td></tr>`;
+                platformDataHtml += `<tr><td class="text-muted" style="width:100px;">${escapeHtml(key1)}</td><td colspan="3">${escapeHtml(val1)}</td></tr>`;
             }
         }
         platformDataHtml += '</table>';
@@ -1088,7 +1124,7 @@ function showDetail(orderId) {
     document.getElementById('detailModalBody').innerHTML = html + platformDataHtml;
     document.getElementById('commentInput').value = '';
     new bootstrap.Modal(document.getElementById('detailModal')).show();
-    loadComments(orderId);
+    loadComments(order.id);
 }
 
 // ============================================================================
