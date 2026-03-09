@@ -21,4 +21,5 @@ urlpatterns = [
     path('api/logs/', views.get_logs, name='get_logs'),
     path('api/batches/', views.get_upload_batches, name='get_upload_batches'),
     path('api/batches/<int:batch_id>/delete/', views.delete_upload_batch, name='delete_upload_batch'),
+    path('api/batches/<int:batch_id>/picking-list/', views.picking_list_page, name='picking_list'),
 ]

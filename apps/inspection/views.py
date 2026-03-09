@@ -9,11 +9,12 @@ import re
 import json
 from collections import defaultdict
 
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 import openpyxl
 import xlrd
@@ -1087,3 +1088,40 @@ def delete_upload_batch(request, batch_id):
             'success': False,
             'message': '해당 업로드 이력을 찾을 수 없습니다.',
         }, status=404)
+
+
+@require_GET
+def picking_list_page(request, batch_id):
+    """피킹리스트 출력 페이지 (A4 가로 인쇄용)
+
+    UploadBatch 내 모든 OrderProduct를 바코드 기준으로 집계하여
+    매칭상품명, 매칭수량 합계, 바코드번호를 표시한다.
+    """
+    batch = get_object_or_404(UploadBatch, pk=batch_id)
+
+    # OrderProduct를 바코드 기준으로 집계
+    products = list(
+        OrderProduct.objects
+        .filter(order__upload_batch=batch)
+        .values('barcode', 'product_name')
+        .annotate(total_qty=Sum('quantity'))
+        .order_by('product_name')
+    )
+
+    # 출력차수: 배치에 저장된 값 또는 배치 ID 기반 fallback
+    print_order = batch.print_order or str(batch.id)
+
+    # 바코드 값: 출력일자 + 차수 조합 (예: 20260309-3)
+    now = timezone.localtime()
+    barcode_value = f"{now.strftime('%Y%m%d')}-{print_order}"
+
+    context = {
+        'batch': batch,
+        'products': products,
+        'total_quantity': sum(p['total_qty'] for p in products),
+        'total_sku_count': len(products),
+        'print_order': print_order,
+        'print_time': now.strftime('%Y-%m-%d %H:%M:%S'),
+        'barcode_value': barcode_value,
+    }
+    return render(request, 'inspection/picking_list.html', context)

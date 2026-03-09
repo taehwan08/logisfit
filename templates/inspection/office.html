@@ -484,9 +484,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         <span class="batch-meta">${dateStr} ${timeStr}</span>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteBatch(${b.id}, '${escapeHtml(b.file_name)}')" title="삭제">
-                            <i class="bi bi-trash"></i>
-                        </button>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-primary" onclick="window.open('/inspection/api/batches/${b.id}/picking-list/', '_blank')" title="피킹리스트">
+                                <i class="bi bi-printer"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteBatch(${b.id}, '${escapeHtml(b.file_name)}')" title="삭제">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>`;
             }).join('');

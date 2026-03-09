@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>피킹리스트 - {{ batch.file_name }}</title>
+    <style>
+        /* ── 기본 스타일 ── */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+            font-size: 12px;
+            color: #222;
+            background: #f5f5f5;
+        }
+
+        .picking-list {
+            width: 297mm;
+            min-height: 210mm;
+            margin: 10mm auto;
+            padding: 8mm 10mm;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* ── 헤더 ── */
+        .pl-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #333;
+            padding-bottom: 6mm;
+            margin-bottom: 4mm;
+        }
+        .pl-header-left h1 {
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+        .pl-header-left .pl-meta {
+            font-size: 11px;
+            color: #555;
+            line-height: 1.6;
+        }
+        .pl-header-right {
+            text-align: right;
+        }
+        .pl-header-right .print-order {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .pl-header-right svg {
+            display: block;
+            margin-left: auto;
+        }
+
+        /* ── 요약 ── */
+        .pl-summary {
+            display: flex;
+            gap: 12mm;
+            margin-bottom: 4mm;
+            font-size: 12px;
+        }
+        .pl-summary .item {
+            display: flex;
+            align-items: center;
+            gap: 2mm;
+        }
+        .pl-summary .label {
+            color: #666;
+        }
+        .pl-summary .value {
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        /* ── 테이블 ── */
+        .pl-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4mm;
+        }
+        .pl-table th,
+        .pl-table td {
+            border: 1px solid #555;
+            padding: 3px 6px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .pl-table thead th {
+            background: #333;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 5px 6px;
+        }
+        .pl-table tbody td {
+            font-size: 11px;
+        }
+        .pl-table .col-no { width: 35px; }
+        .pl-table .col-barcode { width: 120px; font-family: 'Consolas', 'Courier New', monospace; }
+        .pl-table .col-name { text-align: left; padding-left: 8px; }
+        .pl-table .col-qty { width: 70px; font-weight: 600; }
+        .pl-table .col-check { width: 70px; }
+        .pl-table tbody tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .pl-table tfoot td {
+            font-weight: 700;
+            font-size: 12px;
+            background: #f0f0f0;
+            padding: 5px 6px;
+        }
+
+        /* ── 푸터 ── */
+        .pl-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 3mm;
+            border-top: 1px solid #999;
+            font-size: 10px;
+            color: #777;
+        }
+
+        /* ── 인쇄 버튼 (화면용) ── */
+        .print-actions {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        .print-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .btn-print {
+            background: #0d6efd;
+            color: #fff;
+        }
+        .btn-print:hover {
+            background: #0b5ed7;
+        }
+        .btn-close-page {
+            background: #6c757d;
+            color: #fff;
+        }
+        .btn-close-page:hover {
+            background: #5c636a;
+        }
+
+        /* ── 인쇄 스타일 ── */
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 8mm;
+            }
+            body {
+                background: #fff;
+            }
+            .picking-list {
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            .print-actions {
+                display: none !important;
+            }
+            .pl-table tbody tr {
+                page-break-inside: avoid;
+            }
+            .pl-table tbody tr:nth-child(even) {
+                background: #f5f5f5 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .pl-table thead th {
+                background: #333 !important;
+                color: #fff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .pl-table tfoot td {
+                background: #f0f0f0 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 인쇄 버튼 -->
+    <div class="print-actions">
+        <button class="btn-print" onclick="window.print()">
+            🖨️ 인쇄
+        </button>
+        <button class="btn-close-page" onclick="window.close()">
+            ✕ 닫기
+        </button>
+    </div>
+
+    <div class="picking-list">
+        <!-- 헤더 -->
+        <div class="pl-header">
+            <div class="pl-header-left">
+                <h1>LOGISFIT 피킹리스트</h1>
+                <div class="pl-meta">
+                    <div>파일명: {{ batch.file_name }}</div>
+                    <div>출력시간: {{ print_time }}</div>
+                </div>
+            </div>
+            <div class="pl-header-right">
+                <div class="print-order">출력차수: {{ print_order }}차</div>
+                <svg id="barcode"></svg>
+            </div>
+        </div>
+
+        <!-- 요약 -->
+        <div class="pl-summary">
+            <div class="item">
+                <span class="label">총 SKU:</span>
+                <span class="value">{{ total_sku_count }}종</span>
+            </div>
+            <div class="item">
+                <span class="label">총 수량:</span>
+                <span class="value">{{ total_quantity }}개</span>
+            </div>
+            <div class="item">
+                <span class="label">총 송장:</span>
+                <span class="value">{{ batch.total_orders }}건</span>
+            </div>
+        </div>
+
+        <!-- 테이블 -->
+        <table class="pl-table">
+            <thead>
+                <tr>
+                    <th class="col-no">No</th>
+                    <th class="col-barcode">바코드번호</th>
+                    <th class="col-name">매칭상품명</th>
+                    <th class="col-qty">매칭수량</th>
+                    <th class="col-check">비고</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td class="col-no">{{ forloop.counter }}</td>
+                    <td class="col-barcode">{{ product.barcode }}</td>
+                    <td class="col-name">{{ product.product_name }}</td>
+                    <td class="col-qty">{{ product.total_qty }}</td>
+                    <td class="col-check"></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:20px; color:#999;">
+                        상품 데이터가 없습니다.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3" style="text-align:right; padding-right:10px;">합계</td>
+                    <td class="col-qty">{{ total_quantity }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- 푸터 -->
+        <div class="pl-footer">
+            <span>파일: {{ batch.file_name }} | 업로드: {{ batch.uploaded_by }} | {{ batch.uploaded_at|date:"Y-m-d H:i" }}</span>
+            <span>LOGISFIT 3PL</span>
+        </div>
+    </div>
+
+    <!-- JsBarcode CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                JsBarcode('#barcode', '{{ barcode_value }}', {
+                    format: 'CODE128',
+                    width: 1.5,
+                    height: 40,
+                    displayValue: true,
+                    fontSize: 11,
+                    margin: 0,
+                    textMargin: 2,
+                });
+            } catch (e) {
+                console.error('바코드 생성 실패:', e);
+            }
+        });
+    </script>
+</body>
+</html>
