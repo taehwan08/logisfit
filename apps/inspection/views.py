@@ -1101,38 +1101,39 @@ def delete_upload_batch(request, batch_id):
 def picking_list_page(request, batch_id):
     """피킹리스트 출력 페이지 (A4 가로 인쇄용)
 
-    UploadBatch 내 모든 OrderProduct를 바코드 기준으로 집계하여
-    매칭상품명, 매칭수량 합계, 바코드번호를 표시한다.
+    UploadBatch 내 모든 OrderProduct를 매칭상품명(product_name) 기준으로 집계하여
+    매칭수량 합계, 관련 바코드번호를 표시한다.
 
     두 가지 테이블:
-    1) 총 합계 테이블: 바코드별 전체 수량 합산
-    2) 그룹핑 테이블: 바코드+수량 조합별 건수 (예: A-20개짜리 17건)
+    1) 총 합계 테이블: 매칭상품명별 전체 수량 합산
+    2) 그룹핑 테이블: 매칭상품명+수량 조합별 건수 (예: A-20개짜리 17건)
     """
     batch = get_object_or_404(UploadBatch, pk=batch_id)
 
     base_qs = OrderProduct.objects.filter(order__upload_batch=batch)
 
-    # 1) 총 합계: 바코드별 수량 합산
+    # 1) 총 합계: 매칭상품명별 수량 합산 (바코드는 대표값 하나만 가져옴)
+    from django.db.models import Min
     products = list(
         base_qs
-        .values('barcode', 'product_name')
-        .annotate(total_qty=Sum('quantity'))
+        .values('product_name')
+        .annotate(total_qty=Sum('quantity'), barcode=Min('barcode'))
         .order_by('product_name')
     )
 
-    # 2) 그룹핑: 바코드+수량 조합별 건수
-    #    예: barcode=8800309590019, quantity=20 → order_count=17건, subtotal=340
+    # 2) 그룹핑: 매칭상품명+수량 조합별 건수
+    #    예: product_name="트러블 패드", quantity=20 → order_count=17건, subtotal=340
     grouped_rows = list(
         base_qs
-        .values('barcode', 'product_name', 'quantity')
-        .annotate(order_count=Count('id'))
-        .order_by('product_name', 'barcode', '-quantity')
+        .values('product_name', 'quantity')
+        .annotate(order_count=Count('id'), barcode=Min('barcode'))
+        .order_by('product_name', '-quantity')
     )
 
-    # 그룹핑 데이터를 바코드별로 묶기
+    # 그룹핑 데이터를 매칭상품명별로 묶기
     grouped_products = {}
     for row in grouped_rows:
-        key = row['barcode']
+        key = row['product_name']
         if key not in grouped_products:
             grouped_products[key] = {
                 'barcode': row['barcode'],
