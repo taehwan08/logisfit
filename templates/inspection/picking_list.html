@@ -137,9 +137,23 @@
             font-size: 11px;
         }
         .pl-table .col-no { width: 35px; }
-        .pl-table .col-barcode-num { width: 110px; font-family: 'Consolas', 'Courier New', monospace; font-size: 10px; }
-        .pl-table .col-barcode-img { width: 130px; }
-        .pl-table .col-barcode-img svg { max-width: 120px; height: auto; }
+        .pl-table .col-barcode {
+            width: 150px;
+            padding: 4px 12px;
+        }
+        .pl-table .col-barcode .barcode-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .pl-table .col-barcode svg { max-width: 130px; height: auto; }
+        .pl-table .col-barcode .barcode-num {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 9px;
+            color: #444;
+            letter-spacing: 0.5px;
+        }
         .pl-table .col-name { text-align: left; padding-left: 8px; }
         .pl-table .col-qty { width: 65px; font-weight: 600; }
         .pl-table .col-count { width: 55px; }
@@ -321,8 +335,7 @@
                 <thead>
                     <tr>
                         <th class="col-no">No</th>
-                        <th class="col-barcode-num">바코드번호</th>
-                        <th class="col-barcode-img">바코드</th>
+                        <th class="col-barcode">바코드</th>
                         <th class="col-name">매칭상품명</th>
                         <th class="col-qty">매칭수량</th>
                         <th class="col-check">비고</th>
@@ -332,15 +345,14 @@
                     {% for product in products %}
                     <tr>
                         <td class="col-no">{{ forloop.counter }}</td>
-                        <td class="col-barcode-num">{{ product.barcode }}</td>
-                        <td class="col-barcode-img"><svg class="product-barcode" data-barcode="{{ product.barcode }}"></svg></td>
+                        <td class="col-barcode"><div class="barcode-wrap"><svg class="product-barcode" data-barcode="{{ product.barcode }}"></svg><span class="barcode-num">{{ product.barcode }}</span></div></td>
                         <td class="col-name">{{ product.product_name }}</td>
                         <td class="col-qty">{{ product.total_qty }}</td>
                         <td class="col-check"></td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" style="text-align:center; padding:20px; color:#999;">
+                        <td colspan="5" style="text-align:center; padding:20px; color:#999;">
                             상품 데이터가 없습니다.
                         </td>
                     </tr>
@@ -348,7 +360,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="4" style="text-align:right; padding-right:10px;">합계</td>
+                        <td colspan="3" style="text-align:right; padding-right:10px;">합계</td>
                         <td class="col-qty">{{ total_quantity }}</td>
                         <td></td>
                     </tr>
@@ -363,8 +375,7 @@
                 <thead>
                     <tr>
                         <th class="col-no">No</th>
-                        <th class="col-barcode-num">바코드번호</th>
-                        <th class="col-barcode-img">바코드</th>
+                        <th class="col-barcode">바코드</th>
                         <th class="col-name">매칭상품명</th>
                         <th class="col-qty">수량</th>
                         <th class="col-count">건수</th>
@@ -377,8 +388,7 @@
                     <!-- 상품 그룹 헤더 -->
                     <tr class="group-header">
                         <td>{{ forloop.counter }}</td>
-                        <td class="col-barcode-num">{{ group.barcode }}</td>
-                        <td class="col-barcode-img"><svg class="product-barcode" data-barcode="{{ group.barcode }}"></svg></td>
+                        <td class="col-barcode"><div class="barcode-wrap"><svg class="product-barcode" data-barcode="{{ group.barcode }}"></svg><span class="barcode-num">{{ group.barcode }}</span></div></td>
                         <td class="col-name">{{ group.product_name }}</td>
                         <td colspan="3" style="text-align:right; padding-right:8px;">합계: {{ group.total_qty }}</td>
                         <td></td>
@@ -386,7 +396,6 @@
                     <!-- 수량별 상세 -->
                     {% for detail in group.details %}
                     <tr class="group-detail">
-                        <td></td>
                         <td></td>
                         <td></td>
                         <td class="col-name" style="padding-left:20px; color:#555;">ㄴ {{ detail.quantity }}개짜리</td>
@@ -398,7 +407,7 @@
                     {% endfor %}
                     {% empty %}
                     <tr>
-                        <td colspan="8" style="text-align:center; padding:20px; color:#999;">
+                        <td colspan="7" style="text-align:center; padding:20px; color:#999;">
                             상품 데이터가 없습니다.
                         </td>
                     </tr>
@@ -406,7 +415,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="6" style="text-align:right; padding-right:10px;">총합계</td>
+                        <td colspan="5" style="text-align:right; padding-right:10px;">총합계</td>
                         <td class="col-subtotal">{{ total_quantity }}</td>
                         <td></td>
                     </tr>
