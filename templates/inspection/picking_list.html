@@ -38,9 +38,10 @@
             margin-bottom: 4px;
         }
         .pl-header-left .pl-meta {
-            font-size: 11px;
+            font-size: 14px;
             color: #555;
             line-height: 1.6;
+            font-weight: 600;
         }
         .pl-header-right {
             text-align: right;
@@ -320,10 +321,9 @@
         <!-- 헤더 -->
         <div class="pl-header">
             <div class="pl-header-left">
-                <h1>LOGISFIT 피킹리스트</h1>
+                <h1>피킹리스트 - {{ bd.print_time|slice:":10" }}</h1>
                 <div class="pl-meta">
-                    <div>파일명: {% if bd.file_names %}{{ bd.file_names }}{% else %}{{ bd.batch.file_name }}{% endif %}</div>
-                    <div>출력시간: {{ bd.print_time }}</div>
+                    <div>{{ bd.print_time }}</div>
                 </div>
             </div>
             <div class="pl-header-right">
