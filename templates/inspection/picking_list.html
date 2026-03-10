@@ -50,9 +50,20 @@
             font-weight: 700;
             margin-bottom: 6px;
         }
-        .pl-header-right svg {
+        .pl-header-right .header-qr {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+        .pl-header-right .header-qr canvas {
             display: block;
-            margin-left: auto;
+        }
+        .pl-header-right .header-qr .qr-label {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 9px;
+            color: #444;
+            text-align: right;
         }
 
         /* ── 요약 ── */
@@ -317,7 +328,7 @@
             </div>
             <div class="pl-header-right">
                 <div class="print-order">출력차수: {{ bd.print_order }}차</div>
-                <svg class="header-barcode" data-barcode="{{ bd.barcode_value }}"></svg>
+                <div class="header-qr" data-barcode="{{ bd.barcode_value }}"></div>
             </div>
         </div>
 
@@ -432,8 +443,10 @@
     </div>
     {% endfor %}
 
-    <!-- JsBarcode CDN -->
+    <!-- JsBarcode CDN (상품 바코드용) -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <!-- QRCode.js CDN (헤더 QR코드용) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script>
         // 현재 탭 상태
         let currentTab = 'summary';
@@ -463,22 +476,29 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 헤더 바코드 (각 피킹리스트마다)
-            document.querySelectorAll('.header-barcode').forEach(function(svg) {
-                const code = svg.getAttribute('data-barcode');
+            // 헤더 QR코드 (각 피킹리스트마다)
+            document.querySelectorAll('.header-qr').forEach(function(container) {
+                const code = container.getAttribute('data-barcode');
                 if (!code) return;
                 try {
-                    JsBarcode(svg, code, {
-                        format: 'CODE128',
-                        width: 1.5,
-                        height: 40,
-                        displayValue: true,
-                        fontSize: 11,
+                    const canvas = document.createElement('canvas');
+                    QRCode.toCanvas(canvas, code, {
+                        width: 80,
                         margin: 0,
-                        textMargin: 2,
+                        errorCorrectionLevel: 'M',
+                    }, function(err) {
+                        if (err) {
+                            console.error('헤더 QR코드 생성 실패:', err);
+                            return;
+                        }
+                        container.appendChild(canvas);
+                        const label = document.createElement('div');
+                        label.className = 'qr-label';
+                        label.textContent = code;
+                        container.appendChild(label);
                     });
                 } catch (e) {
-                    console.error('헤더 바코드 생성 실패:', e);
+                    console.error('헤더 QR코드 생성 실패:', e);
                 }
             });
 
