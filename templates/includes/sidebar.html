@@ -19,6 +19,12 @@
                     <span>대시보드</span>
                 </a>
             </li>
+            <li class="sidebar-item">
+                <a href="{% url 'accounts:announcement_list' %}" class="sidebar-link {% if request.resolver_match and 'announcement' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="bi bi-megaphone"></i>
+                    <span>공지사항</span>
+                </a>
+            </li>
 
             {% if user.is_admin or user.is_superuser %}
                 <!-- 관리자 메뉴 -->
