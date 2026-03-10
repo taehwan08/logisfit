@@ -121,13 +121,23 @@
         .history-list li:last-child {
             border-bottom: none;
         }
-        .history-file {
-            font-weight: 600;
-            color: #333;
+        .history-primary {
+            font-weight: 700;
+            font-size: 15px;
+            color: #222;
         }
-        .history-meta {
+        .history-primary .order-count {
+            color: #0d6efd;
+        }
+        .history-sub {
+            color: #999;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        .history-time {
             color: #888;
             font-size: 12px;
+            white-space: nowrap;
         }
         .history-empty {
             text-align: center;
@@ -218,9 +228,9 @@
                 title = escapeHtml(result.message);
                 const b = result.batch;
                 detail = `
-                    <div><strong>${escapeHtml(b.file_name)}</strong></div>
-                    <div>${escapeHtml(b.print_order)}차 | 송장 ${b.total_orders}건</div>
-                    <div>처리 시간: ${b.picked_up_at}</div>
+                    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">${escapeHtml(b.print_order)}차 &mdash; ${b.total_orders}건</div>
+                    <div style="color:inherit;opacity:0.7;font-size:12px;">${escapeHtml(b.file_name)}</div>
+                    <div style="margin-top:4px;">처리 시간: ${b.picked_up_at}</div>
                 `;
             } else if (result.success && result.already_picked) {
                 // 이미 픽업됨
@@ -229,9 +239,9 @@
                 title = escapeHtml(result.message);
                 const b = result.batch;
                 detail = `
-                    <div><strong>${escapeHtml(b.file_name)}</strong></div>
-                    <div>${escapeHtml(b.print_order)}차 | 송장 ${b.total_orders}건</div>
-                    <div>픽업 시간: ${b.picked_up_at}</div>
+                    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">${escapeHtml(b.print_order)}차 &mdash; ${b.total_orders}건</div>
+                    <div style="color:inherit;opacity:0.7;font-size:12px;">${escapeHtml(b.file_name)}</div>
+                    <div style="margin-top:4px;">픽업 시간: ${b.picked_up_at}</div>
                     ${b.picked_up_by ? `<div>작업자: ${escapeHtml(b.picked_up_by)}</div>` : ''}
                 `;
             } else {
@@ -259,14 +269,11 @@
 
         async function loadTodayHistory() {
             try {
-                const response = await fetch('{% url "inspection:get_upload_batches" %}?page_size=100');
+                const response = await fetch('{% url "inspection:get_upload_batches" %}?page_size=100&picked_today=1');
                 const result = await response.json();
                 if (!result.success) return;
 
-                const today = new Date().toISOString().slice(0, 10);
-                const pickedToday = result.batches.filter(b =>
-                    b.picked_up_at && b.picked_up_at.slice(0, 10) === today
-                );
+                const pickedToday = result.batches;
 
                 if (pickedToday.length === 0) {
                     historyList.innerHTML = '<li class="history-empty">오늘 픽업 이력이 없습니다.</li>';
@@ -282,10 +289,10 @@
                     });
                     return `<li>
                         <div>
-                            <span class="history-file">${escapeHtml(b.file_name)}</span>
-                            <span class="history-meta ms-2">${b.print_order}차 | ${b.total_orders}건</span>
+                            <div class="history-primary">${escapeHtml(b.print_order)}차 &mdash; <span class="order-count">${b.total_orders}건</span></div>
+                            <div class="history-sub">${escapeHtml(b.file_name)}</div>
                         </div>
-                        <span class="history-meta">${pickTime}</span>
+                        <span class="history-time">${pickTime}</span>
                     </li>`;
                 }).join('');
             } catch (err) {

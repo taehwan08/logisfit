@@ -1065,10 +1065,16 @@ def get_upload_batches(request):
     Query params:
         page: 페이지 번호 (기본: 1)
         page_size: 페이지당 건수 (기본: 10, 최대: 100)
+        picked_today: "1" 이면 오늘 픽업 완료된 배치만 반환
     """
     from django.core.paginator import Paginator
 
     batches = UploadBatch.objects.all()
+
+    # 오늘 픽업 완료 필터
+    if request.GET.get('picked_today') == '1':
+        today = timezone.localdate()
+        batches = batches.filter(picked_up_at__date=today)
 
     page = request.GET.get('page', 1)
     page_size = request.GET.get('page_size', 10)
