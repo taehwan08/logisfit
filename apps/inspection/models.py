@@ -7,7 +7,13 @@ from django.utils import timezone
 
 class UploadBatch(models.Model):
     """업로드 배치 (파일 단위 업로드 이력)"""
+    FILE_FORMAT_CHOICES = [
+        ('eveut', '이벗'),
+        ('cl', 'CL'),
+    ]
     file_name = models.CharField('파일명', max_length=200)
+    file_format = models.CharField('양식', max_length=10, blank=True, default='',
+                                   choices=FILE_FORMAT_CHOICES)
     print_order = models.CharField('출력차수', max_length=100, blank=True, default='')
     delivery_memo = models.CharField('배송메모', max_length=200, blank=True, default='')
     total_orders = models.IntegerField('송장 수', default=0)

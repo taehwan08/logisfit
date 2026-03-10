@@ -421,8 +421,12 @@ def upload_excel(request):
             if request.user.is_authenticated:
                 uploader = request.user.name or request.user.email or ''
 
+            # 양식 구분: format1=이벗(eveut), format2=CL(cl)
+            batch_file_format = 'eveut' if file_format == 'format1' else 'cl'
+
             batch = UploadBatch.objects.create(
                 file_name=excel_file.name,
+                file_format=batch_file_format,
                 print_order=batch_print_order,
                 delivery_memo=batch_delivery_memo,
                 uploaded_by=uploader,
@@ -1056,6 +1060,7 @@ def get_upload_batches(request):
         result.append({
             'id': b.id,
             'file_name': b.file_name,
+            'file_format': b.file_format,
             'print_order': b.print_order,
             'delivery_memo': b.delivery_memo,
             'total_orders': b.total_orders,
