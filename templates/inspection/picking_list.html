@@ -311,7 +311,7 @@
             <div class="pl-header-left">
                 <h1>LOGISFIT 피킹리스트</h1>
                 <div class="pl-meta">
-                    <div>파일명: {{ bd.batch.file_name }}</div>
+                    <div>파일명: {% if bd.file_names %}{{ bd.file_names }}{% else %}{{ bd.batch.file_name }}{% endif %}</div>
                     <div>출력시간: {{ bd.print_time }}</div>
                 </div>
             </div>
@@ -333,7 +333,7 @@
             </div>
             <div class="item">
                 <span class="label">총 송장:</span>
-                <span class="value">{{ bd.batch.total_orders }}건</span>
+                <span class="value">{% if bd.total_orders %}{{ bd.total_orders }}{% else %}{{ bd.batch.total_orders }}{% endif %}건</span>
             </div>
         </div>
 
@@ -422,7 +422,7 @@
 
         <!-- 푸터 -->
         <div class="pl-footer">
-            <span>파일: {{ bd.batch.file_name }} | 업로드: {{ bd.batch.uploaded_by }} | {{ bd.batch.uploaded_at|date:"Y-m-d H:i" }}</span>
+            <span>파일: {% if bd.file_names %}{{ bd.file_names }}{% else %}{{ bd.batch.file_name }}{% endif %} | 업로드: {{ bd.batch.uploaded_by }} | {{ bd.batch.uploaded_at|date:"Y-m-d H:i" }}</span>
             <span>LOGISFIT 3PL</span>
         </div>
     </div>

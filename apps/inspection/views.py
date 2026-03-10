@@ -1206,10 +1206,14 @@ def picking_list_page(request, batch_id):
 
 @require_GET
 def picking_list_multi(request):
-    """피킹리스트 출력 페이지 (여러 배치 동시 출력)
+    """피킹리스트 출력 페이지 (여러 배치를 하나로 합산 출력)
 
     Query param: ids=1,2,3 (쉼표 구분 배치 ID)
+    여러 배치의 상품을 하나의 총 합계 테이블로 합산하고,
+    출력차수는 쉼표 구분(예: 65,75,81차), 바코드도 동일 형태로 생성.
     """
+    from django.db.models import Min
+
     ids_str = request.GET.get('ids', '')
     try:
         batch_ids = [int(x.strip()) for x in ids_str.split(',') if x.strip()]
@@ -1227,16 +1231,79 @@ def picking_list_multi(request):
         })
 
     batches = UploadBatch.objects.filter(id__in=batch_ids)
-    # 요청 순서 유지
     batch_map = {b.id: b for b in batches}
-    batches_data = []
-    for bid in batch_ids:
-        if bid in batch_map:
-            batches_data.append(_build_picking_list_context(batch_map[bid]))
+    ordered_batches = [batch_map[bid] for bid in batch_ids if bid in batch_map]
 
-    # 첫 번째 배치를 기본 컨텍스트로 사용 (단일 배치 호환)
-    first = batches_data[0] if batches_data else {}
-    ctx = {**first, 'batches_data': batches_data, 'multi': len(batches_data) > 1}
+    if not ordered_batches:
+        return render(request, 'inspection/picking_list.html', {
+            'batches_data': [], 'multi': True,
+            'products': [], 'combo_groups': [],
+            'total_quantity': 0, 'total_sku_count': 0,
+        })
+
+    # 출력차수 합산: "65,75,81"
+    print_orders = [b.print_order or str(b.id) for b in ordered_batches]
+    combined_print_order = ','.join(print_orders)
+
+    now = timezone.localtime()
+    barcode_value = f"{now.strftime('%Y%m%d')}-{combined_print_order}"
+
+    # 총 합계: 모든 배치의 상품을 product_name 기준 합산
+    base_qs = OrderProduct.objects.filter(order__upload_batch__in=ordered_batches)
+    products = list(
+        base_qs
+        .values('product_name')
+        .annotate(total_qty=Sum('quantity'), barcode=Min('barcode'))
+        .order_by('product_name')
+    )
+
+    # 그룹핑: 모든 배치의 주문 조합 기준 합산
+    all_orders = Order.objects.filter(upload_batch__in=ordered_batches).prefetch_related('products')
+    combo_groups = defaultdict(lambda: {'count': 0, 'products': []})
+    for order in all_orders:
+        order_products = list(order.products.all())
+        combo_key = tuple(sorted(
+            (p.product_name, p.quantity) for p in order_products
+        ))
+        if combo_groups[combo_key]['count'] == 0:
+            combo_groups[combo_key]['products'] = [
+                {'product_name': p.product_name, 'quantity': p.quantity, 'barcode': p.barcode}
+                for p in order_products
+            ]
+        combo_groups[combo_key]['count'] += 1
+
+    combo_list = []
+    for combo_key, data in combo_groups.items():
+        sorted_products = sorted(data['products'], key=lambda x: x['product_name'])
+        combo_list.append({
+            'products': sorted_products,
+            'order_count': data['count'],
+        })
+    combo_list.sort(key=lambda x: -x['order_count'])
+
+    total_quantity = sum(p['total_qty'] for p in products)
+    total_orders = sum(b.total_orders for b in ordered_batches)
+    file_names = ', '.join(b.file_name for b in ordered_batches)
+
+    ctx = {
+        'batches_data': [{
+            'batch': ordered_batches[0],  # 대표 배치 (푸터용)
+            'products': products,
+            'combo_groups': combo_list,
+            'total_quantity': total_quantity,
+            'total_sku_count': len(products),
+            'print_order': combined_print_order,
+            'print_time': now.strftime('%Y-%m-%d %H:%M:%S'),
+            'barcode_value': barcode_value,
+            'file_names': file_names,
+            'total_orders': total_orders,
+        }],
+        'multi': True,
+        'products': products,
+        'combo_groups': combo_list,
+        'total_quantity': total_quantity,
+        'total_sku_count': len(products),
+    }
     return render(request, 'inspection/picking_list.html', ctx)
 
 
@@ -1253,6 +1320,7 @@ def pickup_scan(request):
     """피킹리스트 바코드 스캔으로 픽업 완료 처리
 
     바코드 형식: YYYYMMDD-차수 (예: 20260310-3)
+    복수 배치: YYYYMMDD-차수1,차수2,차수3 (예: 20260310-65,75,81)
     uploaded_at 날짜 + print_order로 배치를 조회하여 픽업 완료 표시.
     """
     try:
@@ -1264,7 +1332,7 @@ def pickup_scan(request):
     if not barcode_value:
         return JsonResponse({'success': False, 'message': '바코드가 필요합니다.'}, status=400)
 
-    # 바코드 파싱: "YYYYMMDD-차수"
+    # 바코드 파싱: "YYYYMMDD-차수" 또는 "YYYYMMDD-차수1,차수2,..."
     parts = barcode_value.split('-', 1)
     if len(parts) != 2:
         return JsonResponse({
@@ -1272,7 +1340,7 @@ def pickup_scan(request):
             'message': f'인식할 수 없는 바코드입니다: {barcode_value}',
         })
 
-    date_str, print_order = parts
+    date_str, print_order_part = parts
     try:
         from datetime import datetime
         target_date = datetime.strptime(date_str, '%Y%m%d').date()
@@ -1282,53 +1350,86 @@ def pickup_scan(request):
             'message': f'날짜 형식이 올바르지 않습니다: {date_str}',
         })
 
-    # 배치 조회: uploaded_at 날짜 + print_order
-    batch = UploadBatch.objects.filter(
-        print_order=print_order,
-        uploaded_at__date=target_date,
-    ).first()
+    # 쉼표 구분 차수 파싱
+    print_orders = [po.strip() for po in print_order_part.split(',') if po.strip()]
+    if not print_orders:
+        return JsonResponse({
+            'success': False,
+            'message': f'차수 정보가 없습니다: {barcode_value}',
+        })
 
-    if not batch:
+    # 배치 조회: uploaded_at 날짜 + print_order(들)
+    batches = list(UploadBatch.objects.filter(
+        print_order__in=print_orders,
+        uploaded_at__date=target_date,
+    ))
+
+    if not batches:
         return JsonResponse({
             'success': False,
             'message': f'해당 배치를 찾을 수 없습니다 ({barcode_value})',
         })
 
-    # 이미 픽업 완료
-    if batch.picked_up_at:
-        return JsonResponse({
-            'success': True,
-            'already_picked': True,
-            'message': '이미 픽업 완료된 배치입니다.',
-            'batch': {
-                'id': batch.id,
-                'file_name': batch.file_name,
-                'print_order': batch.print_order,
-                'total_orders': batch.total_orders,
-                'picked_up_at': timezone.localtime(batch.picked_up_at).strftime('%Y-%m-%d %H:%M:%S'),
-                'picked_up_by': batch.picked_up_by,
-            },
-        })
+    # 찾지 못한 차수 확인
+    found_orders = {b.print_order for b in batches}
+    missing_orders = [po for po in print_orders if po not in found_orders]
 
-    # 픽업 완료 처리
     worker = ''
     if request.user.is_authenticated:
         worker = request.user.name or request.user.email or ''
 
-    batch.picked_up_at = timezone.now()
-    batch.picked_up_by = worker
-    batch.save(update_fields=['picked_up_at', 'picked_up_by'])
+    now = timezone.now()
+    newly_picked = []
+    already_picked = []
+
+    for batch in batches:
+        if batch.picked_up_at:
+            already_picked.append(batch)
+        else:
+            batch.picked_up_at = now
+            batch.picked_up_by = worker
+            batch.save(update_fields=['picked_up_at', 'picked_up_by'])
+            newly_picked.append(batch)
+
+    def _batch_info(b):
+        return {
+            'id': b.id,
+            'file_name': b.file_name,
+            'print_order': b.print_order,
+            'total_orders': b.total_orders,
+            'picked_up_at': timezone.localtime(b.picked_up_at).strftime('%Y-%m-%d %H:%M:%S'),
+            'picked_up_by': b.picked_up_by,
+        }
+
+    # 단일 배치 응답 (기존 호환)
+    if len(batches) == 1:
+        batch = batches[0]
+        is_already = batch in already_picked
+        return JsonResponse({
+            'success': True,
+            'already_picked': is_already,
+            'message': '이미 픽업 완료된 배치입니다.' if is_already else '픽업 완료!',
+            'batch': _batch_info(batch),
+        })
+
+    # 복수 배치 응답
+    total_orders = sum(b.total_orders for b in batches)
+    file_names = ', '.join(b.file_name for b in batches)
+    all_already = len(newly_picked) == 0
 
     return JsonResponse({
         'success': True,
-        'already_picked': False,
-        'message': '픽업 완료!',
+        'already_picked': all_already,
+        'message': f'이미 전체 픽업 완료 ({len(already_picked)}건)' if all_already
+                   else f'픽업 완료! ({len(newly_picked)}건 처리'
+                        + (f', {len(already_picked)}건 기처리' if already_picked else '')
+                        + (f', {len(missing_orders)}건 미발견' if missing_orders else '')
+                        + ')',
         'batch': {
-            'id': batch.id,
-            'file_name': batch.file_name,
-            'print_order': batch.print_order,
-            'total_orders': batch.total_orders,
-            'picked_up_at': timezone.localtime(batch.picked_up_at).strftime('%Y-%m-%d %H:%M:%S'),
-            'picked_up_by': batch.picked_up_by,
+            'file_name': file_names,
+            'print_order': ','.join(print_orders),
+            'total_orders': total_orders,
+            'picked_up_at': timezone.localtime(now).strftime('%Y-%m-%d %H:%M:%S'),
+            'picked_up_by': worker,
         },
     })

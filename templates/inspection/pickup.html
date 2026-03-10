@@ -215,22 +215,22 @@
                 // 픽업 완료 성공
                 cls = 'result-success';
                 icon = '<i class="bi bi-check-circle-fill"></i>';
-                title = '픽업 완료!';
+                title = escapeHtml(result.message);
                 const b = result.batch;
                 detail = `
                     <div><strong>${escapeHtml(b.file_name)}</strong></div>
-                    <div>${b.print_order}차 | 송장 ${b.total_orders}건</div>
+                    <div>${escapeHtml(b.print_order)}차 | 송장 ${b.total_orders}건</div>
                     <div>처리 시간: ${b.picked_up_at}</div>
                 `;
             } else if (result.success && result.already_picked) {
                 // 이미 픽업됨
                 cls = 'result-warning';
                 icon = '<i class="bi bi-exclamation-triangle-fill"></i>';
-                title = '이미 픽업 완료된 배치';
+                title = escapeHtml(result.message);
                 const b = result.batch;
                 detail = `
                     <div><strong>${escapeHtml(b.file_name)}</strong></div>
-                    <div>${b.print_order}차 | 송장 ${b.total_orders}건</div>
+                    <div>${escapeHtml(b.print_order)}차 | 송장 ${b.total_orders}건</div>
                     <div>픽업 시간: ${b.picked_up_at}</div>
                     ${b.picked_up_by ? `<div>작업자: ${escapeHtml(b.picked_up_by)}</div>` : ''}
                 `;
