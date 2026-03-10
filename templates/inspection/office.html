@@ -185,14 +185,18 @@
     <!-- 업로드 이력 -->
     <div class="col-12">
         <div class="card shadow-sm">
-            <div class="card-header bg-white">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>업로드 이력</h5>
+                <button id="btnPrintSelected" class="btn btn-sm btn-primary" style="display:none;" onclick="printSelected()">
+                    <i class="bi bi-printer me-1"></i>선택 프린트 (<span id="printCount">0</span>)
+                </button>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 batch-table">
                         <thead class="table-light">
                             <tr>
+                                <th class="text-center" style="width:35px;"><input type="checkbox" id="checkAll" onchange="toggleCheckAll(this)"></th>
                                 <th>파일명</th>
                                 <th>출력차수</th>
                                 <th>배송메모</th>
@@ -207,7 +211,7 @@
                         </thead>
                         <tbody id="batchesBody">
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
+                                <td colspan="11" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -443,7 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const tbody = document.getElementById('batchesBody');
 
             if (!result.batches || result.batches.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
                 updateStats(0, 0, 0, 0);
                 document.getElementById('paginationArea').style.display = 'none';
                 return;
@@ -471,6 +475,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 else if (pct > 0) barClass = 'bg-warning';
 
                 return `<tr>
+                    <td class="text-center">
+                        ${b.file_format === 'eveut' ? `<input type="checkbox" class="batch-check" value="${b.id}" onchange="updatePrintSelection()">` : ''}
+                    </td>
                     <td>
                         <i class="bi bi-file-earmark-excel text-success me-1"></i>
                         <span class="fw-medium">${escapeHtml(b.file_name)}</span>
@@ -558,6 +565,40 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('statInspecting').textContent = inspecting;
         document.getElementById('statCompleted').textContent = completed;
     }
+
+    // 체크박스 전체선택/해제
+    window.toggleCheckAll = function(el) {
+        document.querySelectorAll('.batch-check').forEach(cb => {
+            cb.checked = el.checked;
+        });
+        updatePrintSelection();
+    };
+
+    // 선택 프린트 버튼 상태 갱신
+    window.updatePrintSelection = function() {
+        const checked = document.querySelectorAll('.batch-check:checked');
+        const btn = document.getElementById('btnPrintSelected');
+        const cnt = document.getElementById('printCount');
+        if (checked.length > 0) {
+            btn.style.display = '';
+            cnt.textContent = checked.length;
+        } else {
+            btn.style.display = 'none';
+        }
+        // 전체선택 체크박스 동기화
+        const all = document.querySelectorAll('.batch-check');
+        const checkAll = document.getElementById('checkAll');
+        if (checkAll) {
+            checkAll.checked = all.length > 0 && checked.length === all.length;
+        }
+    };
+
+    // 선택된 배치 피킹리스트 일괄 출력
+    window.printSelected = function() {
+        const ids = Array.from(document.querySelectorAll('.batch-check:checked')).map(cb => cb.value);
+        if (ids.length === 0) return;
+        window.open(`/inspection/api/batches/picking-list/?ids=${ids.join(',')}`, '_blank');
+    };
 
     function escapeHtml(text) {
         if (!text) return '';

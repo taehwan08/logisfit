@@ -1139,23 +1139,13 @@ def delete_upload_batch(request, batch_id):
         }, status=404)
 
 
-@require_GET
-def picking_list_page(request, batch_id):
-    """피킹리스트 출력 페이지 (A4 가로 인쇄용)
-
-    UploadBatch 내 모든 OrderProduct를 매칭상품명(product_name) 기준으로 집계하여
-    매칭수량 합계, 관련 바코드번호를 표시한다.
-
-    두 가지 테이블:
-    1) 총 합계 테이블: 매칭상품명별 전체 수량 합산
-    2) 그룹핑 테이블: 매칭상품명+수량 조합별 건수 (예: A-20개짜리 17건)
-    """
-    batch = get_object_or_404(UploadBatch, pk=batch_id)
+def _build_picking_list_context(batch):
+    """배치 하나에 대한 피킹리스트 컨텍스트를 생성한다."""
+    from django.db.models import Min
 
     base_qs = OrderProduct.objects.filter(order__upload_batch=batch)
 
-    # 1) 총 합계: 매칭상품명별 수량 합산 (바코드는 대표값 하나만 가져옴)
-    from django.db.models import Min
+    # 총 합계: 매칭상품명별 수량 합산
     products = list(
         base_qs
         .values('product_name')
@@ -1163,14 +1153,12 @@ def picking_list_page(request, batch_id):
         .order_by('product_name')
     )
 
-    # 2) 그룹핑: 주문건의 상품 조합 기준
-    #    동일한 상품 조합(product_name+quantity 세트)을 가진 주문들을 묶어 건수 표시
+    # 그룹핑: 주문건의 상품 조합 기준
     orders_in_batch = Order.objects.filter(upload_batch=batch).prefetch_related('products')
 
     combo_groups = defaultdict(lambda: {'count': 0, 'products': []})
     for order in orders_in_batch:
         order_products = list(order.products.all())
-        # 각 주문의 상품 조합을 정렬된 튜플로 키 생성
         combo_key = tuple(sorted(
             (p.product_name, p.quantity) for p in order_products
         ))
@@ -1181,7 +1169,6 @@ def picking_list_page(request, batch_id):
             ]
         combo_groups[combo_key]['count'] += 1
 
-    # 리스트 변환 후 건수 내림차순 정렬
     combo_list = []
     for combo_key, data in combo_groups.items():
         sorted_products = sorted(data['products'], key=lambda x: x['product_name'])
@@ -1191,14 +1178,11 @@ def picking_list_page(request, batch_id):
         })
     combo_list.sort(key=lambda x: -x['order_count'])
 
-    # 출력차수: 배치에 저장된 값 또는 배치 ID 기반 fallback
     print_order = batch.print_order or str(batch.id)
-
-    # 바코드 값: 출력일자 + 차수 조합 (예: 20260309-3)
     now = timezone.localtime()
     barcode_value = f"{now.strftime('%Y%m%d')}-{print_order}"
 
-    context = {
+    return {
         'batch': batch,
         'products': products,
         'combo_groups': combo_list,
@@ -1208,7 +1192,52 @@ def picking_list_page(request, batch_id):
         'print_time': now.strftime('%Y-%m-%d %H:%M:%S'),
         'barcode_value': barcode_value,
     }
-    return render(request, 'inspection/picking_list.html', context)
+
+
+@require_GET
+def picking_list_page(request, batch_id):
+    """피킹리스트 출력 페이지 (단일 배치)"""
+    batch = get_object_or_404(UploadBatch, pk=batch_id)
+    ctx = _build_picking_list_context(batch)
+    ctx['batches_data'] = [ctx.copy()]
+    ctx['multi'] = False
+    return render(request, 'inspection/picking_list.html', ctx)
+
+
+@require_GET
+def picking_list_multi(request):
+    """피킹리스트 출력 페이지 (여러 배치 동시 출력)
+
+    Query param: ids=1,2,3 (쉼표 구분 배치 ID)
+    """
+    ids_str = request.GET.get('ids', '')
+    try:
+        batch_ids = [int(x.strip()) for x in ids_str.split(',') if x.strip()]
+    except ValueError:
+        batch_ids = []
+
+    if not batch_ids:
+        return render(request, 'inspection/picking_list.html', {
+            'batches_data': [],
+            'multi': True,
+            'products': [],
+            'combo_groups': [],
+            'total_quantity': 0,
+            'total_sku_count': 0,
+        })
+
+    batches = UploadBatch.objects.filter(id__in=batch_ids)
+    # 요청 순서 유지
+    batch_map = {b.id: b for b in batches}
+    batches_data = []
+    for bid in batch_ids:
+        if bid in batch_map:
+            batches_data.append(_build_picking_list_context(batch_map[bid]))
+
+    # 첫 번째 배치를 기본 컨텍스트로 사용 (단일 배치 호환)
+    first = batches_data[0] if batches_data else {}
+    ctx = {**first, 'batches_data': batches_data, 'multi': len(batches_data) > 1}
+    return render(request, 'inspection/picking_list.html', ctx)
 
 
 @pickup_ip_required

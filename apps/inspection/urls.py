@@ -22,6 +22,7 @@ urlpatterns = [
     path('api/batches/', views.get_upload_batches, name='get_upload_batches'),
     path('api/batches/<int:batch_id>/delete/', views.delete_upload_batch, name='delete_upload_batch'),
     path('api/batches/<int:batch_id>/picking-list/', views.picking_list_page, name='picking_list'),
+    path('api/batches/picking-list/', views.picking_list_multi, name='picking_list_multi'),
 
     # 픽업 스캔
     path('pickup/', views.pickup_page, name='pickup_page'),
