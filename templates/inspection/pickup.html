@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>픽업 스캔 - LOGISFIT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f0f2f5;
+            font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+        }
+        .pickup-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 0 16px;
+        }
+        .pickup-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .pickup-header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .pickup-header p {
+            color: #888;
+            font-size: 14px;
+        }
+
+        /* 스캔 입력 */
+        .scan-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        .scan-input {
+            font-size: 20px;
+            padding: 14px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            transition: border-color 0.2s;
+        }
+        .scan-input:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
+        }
+
+        /* 결과 카드 */
+        .result-card {
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .result-success {
+            background: #d1e7dd;
+            border: 2px solid #a3cfbb;
+            color: #0f5132;
+        }
+        .result-warning {
+            background: #fff3cd;
+            border: 2px solid #ffe69c;
+            color: #664d03;
+        }
+        .result-error {
+            background: #f8d7da;
+            border: 2px solid #f1aeb5;
+            color: #842029;
+        }
+        .result-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+        .result-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .result-detail {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* 이력 목록 */
+        .history-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .history-card h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: #555;
+            margin-bottom: 12px;
+        }
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .history-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        .history-list li:last-child {
+            border-bottom: none;
+        }
+        .history-file {
+            font-weight: 600;
+            color: #333;
+        }
+        .history-meta {
+            color: #888;
+            font-size: 12px;
+        }
+        .history-empty {
+            text-align: center;
+            color: #aaa;
+            padding: 20px 0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="pickup-container">
+        <!-- 헤더 -->
+        <div class="pickup-header">
+            <h1><i class="bi bi-box-seam me-2"></i>LOGISFIT 픽업 스캔</h1>
+            <p>피킹리스트 바코드를 스캔하여 픽업 완료 처리</p>
+        </div>
+
+        <!-- 스캔 입력 -->
+        <div class="scan-card">
+            <label class="form-label fw-semibold mb-2">
+                <i class="bi bi-upc-scan me-1"></i>피킹리스트 바코드
+            </label>
+            <input type="text" id="barcodeInput" class="form-control scan-input"
+                   placeholder="바코드를 스캔하세요..." autocomplete="off" autofocus>
+        </div>
+
+        <!-- 결과 영역 -->
+        <div id="resultCard" class="result-card"></div>
+
+        <!-- 오늘 픽업 이력 -->
+        <div class="history-card">
+            <h3><i class="bi bi-clock-history me-1"></i>오늘 픽업 이력</h3>
+            <ul id="historyList" class="history-list">
+                <li class="history-empty">픽업 이력이 없습니다.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const barcodeInput = document.getElementById('barcodeInput');
+        const resultCard = document.getElementById('resultCard');
+        const historyList = document.getElementById('historyList');
+
+        // 페이지 로드 시 이력 불러오기
+        loadTodayHistory();
+
+        // Enter 키로 스캔 처리
+        barcodeInput.addEventListener('keypress', async (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+
+            const barcode = barcodeInput.value.trim();
+            if (!barcode) return;
+
+            barcodeInput.disabled = true;
+
+            try {
+                const response = await fetch('{% url "inspection:pickup_scan" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ barcode }),
+                });
+                const result = await response.json();
+                showResult(result);
+
+                if (result.success) {
+                    loadTodayHistory();
+                }
+            } catch (err) {
+                showResult({
+                    success: false,
+                    message: '서버 통신 오류가 발생했습니다.',
+                });
+            }
+
+            barcodeInput.value = '';
+            barcodeInput.disabled = false;
+            barcodeInput.focus();
+        });
+
+        function showResult(result) {
+            let cls, icon, title, detail;
+
+            if (result.success && !result.already_picked) {
+                // 픽업 완료 성공
+                cls = 'result-success';
+                icon = '<i class="bi bi-check-circle-fill"></i>';
+                title = '픽업 완료!';
+                const b = result.batch;
+                detail = `
+                    <div><strong>${escapeHtml(b.file_name)}</strong></div>
+                    <div>${b.print_order}차 | 송장 ${b.total_orders}건</div>
+                    <div>처리 시간: ${b.picked_up_at}</div>
+                `;
+            } else if (result.success && result.already_picked) {
+                // 이미 픽업됨
+                cls = 'result-warning';
+                icon = '<i class="bi bi-exclamation-triangle-fill"></i>';
+                title = '이미 픽업 완료된 배치';
+                const b = result.batch;
+                detail = `
+                    <div><strong>${escapeHtml(b.file_name)}</strong></div>
+                    <div>${b.print_order}차 | 송장 ${b.total_orders}건</div>
+                    <div>픽업 시간: ${b.picked_up_at}</div>
+                    ${b.picked_up_by ? `<div>작업자: ${escapeHtml(b.picked_up_by)}</div>` : ''}
+                `;
+            } else {
+                // 에러
+                cls = 'result-error';
+                icon = '<i class="bi bi-x-circle-fill"></i>';
+                title = '스캔 실패';
+                detail = `<div>${escapeHtml(result.message)}</div>`;
+            }
+
+            resultCard.className = `result-card ${cls}`;
+            resultCard.innerHTML = `
+                <div class="result-icon">${icon}</div>
+                <div class="result-title">${title}</div>
+                <div class="result-detail">${detail}</div>
+            `;
+            resultCard.style.display = 'block';
+
+            // 5초 후 자동 숨김
+            clearTimeout(resultCard._timer);
+            resultCard._timer = setTimeout(() => {
+                resultCard.style.display = 'none';
+            }, 5000);
+        }
+
+        async function loadTodayHistory() {
+            try {
+                const response = await fetch('{% url "inspection:get_upload_batches" %}?page_size=100');
+                const result = await response.json();
+                if (!result.success) return;
+
+                const today = new Date().toISOString().slice(0, 10);
+                const pickedToday = result.batches.filter(b =>
+                    b.picked_up_at && b.picked_up_at.slice(0, 10) === today
+                );
+
+                if (pickedToday.length === 0) {
+                    historyList.innerHTML = '<li class="history-empty">오늘 픽업 이력이 없습니다.</li>';
+                    return;
+                }
+
+                // 픽업 시간 내림차순 정렬
+                pickedToday.sort((a, b) => b.picked_up_at.localeCompare(a.picked_up_at));
+
+                historyList.innerHTML = pickedToday.map(b => {
+                    const pickTime = new Date(b.picked_up_at).toLocaleTimeString('ko-KR', {
+                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                    });
+                    return `<li>
+                        <div>
+                            <span class="history-file">${escapeHtml(b.file_name)}</span>
+                            <span class="history-meta ms-2">${b.print_order}차 | ${b.total_orders}건</span>
+                        </div>
+                        <span class="history-meta">${pickTime}</span>
+                    </li>`;
+                }).join('');
+            } catch (err) {
+                console.error('이력 로드 실패:', err);
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // 포커스 유지
+        document.addEventListener('click', () => barcodeInput.focus());
+    </script>
+</body>
+</html>

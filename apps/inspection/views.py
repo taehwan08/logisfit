@@ -1074,6 +1074,8 @@ def get_upload_batches(request):
             'completed': completed,
             'uploaded_by': b.uploaded_by,
             'uploaded_at': b.uploaded_at.isoformat(),
+            'picked_up_at': b.picked_up_at.isoformat() if b.picked_up_at else None,
+            'picked_up_by': b.picked_up_by,
         })
 
     return JsonResponse({
@@ -1176,3 +1178,95 @@ def picking_list_page(request, batch_id):
         'barcode_value': barcode_value,
     }
     return render(request, 'inspection/picking_list.html', context)
+
+
+def pickup_page(request):
+    """픽업 스캔 전용 페이지"""
+    return render(request, 'inspection/pickup.html')
+
+
+@csrf_exempt
+@require_POST
+def pickup_scan(request):
+    """피킹리스트 바코드 스캔으로 픽업 완료 처리
+
+    바코드 형식: YYYYMMDD-차수 (예: 20260310-3)
+    uploaded_at 날짜 + print_order로 배치를 조회하여 픽업 완료 표시.
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '잘못된 요청입니다.'}, status=400)
+
+    barcode_value = data.get('barcode', '').strip()
+    if not barcode_value:
+        return JsonResponse({'success': False, 'message': '바코드가 필요합니다.'}, status=400)
+
+    # 바코드 파싱: "YYYYMMDD-차수"
+    parts = barcode_value.split('-', 1)
+    if len(parts) != 2:
+        return JsonResponse({
+            'success': False,
+            'message': f'인식할 수 없는 바코드입니다: {barcode_value}',
+        })
+
+    date_str, print_order = parts
+    try:
+        from datetime import datetime
+        target_date = datetime.strptime(date_str, '%Y%m%d').date()
+    except ValueError:
+        return JsonResponse({
+            'success': False,
+            'message': f'날짜 형식이 올바르지 않습니다: {date_str}',
+        })
+
+    # 배치 조회: uploaded_at 날짜 + print_order
+    batch = UploadBatch.objects.filter(
+        print_order=print_order,
+        uploaded_at__date=target_date,
+    ).first()
+
+    if not batch:
+        return JsonResponse({
+            'success': False,
+            'message': f'해당 배치를 찾을 수 없습니다 ({barcode_value})',
+        })
+
+    # 이미 픽업 완료
+    if batch.picked_up_at:
+        return JsonResponse({
+            'success': True,
+            'already_picked': True,
+            'message': '이미 픽업 완료된 배치입니다.',
+            'batch': {
+                'id': batch.id,
+                'file_name': batch.file_name,
+                'print_order': batch.print_order,
+                'total_orders': batch.total_orders,
+                'picked_up_at': timezone.localtime(batch.picked_up_at).strftime('%Y-%m-%d %H:%M:%S'),
+                'picked_up_by': batch.picked_up_by,
+            },
+        })
+
+    # 픽업 완료 처리
+    worker = ''
+    if request.user.is_authenticated:
+        worker = request.user.name or request.user.email or ''
+
+    batch.picked_up_at = timezone.now()
+    batch.picked_up_by = worker
+    batch.save(update_fields=['picked_up_at', 'picked_up_by'])
+
+    return JsonResponse({
+        'success': True,
+        'already_picked': False,
+        'message': '픽업 완료!',
+        'batch': {
+            'id': batch.id,
+            'file_name': batch.file_name,
+            'print_order': batch.print_order,
+            'total_orders': batch.total_orders,
+            'picked_up_at': timezone.localtime(batch.picked_up_at).strftime('%Y-%m-%d %H:%M:%S'),
+            'picked_up_by': batch.picked_up_by,
+        },
+    })

@@ -201,12 +201,13 @@
                                 <th>진행률</th>
                                 <th>업로드자</th>
                                 <th>업로드 시간</th>
+                                <th class="text-center">픽업</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody id="batchesBody">
                             <tr>
-                                <td colspan="9" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
+                                <td colspan="10" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -442,7 +443,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const tbody = document.getElementById('batchesBody');
 
             if (!result.batches || result.batches.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
                 updateStats(0, 0, 0, 0);
                 document.getElementById('paginationArea').style.display = 'none';
                 return;
@@ -489,6 +490,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td>${escapeHtml(b.uploaded_by) || '-'}</td>
                     <td>
                         <span class="batch-meta">${dateStr} ${timeStr}</span>
+                    </td>
+                    <td class="text-center">
+                        ${b.picked_up_at
+                            ? `<span class="badge bg-success" title="${new Date(b.picked_up_at).toLocaleString('ko-KR')}${b.picked_up_by ? ' (' + escapeHtml(b.picked_up_by) + ')' : ''}">픽업완료</span>`
+                            : (b.file_format === 'eveut' ? '<span class="badge bg-secondary">대기</span>' : '')}
                     </td>
                     <td>
                         <div class="d-flex gap-1">

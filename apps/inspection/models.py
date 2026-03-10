@@ -20,6 +20,8 @@ class UploadBatch(models.Model):
     total_products = models.IntegerField('상품 수', default=0)
     uploaded_at = models.DateTimeField('업로드 시간', auto_now_add=True)
     uploaded_by = models.CharField('업로드자', max_length=50, blank=True, default='')
+    picked_up_at = models.DateTimeField('픽업 완료 시간', null=True, blank=True)
+    picked_up_by = models.CharField('픽업 작업자', max_length=50, blank=True, default='')
 
     class Meta:
         db_table = 'upload_batches'
