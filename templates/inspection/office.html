@@ -369,10 +369,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     successCount++;
                     if (fileItem) { fileItem.classList.remove('uploading'); fileItem.classList.add('done'); }
                     if (fileStatus) fileStatus.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
-                    alertsHtml += `<div class="alert alert-success py-2 mb-1">
+                    let dupInfo = '';
+                    if (result.duplicated > 0 && result.duplicated_numbers && result.duplicated_numbers.length > 0) {
+                        const nums = result.duplicated_numbers.map(n => escapeHtml(n)).join(', ');
+                        const moreText = result.duplicated > result.duplicated_numbers.length ? ` 외 ${result.duplicated - result.duplicated_numbers.length}건` : '';
+                        dupInfo = `<small class="d-block text-warning mt-1"><i class="bi bi-exclamation-triangle me-1"></i>중복 제외 송장: ${nums}${moreText}</small>`;
+                    }
+                    alertsHtml += `<div class="alert ${result.duplicated > 0 ? 'alert-warning' : 'alert-success'} py-2 mb-1">
                         <i class="bi bi-check-circle me-1"></i>
                         <strong>${escapeHtml(file.name)}</strong> - ${result.message}
                         <small class="d-block">송장 ${result.total_orders}건, 상품 ${result.total_products}건</small>
+                        ${dupInfo}
                     </div>`;
                 } else {
                     failCount++;

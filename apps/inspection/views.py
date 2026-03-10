@@ -432,11 +432,14 @@ def upload_excel(request):
                 uploaded_by=uploader,
             )
 
+            duplicated_numbers = []
+
             for tracking_number, data in orders_data.items():
                 existing = Order.objects.filter(tracking_number=tracking_number)
                 if existing.exists():
-                    existing.delete()
                     duplicated += 1
+                    duplicated_numbers.append(tracking_number)
+                    continue  # 중복 송장은 건너뜀
 
                 order = Order.objects.create(
                     upload_batch=batch,
@@ -461,10 +464,10 @@ def upload_excel(request):
             batch.total_products = total_products
             batch.save(update_fields=['total_orders', 'total_products'])
 
-        format_label = '양식1' if file_format == 'format1' else '양식2'
+        format_label = '이벗' if file_format == 'format1' else 'CL'
         message = f'{total_orders}건의 송장이 등록되었습니다. ({format_label})'
         if duplicated:
-            message += f' (중복 {duplicated}건 재등록)'
+            message += f' (중복 {duplicated}건 제외)'
 
         return JsonResponse({
             'success': True,
@@ -472,6 +475,7 @@ def upload_excel(request):
             'total_orders': total_orders,
             'total_products': total_products,
             'duplicated': duplicated,
+            'duplicated_numbers': duplicated_numbers[:20],  # 최대 20건만 표시
         })
 
     except Exception as e:
@@ -1126,36 +1130,33 @@ def picking_list_page(request, batch_id):
         .order_by('product_name')
     )
 
-    # 2) 그룹핑: 매칭상품명+수량 조합별 건수
-    #    예: product_name="트러블 패드", quantity=20 → order_count=17건, subtotal=340
-    grouped_rows = list(
-        base_qs
-        .values('product_name', 'quantity')
-        .annotate(order_count=Count('id'), barcode=Min('barcode'))
-        .order_by('product_name', '-quantity')
-    )
+    # 2) 그룹핑: 주문건의 상품 조합 기준
+    #    동일한 상품 조합(product_name+quantity 세트)을 가진 주문들을 묶어 건수 표시
+    orders_in_batch = Order.objects.filter(upload_batch=batch).prefetch_related('products')
 
-    # 그룹핑 데이터를 매칭상품명별로 묶기
-    grouped_products = {}
-    for row in grouped_rows:
-        key = row['product_name']
-        if key not in grouped_products:
-            grouped_products[key] = {
-                'barcode': row['barcode'],
-                'product_name': row['product_name'],
-                'details': [],
-                'total_qty': 0,
-            }
-        subtotal = row['quantity'] * row['order_count']
-        grouped_products[key]['details'].append({
-            'quantity': row['quantity'],
-            'order_count': row['order_count'],
-            'subtotal': subtotal,
+    combo_groups = defaultdict(lambda: {'count': 0, 'products': []})
+    for order in orders_in_batch:
+        order_products = list(order.products.all())
+        # 각 주문의 상품 조합을 정렬된 튜플로 키 생성
+        combo_key = tuple(sorted(
+            (p.product_name, p.quantity) for p in order_products
+        ))
+        if combo_groups[combo_key]['count'] == 0:
+            combo_groups[combo_key]['products'] = [
+                {'product_name': p.product_name, 'quantity': p.quantity, 'barcode': p.barcode}
+                for p in order_products
+            ]
+        combo_groups[combo_key]['count'] += 1
+
+    # 리스트 변환 후 건수 내림차순 정렬
+    combo_list = []
+    for combo_key, data in combo_groups.items():
+        sorted_products = sorted(data['products'], key=lambda x: x['product_name'])
+        combo_list.append({
+            'products': sorted_products,
+            'order_count': data['count'],
         })
-        grouped_products[key]['total_qty'] += subtotal
-
-    # product_name 기준 정렬
-    grouped_list = sorted(grouped_products.values(), key=lambda x: x['product_name'])
+    combo_list.sort(key=lambda x: -x['order_count'])
 
     # 출력차수: 배치에 저장된 값 또는 배치 ID 기반 fallback
     print_order = batch.print_order or str(batch.id)
@@ -1167,7 +1168,7 @@ def picking_list_page(request, batch_id):
     context = {
         'batch': batch,
         'products': products,
-        'grouped_products': grouped_list,
+        'combo_groups': combo_list,
         'total_quantity': sum(p['total_qty'] for p in products),
         'total_sku_count': len(products),
         'print_order': print_order,

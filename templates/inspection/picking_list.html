@@ -368,58 +368,39 @@
             </table>
         </div>
 
-        <!-- ===== 2. 그룹핑 상세 테이블 ===== -->
+        <!-- ===== 2. 주문 조합별 그룹핑 상세 테이블 ===== -->
         <div id="section-grouped" style="display:none;">
-            <div class="section-title">수량별 그룹핑 상세</div>
+            <div class="section-title">주문 조합별 그룹핑 상세</div>
             <table class="pl-table">
                 <thead>
                     <tr>
                         <th class="col-no">No</th>
-                        <th class="col-barcode">바코드</th>
                         <th class="col-name">매칭상품명</th>
                         <th class="col-qty">수량</th>
                         <th class="col-count">건수</th>
-                        <th class="col-subtotal">소계</th>
                         <th class="col-check">비고</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for group in grouped_products %}
-                    <!-- 상품 그룹 헤더 -->
-                    <tr class="group-header">
-                        <td>{{ forloop.counter }}</td>
-                        <td class="col-barcode"><div class="barcode-wrap"><svg class="product-barcode" data-barcode="{{ group.barcode }}"></svg><span class="barcode-num">{{ group.barcode }}</span></div></td>
-                        <td class="col-name">{{ group.product_name }}</td>
-                        <td colspan="3" style="text-align:right; padding-right:8px;">합계: {{ group.total_qty }}</td>
-                        <td></td>
-                    </tr>
-                    <!-- 수량별 상세 -->
-                    {% for detail in group.details %}
-                    <tr class="group-detail">
-                        <td></td>
-                        <td></td>
-                        <td class="col-name" style="padding-left:20px; color:#555;">ㄴ {{ detail.quantity }}개짜리</td>
-                        <td class="col-qty">{{ detail.quantity }}</td>
-                        <td class="col-count">{{ detail.order_count }}건</td>
-                        <td class="col-subtotal">{{ detail.subtotal }}</td>
+                    {% for combo in combo_groups %}
+                    <!-- 조합 그룹: 첫 번째 상품 행에 건수 표시 -->
+                    {% for product in combo.products %}
+                    <tr class="{% if forloop.first %}group-header{% else %}group-detail{% endif %}">
+                        <td>{% if forloop.first %}{{ forloop.parentloop.counter }}{% endif %}</td>
+                        <td class="col-name">{{ product.product_name }} --- {{ product.quantity }}</td>
+                        <td class="col-qty">{{ product.quantity }}</td>
+                        <td class="col-count">{% if forloop.first %}{{ combo.order_count }}건{% endif %}</td>
                         <td></td>
                     </tr>
                     {% endfor %}
                     {% empty %}
                     <tr>
-                        <td colspan="7" style="text-align:center; padding:20px; color:#999;">
+                        <td colspan="5" style="text-align:center; padding:20px; color:#999;">
                             상품 데이터가 없습니다.
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="5" style="text-align:right; padding-right:10px;">총합계</td>
-                        <td class="col-subtotal">{{ total_quantity }}</td>
-                        <td></td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
 
