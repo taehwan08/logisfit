@@ -96,10 +96,6 @@
         font-size: 0.85rem;
         vertical-align: middle;
     }
-    .badge-status {
-        font-size: 0.75rem;
-        padding: 0.35em 0.65em;
-    }
     .progress-mini {
         height: 6px;
         border-radius: 3px;
@@ -108,9 +104,6 @@
     .batch-meta {
         font-size: 0.8rem;
         color: #6c757d;
-    }
-    .batch-meta i {
-        font-size: 0.75rem;
     }
 </style>
 {% endblock %}
@@ -182,56 +175,36 @@
         </div>
     </div>
 
-    <!-- 업로드 이력 -->
+    <!-- 최근 업로드 (오늘 기준) -->
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>업로드 이력</h5>
-                <button id="btnPrintSelected" class="btn btn-sm btn-primary" style="display:none;" onclick="printSelected()">
-                    <i class="bi bi-printer me-1"></i>선택 프린트 (<span id="printCount">0</span>)
-                </button>
+                <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>오늘 업로드</h5>
+                <a href="{% url 'inspection:upload_history_page' %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-list-ul me-1"></i>전체 이력
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 batch-table">
                         <thead class="table-light">
                             <tr>
-                                <th class="text-center" style="width:35px;"><input type="checkbox" id="checkAll" onchange="toggleCheckAll(this)"></th>
                                 <th>파일명</th>
                                 <th>출력차수</th>
-                                <th>배송메모</th>
                                 <th class="text-center">송장</th>
-                                <th class="text-center">상품</th>
                                 <th>진행률</th>
                                 <th>업로드자</th>
-                                <th>업로드 시간</th>
+                                <th>시간</th>
                                 <th class="text-center">픽업</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody id="batchesBody">
                             <tr>
-                                <td colspan="11" class="text-center text-muted py-4">데이터를 불러오는 중...</td>
+                                <td colspan="8" class="text-center text-muted py-4">불러오는 중...</td>
                             </tr>
                         </tbody>
                     </table>
-                </div>
-                <!-- 페이지네이션 -->
-                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" id="paginationArea" style="display:none!important;">
-                    <small class="text-muted" id="pageInfo"></small>
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="d-flex align-items-center gap-1">
-                            <select class="form-select form-select-sm" id="pageSizeSelect" style="width:auto;" onchange="window.changePageSize(this.value)">
-                                <option value="20">20건</option>
-                                <option value="50">50건</option>
-                                <option value="100">100건</option>
-                                <option value="200">200건</option>
-                            </select>
-                        </div>
-                        <nav>
-                            <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
-                        </nav>
-                    </div>
                 </div>
             </div>
         </div>
@@ -416,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         uploadAlerts.innerHTML = alertsHtml;
         uploadResult.classList.add('show');
-        loadBatches(1);
+        loadBatches();
 
         setTimeout(() => {
             progressBar.classList.remove('show');
@@ -429,31 +402,21 @@ document.addEventListener('DOMContentLoaded', function() {
         renderFileList();
     });
 
-    let currentPage = 1;
-    let pageSize = 20;
-
-    window.changePageSize = function(val) {
-        pageSize = parseInt(val) || 10;
-        loadBatches(1);
-    };
-
-    // 업로드 이력 로드
-    async function loadBatches(page) {
-        if (page) currentPage = page;
+    // 오늘 업로드 이력 로드
+    async function loadBatches() {
+        const today = new Date().toISOString().slice(0, 10);
         try {
-            const params = new URLSearchParams({ page: currentPage, page_size: pageSize });
+            const params = new URLSearchParams({ page_size: 100, date_from: today, date_to: today });
             const response = await fetch(`{% url "inspection:get_upload_batches" %}?${params.toString()}`);
             const result = await response.json();
             const tbody = document.getElementById('batchesBody');
 
             if (!result.batches || result.batches.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">업로드 이력이 없습니다.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">오늘 업로드 이력이 없습니다.</td></tr>';
                 updateStats(0, 0, 0, 0);
-                document.getElementById('paginationArea').style.display = 'none';
                 return;
             }
 
-            // 현황 카드 갱신
             let totalAll = 0, waitAll = 0, inspAll = 0, compAll = 0;
             result.batches.forEach(b => {
                 totalAll += b.total_orders;
@@ -467,7 +430,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const total = b.total_orders;
                 const pct = total > 0 ? Math.round((b.completed / total) * 100) : 0;
                 const uploaded = new Date(b.uploaded_at);
-                const dateStr = uploaded.toLocaleDateString('ko-KR');
                 const timeStr = uploaded.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
                 let barClass = 'bg-primary';
@@ -475,17 +437,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 else if (pct > 0) barClass = 'bg-warning';
 
                 return `<tr>
-                    <td class="text-center">
-                        ${b.file_format === 'eveut' ? `<input type="checkbox" class="batch-check" value="${b.id}" onchange="updatePrintSelection()">` : ''}
-                    </td>
                     <td>
                         <i class="bi bi-file-earmark-excel text-success me-1"></i>
                         <span class="fw-medium">${escapeHtml(b.file_name)}</span>
                     </td>
                     <td>${escapeHtml(b.print_order) || '<span class="text-muted">-</span>'}</td>
-                    <td>${escapeHtml(b.delivery_memo) || '<span class="text-muted">-</span>'}</td>
                     <td class="text-center">${b.total_orders}</td>
-                    <td class="text-center">${b.total_products}</td>
                     <td>
                         <div class="d-flex align-items-center gap-2">
                             <div class="progress progress-mini flex-grow-1">
@@ -495,12 +452,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     </td>
                     <td>${escapeHtml(b.uploaded_by) || '-'}</td>
-                    <td>
-                        <span class="batch-meta">${dateStr} ${timeStr}</span>
-                    </td>
+                    <td><span class="batch-meta">${timeStr}</span></td>
                     <td class="text-center">
                         ${b.picked_up_at
-                            ? `<span class="badge bg-success" title="${new Date(b.picked_up_at).toLocaleString('ko-KR')}${b.picked_up_by ? ' (' + escapeHtml(b.picked_up_by) + ')' : ''}">픽업완료</span>`
+                            ? `<span class="badge bg-success">픽업완료</span>`
                             : (b.file_format === 'eveut' ? '<span class="badge bg-secondary">대기</span>' : '')}
                     </td>
                     <td>
@@ -515,49 +470,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                 </tr>`;
             }).join('');
-
-            renderPagination(result);
         } catch (error) {
             console.error('업로드 이력 로드 실패:', error);
         }
     }
-
-    function renderPagination(data) {
-        const area = document.getElementById('paginationArea');
-        const pageInfo = document.getElementById('pageInfo');
-        const pagination = document.getElementById('pagination');
-
-        // 항상 표시 (드롭다운 포함)
-        area.style.display = '';
-        area.style.cssText = '';
-
-        // 드롭다운 값 동기화
-        document.getElementById('pageSizeSelect').value = pageSize;
-
-        pageInfo.textContent = `총 ${data.total}건 (${data.page} / ${data.total_pages} 페이지)`;
-
-        if (data.total_pages <= 1) {
-            pagination.innerHTML = '';
-            return;
-        }
-
-        let html = `<li class="page-item ${!data.has_previous ? 'disabled' : ''}">
-            <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page - 1})"><i class="bi bi-chevron-left"></i></a></li>`;
-
-        const startPage = Math.max(1, data.page - 2);
-        const endPage = Math.min(data.total_pages, data.page + 2);
-        for (let i = startPage; i <= endPage; i++) {
-            html += `<li class="page-item ${i === data.page ? 'active' : ''}">
-                <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${i})">${i}</a></li>`;
-        }
-
-        html += `<li class="page-item ${!data.has_next ? 'disabled' : ''}">
-            <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page + 1})"><i class="bi bi-chevron-right"></i></a></li>`;
-
-        pagination.innerHTML = html;
-    }
-
-    window.goPage = function(page) { loadBatches(page); };
 
     function updateStats(total, waiting, inspecting, completed) {
         document.getElementById('statTotal').textContent = total;
@@ -565,40 +481,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('statInspecting').textContent = inspecting;
         document.getElementById('statCompleted').textContent = completed;
     }
-
-    // 체크박스 전체선택/해제
-    window.toggleCheckAll = function(el) {
-        document.querySelectorAll('.batch-check').forEach(cb => {
-            cb.checked = el.checked;
-        });
-        updatePrintSelection();
-    };
-
-    // 선택 프린트 버튼 상태 갱신
-    window.updatePrintSelection = function() {
-        const checked = document.querySelectorAll('.batch-check:checked');
-        const btn = document.getElementById('btnPrintSelected');
-        const cnt = document.getElementById('printCount');
-        if (checked.length > 0) {
-            btn.style.display = '';
-            cnt.textContent = checked.length;
-        } else {
-            btn.style.display = 'none';
-        }
-        // 전체선택 체크박스 동기화
-        const all = document.querySelectorAll('.batch-check');
-        const checkAll = document.getElementById('checkAll');
-        if (checkAll) {
-            checkAll.checked = all.length > 0 && checked.length === all.length;
-        }
-    };
-
-    // 선택된 배치 피킹리스트 일괄 출력
-    window.printSelected = function() {
-        const ids = Array.from(document.querySelectorAll('.batch-check:checked')).map(cb => cb.value);
-        if (ids.length === 0) return;
-        window.open(`/inspection/api/batches/picking-list/?ids=${ids.join(',')}`, '_blank');
-    };
 
     function escapeHtml(text) {
         if (!text) return '';
@@ -628,7 +510,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // 초기 로드
-    loadBatches(1);
+    loadBatches();
 });
 </script>
 {% endblock %}

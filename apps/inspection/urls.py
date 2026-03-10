@@ -13,6 +13,9 @@ urlpatterns = [
     # 필드팀용 페이지
     path('field/', views.field_page, name='field_page'),
 
+    # 업로드 이력 페이지
+    path('history/', views.upload_history_page, name='upload_history_page'),
+
     # API
     path('upload/', views.upload_excel, name='upload_excel'),
     path('api/orders/<str:tracking_number>/', views.get_order, name='get_order'),

@@ -53,6 +53,12 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
+                    <a href="{% url 'inspection:upload_history_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'upload_history_page' %}active{% endif %}">
+                        <i class="bi bi-clock-history"></i>
+                        <span>업로드 이력</span>
+                    </a>
+                </li>
+                <li class="sidebar-item">
                     <a href="{% url 'inspection:field_page' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'field_page' %}active{% endif %}">
                         <i class="bi bi-upc-scan"></i>
                         <span>송장 검수</span>

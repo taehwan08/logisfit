@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}업로드 이력{% endblock %}
+{% block page_title %}업로드 이력{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-card {
+        border-radius: 10px;
+    }
+    .filter-card .form-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #555;
+        margin-bottom: 0.25rem;
+    }
+    .stat-card {
+        border-radius: 10px;
+        padding: 1rem;
+        text-align: center;
+    }
+    .stat-card .stat-number {
+        font-size: 1.6rem;
+        font-weight: 700;
+    }
+    .stat-card .stat-label {
+        font-size: 0.82rem;
+        color: #6c757d;
+    }
+    .batch-table th {
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .batch-table td {
+        font-size: 0.85rem;
+        vertical-align: middle;
+    }
+    .progress-mini {
+        height: 6px;
+        border-radius: 3px;
+        min-width: 80px;
+    }
+    .batch-meta {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #aaa;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 12px;
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <!-- 필터 -->
+    <div class="col-12">
+        <div class="card shadow-sm filter-card">
+            <div class="card-body py-3">
+                <form id="filterForm" class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label">시작일</label>
+                        <input type="date" class="form-control form-control-sm" id="filterDateFrom">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label">종료일</label>
+                        <input type="date" class="form-control form-control-sm" id="filterDateTo">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label">업로드자</label>
+                        <input type="text" class="form-control form-control-sm" id="filterUploader" placeholder="이름 검색" style="width:140px;">
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search me-1"></i>조회
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnReset">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>초기화
+                        </button>
+                    </div>
+                    <div class="col-auto ms-auto">
+                        <button type="button" id="btnPrintSelected" class="btn btn-sm btn-primary" style="display:none;" onclick="printSelected()">
+                            <i class="bi bi-printer me-1"></i>선택 프린트 (<span id="printCount">0</span>)
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 현황 카드 -->
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white shadow-sm">
+            <div class="stat-number text-primary" id="statTotal">-</div>
+            <div class="stat-label">총 송장</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white shadow-sm">
+            <div class="stat-number text-secondary" id="statWaiting">-</div>
+            <div class="stat-label">대기중</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white shadow-sm">
+            <div class="stat-number text-warning" id="statInspecting">-</div>
+            <div class="stat-label">검수중</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white shadow-sm">
+            <div class="stat-number text-success" id="statCompleted">-</div>
+            <div class="stat-label">완료</div>
+        </div>
+    </div>
+
+    <!-- 결과 테이블 -->
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div id="initialState" class="empty-state">
+                    <i class="bi bi-funnel"></i>
+                    <p class="mb-1 fw-semibold">조회 조건을 설정하세요</p>
+                    <p class="small">일자 또는 업로드자를 선택 후 조회 버튼을 누르세요</p>
+                </div>
+                <div id="tableArea" style="display:none;">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 batch-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width:35px;"><input type="checkbox" id="checkAll" onchange="toggleCheckAll(this)"></th>
+                                    <th>파일명</th>
+                                    <th>출력차수</th>
+                                    <th>배송메모</th>
+                                    <th class="text-center">송장</th>
+                                    <th class="text-center">상품</th>
+                                    <th>진행률</th>
+                                    <th>업로드자</th>
+                                    <th>업로드 시간</th>
+                                    <th class="text-center">픽업</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="batchesBody"></tbody>
+                        </table>
+                    </div>
+                    <!-- 페이지네이션 -->
+                    <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" id="paginationArea" style="display:none;">
+                        <small class="text-muted" id="pageInfo"></small>
+                        <div class="d-flex align-items-center gap-3">
+                            <select class="form-select form-select-sm" id="pageSizeSelect" style="width:auto;" onchange="window.changePageSize(this.value)">
+                                <option value="20">20건</option>
+                                <option value="50">50건</option>
+                                <option value="100">100건</option>
+                                <option value="200">200건</option>
+                            </select>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.getElementById('filterForm');
+    const btnReset = document.getElementById('btnReset');
+    const filterDateFrom = document.getElementById('filterDateFrom');
+    const filterDateTo = document.getElementById('filterDateTo');
+    const filterUploader = document.getElementById('filterUploader');
+    const initialState = document.getElementById('initialState');
+    const tableArea = document.getElementById('tableArea');
+
+    let currentPage = 1;
+    let pageSize = 20;
+    let searched = false;
+
+    // 오늘 날짜를 기본값으로
+    const today = new Date().toISOString().slice(0, 10);
+    filterDateFrom.value = today;
+    filterDateTo.value = today;
+
+    window.changePageSize = function(val) {
+        pageSize = parseInt(val) || 20;
+        if (searched) loadBatches(1);
+    };
+
+    filterForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        searched = true;
+        initialState.style.display = 'none';
+        tableArea.style.display = '';
+        loadBatches(1);
+    });
+
+    btnReset.addEventListener('click', function() {
+        filterDateFrom.value = today;
+        filterDateTo.value = today;
+        filterUploader.value = '';
+        searched = false;
+        initialState.style.display = '';
+        tableArea.style.display = 'none';
+        updateStats('-', '-', '-', '-');
+    });
+
+    async function loadBatches(page) {
+        if (page) currentPage = page;
+        const tbody = document.getElementById('batchesBody');
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>조회 중...</td></tr>';
+
+        try {
+            const params = new URLSearchParams({ page: currentPage, page_size: pageSize });
+            if (filterDateFrom.value) params.set('date_from', filterDateFrom.value);
+            if (filterDateTo.value) params.set('date_to', filterDateTo.value);
+            if (filterUploader.value.trim()) params.set('uploaded_by', filterUploader.value.trim());
+
+            const response = await fetch(`{% url "inspection:get_upload_batches" %}?${params.toString()}`);
+            const result = await response.json();
+
+            if (!result.batches || result.batches.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">조회 결과가 없습니다.</td></tr>';
+                updateStats(0, 0, 0, 0);
+                document.getElementById('paginationArea').style.display = 'none';
+                return;
+            }
+
+            let totalAll = 0, waitAll = 0, inspAll = 0, compAll = 0;
+            result.batches.forEach(b => {
+                totalAll += b.total_orders;
+                waitAll += b.waiting;
+                inspAll += b.inspecting;
+                compAll += b.completed;
+            });
+            updateStats(totalAll, waitAll, inspAll, compAll);
+
+            tbody.innerHTML = result.batches.map(b => {
+                const total = b.total_orders;
+                const pct = total > 0 ? Math.round((b.completed / total) * 100) : 0;
+                const uploaded = new Date(b.uploaded_at);
+                const dateStr = uploaded.toLocaleDateString('ko-KR');
+                const timeStr = uploaded.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+                let barClass = 'bg-primary';
+                if (pct === 100) barClass = 'bg-success';
+                else if (pct > 0) barClass = 'bg-warning';
+
+                return `<tr>
+                    <td class="text-center">
+                        ${b.file_format === 'eveut' ? `<input type="checkbox" class="batch-check" value="${b.id}" onchange="updatePrintSelection()">` : ''}
+                    </td>
+                    <td>
+                        <i class="bi bi-file-earmark-excel text-success me-1"></i>
+                        <span class="fw-medium">${escapeHtml(b.file_name)}</span>
+                    </td>
+                    <td>${escapeHtml(b.print_order) || '<span class="text-muted">-</span>'}</td>
+                    <td>${escapeHtml(b.delivery_memo) || '<span class="text-muted">-</span>'}</td>
+                    <td class="text-center">${b.total_orders}</td>
+                    <td class="text-center">${b.total_products}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress progress-mini flex-grow-1">
+                                <div class="progress-bar ${barClass}" style="width: ${pct}%"></div>
+                            </div>
+                            <small class="text-nowrap">${b.completed}/${total}</small>
+                        </div>
+                    </td>
+                    <td>${escapeHtml(b.uploaded_by) || '-'}</td>
+                    <td>
+                        <span class="batch-meta">${dateStr} ${timeStr}</span>
+                    </td>
+                    <td class="text-center">
+                        ${b.picked_up_at
+                            ? `<span class="badge bg-success" title="${new Date(b.picked_up_at).toLocaleString('ko-KR')}${b.picked_up_by ? ' (' + escapeHtml(b.picked_up_by) + ')' : ''}">픽업완료</span>`
+                            : (b.file_format === 'eveut' ? '<span class="badge bg-secondary">대기</span>' : '')}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            ${b.file_format === 'eveut' ? `<button class="btn btn-sm btn-outline-primary" onclick="window.open('/inspection/api/batches/${b.id}/picking-list/', '_blank')" title="피킹리스트">
+                                <i class="bi bi-printer"></i>
+                            </button>` : ''}
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteBatch(${b.id}, '${escapeHtml(b.file_name)}')" title="삭제">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            renderPagination(result);
+        } catch (error) {
+            console.error('이력 로드 실패:', error);
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">조회 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+
+    function renderPagination(data) {
+        const area = document.getElementById('paginationArea');
+        const pageInfo = document.getElementById('pageInfo');
+        const pagination = document.getElementById('pagination');
+
+        area.style.display = '';
+        document.getElementById('pageSizeSelect').value = pageSize;
+        pageInfo.textContent = `총 ${data.total}건 (${data.page} / ${data.total_pages} 페이지)`;
+
+        if (data.total_pages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let html = `<li class="page-item ${!data.has_previous ? 'disabled' : ''}">
+            <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page - 1})"><i class="bi bi-chevron-left"></i></a></li>`;
+
+        const startPage = Math.max(1, data.page - 2);
+        const endPage = Math.min(data.total_pages, data.page + 2);
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<li class="page-item ${i === data.page ? 'active' : ''}">
+                <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${i})">${i}</a></li>`;
+        }
+
+        html += `<li class="page-item ${!data.has_next ? 'disabled' : ''}">
+            <a class="page-link" href="javascript:void(0)" onclick="window.goPage(${data.page + 1})"><i class="bi bi-chevron-right"></i></a></li>`;
+
+        pagination.innerHTML = html;
+    }
+
+    window.goPage = function(page) { loadBatches(page); };
+
+    function updateStats(total, waiting, inspecting, completed) {
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statWaiting').textContent = waiting;
+        document.getElementById('statInspecting').textContent = inspecting;
+        document.getElementById('statCompleted').textContent = completed;
+    }
+
+    // 체크박스 전체선택/해제
+    window.toggleCheckAll = function(el) {
+        document.querySelectorAll('.batch-check').forEach(cb => { cb.checked = el.checked; });
+        updatePrintSelection();
+    };
+
+    window.updatePrintSelection = function() {
+        const checked = document.querySelectorAll('.batch-check:checked');
+        const btn = document.getElementById('btnPrintSelected');
+        const cnt = document.getElementById('printCount');
+        if (checked.length > 0) {
+            btn.style.display = '';
+            cnt.textContent = checked.length;
+        } else {
+            btn.style.display = 'none';
+        }
+        const all = document.querySelectorAll('.batch-check');
+        const checkAll = document.getElementById('checkAll');
+        if (checkAll) checkAll.checked = all.length > 0 && checked.length === all.length;
+    };
+
+    window.printSelected = function() {
+        const ids = Array.from(document.querySelectorAll('.batch-check:checked')).map(cb => cb.value);
+        if (ids.length === 0) return;
+        window.open(`/inspection/api/batches/picking-list/?ids=${ids.join(',')}`, '_blank');
+    };
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    window.deleteBatch = async function(batchId, fileName) {
+        if (!confirm(`"${fileName}" 업로드 데이터를 삭제하시겠습니까?\n해당 파일의 모든 송장과 상품이 삭제됩니다.`)) return;
+        try {
+            const response = await fetch(`/inspection/api/batches/${batchId}/delete/`, { method: 'POST' });
+            const result = await response.json();
+            if (result.success) {
+                loadBatches();
+            } else {
+                alert(result.message);
+            }
+        } catch (error) {
+            alert('삭제 중 오류가 발생했습니다.');
+        }
+    };
+});
+</script>
+{% endblock %}

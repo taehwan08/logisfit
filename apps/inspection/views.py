@@ -407,6 +407,11 @@ def field_page(request):
     return render(request, 'inspection/field.html')
 
 
+def upload_history_page(request):
+    """업로드 이력 조회 페이지 (일자별/업로드자별 필터)"""
+    return render(request, 'inspection/upload_history.html')
+
+
 @csrf_exempt
 @require_POST
 def upload_excel(request):
@@ -1066,6 +1071,9 @@ def get_upload_batches(request):
         page: 페이지 번호 (기본: 1)
         page_size: 페이지당 건수 (기본: 10, 최대: 100)
         picked_today: "1" 이면 오늘 픽업 완료된 배치만 반환
+        date_from: 업로드 시작일 (YYYY-MM-DD)
+        date_to: 업로드 종료일 (YYYY-MM-DD)
+        uploaded_by: 업로드자 이름 (부분 검색)
     """
     from django.core.paginator import Paginator
 
@@ -1075,6 +1083,19 @@ def get_upload_batches(request):
     if request.GET.get('picked_today') == '1':
         today = timezone.localdate()
         batches = batches.filter(picked_up_at__date=today)
+
+    # 일자 필터
+    date_from = request.GET.get('date_from')
+    if date_from:
+        batches = batches.filter(uploaded_at__date__gte=date_from)
+    date_to = request.GET.get('date_to')
+    if date_to:
+        batches = batches.filter(uploaded_at__date__lte=date_to)
+
+    # 업로드자 필터
+    uploaded_by = request.GET.get('uploaded_by', '').strip()
+    if uploaded_by:
+        batches = batches.filter(uploaded_by__icontains=uploaded_by)
 
     page = request.GET.get('page', 1)
     page_size = request.GET.get('page_size', 10)
