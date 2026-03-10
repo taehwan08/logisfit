@@ -250,4 +250,78 @@
         </div>
     </div>
 {% endif %}
+
+<!-- 공지사항 게시판 (모든 사용자에게 표시) -->
+{% if announcements %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-megaphone me-2 text-primary"></i>공지사항
+                </h5>
+                <div class="d-flex align-items-center gap-2">
+                    {% if user.is_admin or user.is_superuser %}
+                    <a href="{% url 'accounts:announcement_create' %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg me-1"></i>작성
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'accounts:announcement_list' %}" class="btn btn-outline-secondary btn-sm">
+                        전체보기
+                    </a>
+                </div>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for ann in announcements|slice:":5" %}
+                <a href="{% url 'accounts:announcement_detail' ann.pk %}" class="list-group-item list-group-item-action py-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="d-flex align-items-start gap-2">
+                            {% if ann.is_pinned %}
+                            <span class="badge bg-danger mt-1" style="font-size: 0.7rem;">고정</span>
+                            {% endif %}
+                            {% if ann.category == 'update' %}
+                            <span class="badge bg-primary mt-1" style="font-size: 0.7rem;">업데이트</span>
+                            {% elif ann.category == 'notice' %}
+                            <span class="badge bg-info mt-1" style="font-size: 0.7rem;">공지</span>
+                            {% elif ann.category == 'maintenance' %}
+                            <span class="badge bg-warning text-dark mt-1" style="font-size: 0.7rem;">점검</span>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-1">{{ ann.title }}</h6>
+                                <p class="mb-0 text-muted small" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 500px;">
+                                    {{ ann.content|truncatechars:80 }}
+                                </p>
+                            </div>
+                        </div>
+                        <small class="text-muted text-nowrap ms-3">{{ ann.created_at|date:"m/d" }}</small>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+    {% if user.is_admin or user.is_superuser %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-megaphone me-2 text-primary"></i>공지사항
+                    </h5>
+                    <a href="{% url 'accounts:announcement_create' %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg me-1"></i>작성
+                    </a>
+                </div>
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-chat-square-text fs-1 d-block mb-2"></i>
+                    <p class="mb-0">아직 등록된 공지사항이 없습니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endif %}
+
 {% endblock %}

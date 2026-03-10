@@ -26,7 +26,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
 
-from .models import User, PasswordResetCode
+from .models import User, PasswordResetCode, Announcement
 from .forms import (
     UserRegistrationForm, UserLoginForm, UserApprovalForm, UserProfileForm
 )
@@ -311,6 +311,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             # context['today_works'] = DailyWork.objects.filter(...)
             pass
 
+        # 공지사항 (모든 역할에게 표시)
+        context['announcements'] = Announcement.objects.filter(
+            is_active=True
+        ).select_related('author')[:10]
+
         return context
 
 
@@ -576,6 +581,118 @@ class PasswordResetConfirmView(View):
             '비밀번호가 성공적으로 변경되었습니다. 새 비밀번호로 로그인해주세요.'
         )
         return redirect('accounts:login')
+
+
+# ============================================================================
+# 공지사항 (게시판)
+# ============================================================================
+
+class AnnouncementListView(LoginRequiredMixin, ListView):
+    """공지사항 전체 목록"""
+    model = Announcement
+    template_name = 'accounts/announcement_list.html'
+    context_object_name = 'announcements'
+    paginate_by = 20
+
+    def get_queryset(self):
+        return Announcement.objects.filter(
+            is_active=True
+        ).select_related('author')
+
+
+class AnnouncementDetailView(LoginRequiredMixin, DetailView):
+    """공지사항 상세"""
+    model = Announcement
+    template_name = 'accounts/announcement_detail.html'
+    context_object_name = 'announcement'
+
+    def get_queryset(self):
+        return Announcement.objects.filter(is_active=True).select_related('author')
+
+
+class AnnouncementCreateView(AdminRequiredMixin, View):
+    """공지사항 작성 (관리자 전용)"""
+    template_name = 'accounts/announcement_form.html'
+
+    def get(self, request):
+        return render(request, self.template_name, {
+            'categories': Announcement.Category.choices,
+        })
+
+    def post(self, request):
+        title = request.POST.get('title', '').strip()
+        content = request.POST.get('content', '').strip()
+        category = request.POST.get('category', 'update')
+        is_pinned = request.POST.get('is_pinned') == 'on'
+
+        if not title or not content:
+            messages.error(request, '제목과 내용을 모두 입력해주세요.')
+            return render(request, self.template_name, {
+                'categories': Announcement.Category.choices,
+                'form_data': {'title': title, 'content': content, 'category': category, 'is_pinned': is_pinned},
+            })
+
+        announcement = Announcement.objects.create(
+            title=title,
+            content=content,
+            category=category,
+            is_pinned=is_pinned,
+            author=request.user,
+        )
+        messages.success(request, '공지사항이 등록되었습니다.')
+        return redirect('accounts:announcement_detail', pk=announcement.pk)
+
+
+class AnnouncementEditView(AdminRequiredMixin, View):
+    """공지사항 수정 (관리자 전용)"""
+    template_name = 'accounts/announcement_form.html'
+
+    def get(self, request, pk):
+        announcement = get_object_or_404(Announcement, pk=pk)
+        return render(request, self.template_name, {
+            'categories': Announcement.Category.choices,
+            'announcement': announcement,
+            'form_data': {
+                'title': announcement.title,
+                'content': announcement.content,
+                'category': announcement.category,
+                'is_pinned': announcement.is_pinned,
+            },
+        })
+
+    def post(self, request, pk):
+        announcement = get_object_or_404(Announcement, pk=pk)
+        title = request.POST.get('title', '').strip()
+        content = request.POST.get('content', '').strip()
+        category = request.POST.get('category', 'update')
+        is_pinned = request.POST.get('is_pinned') == 'on'
+
+        if not title or not content:
+            messages.error(request, '제목과 내용을 모두 입력해주세요.')
+            return render(request, self.template_name, {
+                'categories': Announcement.Category.choices,
+                'announcement': announcement,
+                'form_data': {'title': title, 'content': content, 'category': category, 'is_pinned': is_pinned},
+            })
+
+        announcement.title = title
+        announcement.content = content
+        announcement.category = category
+        announcement.is_pinned = is_pinned
+        announcement.save()
+        messages.success(request, '공지사항이 수정되었습니다.')
+        return redirect('accounts:announcement_detail', pk=announcement.pk)
+
+
+class AnnouncementDeleteView(AdminRequiredMixin, View):
+    """공지사항 삭제 (관리자 전용) - soft delete"""
+
+    def post(self, request, pk):
+        announcement = get_object_or_404(Announcement, pk=pk)
+        announcement.is_active = False
+        announcement.save(update_fields=['is_active'])
+        messages.success(request, '공지사항이 삭제되었습니다.')
+        return redirect('accounts:announcement_list')
 
 
 class PasswordResetResendView(View):

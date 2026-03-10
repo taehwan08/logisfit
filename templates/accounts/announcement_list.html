@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}공지사항{% endblock %}
+
+{% block page_title %}공지사항{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ann-card {
+        transition: transform 0.15s;
+    }
+    .ann-card:hover {
+        transform: translateY(-1px);
+    }
+    .category-badge {
+        font-size: 0.72rem;
+        padding: 0.25em 0.6em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">
+                <i class="bi bi-megaphone me-2"></i>공지사항
+            </h4>
+            {% if user.is_admin or user.is_superuser %}
+            <a href="{% url 'accounts:announcement_create' %}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>새 공지 작성
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if announcements %}
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="list-group list-group-flush">
+                {% for ann in announcements %}
+                <a href="{% url 'accounts:announcement_detail' ann.pk %}" class="list-group-item list-group-item-action ann-card py-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="d-flex align-items-start gap-2">
+                            {% if ann.is_pinned %}
+                            <span class="badge bg-danger category-badge mt-1">고정</span>
+                            {% endif %}
+                            {% if ann.category == 'update' %}
+                            <span class="badge bg-primary category-badge mt-1">업데이트</span>
+                            {% elif ann.category == 'notice' %}
+                            <span class="badge bg-info category-badge mt-1">공지</span>
+                            {% elif ann.category == 'maintenance' %}
+                            <span class="badge bg-warning text-dark category-badge mt-1">점검</span>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-1">{{ ann.title }}</h6>
+                                <p class="mb-0 text-muted small">{{ ann.content|truncatechars:120 }}</p>
+                            </div>
+                        </div>
+                        <div class="text-end text-nowrap ms-3">
+                            <small class="text-muted d-block">{{ ann.created_at|date:"Y.m.d" }}</small>
+                            {% if ann.author %}
+                            <small class="text-muted">{{ ann.author.name }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 페이지네이션 -->
+        {% if is_paginated %}
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+                    <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body text-center py-5 text-muted">
+                <i class="bi bi-chat-square-text fs-1 d-block mb-2"></i>
+                <p class="mb-0">등록된 공지사항이 없습니다.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

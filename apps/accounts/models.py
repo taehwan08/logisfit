@@ -274,6 +274,49 @@ class SystemConfig(models.Model):
         return f'{self.key}: {self.value}'
 
 
+class Announcement(models.Model):
+    """
+    공지사항/업데이트 게시판 모델
+
+    대시보드에 표시되는 기능 업데이트 내역 등을 관리합니다.
+    관리자만 작성/수정/삭제가 가능합니다.
+    """
+
+    class Category(models.TextChoices):
+        UPDATE = 'update', '기능 업데이트'
+        NOTICE = 'notice', '공지사항'
+        MAINTENANCE = 'maintenance', '점검 안내'
+
+    title = models.CharField('제목', max_length=200)
+    content = models.TextField('내용')
+    category = models.CharField(
+        '분류',
+        max_length=20,
+        choices=Category.choices,
+        default=Category.UPDATE,
+    )
+    is_pinned = models.BooleanField('상단 고정', default=False)
+    is_active = models.BooleanField('활성', default=True)
+    author = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name='작성자',
+        related_name='announcements',
+    )
+    created_at = models.DateTimeField('작성일', auto_now_add=True)
+    updated_at = models.DateTimeField('수정일', auto_now=True)
+
+    class Meta:
+        verbose_name = '공지사항'
+        verbose_name_plural = '공지사항'
+        db_table = 'announcements'
+        ordering = ['-is_pinned', '-created_at']
+
+    def __str__(self):
+        return self.title
+
+
 def get_config(key, default=None):
     """시스템 설정 조회 헬퍼
 

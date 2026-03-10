@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ announcement.title }}{% endblock %}
+
+{% block page_title %}공지사항{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ann-content {
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.8;
+        font-size: 0.95rem;
+    }
+    .ann-meta {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <a href="{% url 'accounts:announcement_list' %}" class="btn btn-outline-secondary btn-sm mb-3">
+            <i class="bi bi-arrow-left me-1"></i>목록으로
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 col-lg-10">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <!-- 헤더 -->
+                <div class="d-flex align-items-start gap-2 mb-3">
+                    {% if announcement.is_pinned %}
+                    <span class="badge bg-danger" style="font-size: 0.72rem;">고정</span>
+                    {% endif %}
+                    {% if announcement.category == 'update' %}
+                    <span class="badge bg-primary" style="font-size: 0.72rem;">업데이트</span>
+                    {% elif announcement.category == 'notice' %}
+                    <span class="badge bg-info" style="font-size: 0.72rem;">공지</span>
+                    {% elif announcement.category == 'maintenance' %}
+                    <span class="badge bg-warning text-dark" style="font-size: 0.72rem;">점검</span>
+                    {% endif %}
+                </div>
+
+                <h4 class="mb-3">{{ announcement.title }}</h4>
+
+                <div class="ann-meta mb-4 pb-3 border-bottom">
+                    {% if announcement.author %}
+                    <span><i class="bi bi-person me-1"></i>{{ announcement.author.name }}</span>
+                    <span class="mx-2">|</span>
+                    {% endif %}
+                    <span><i class="bi bi-clock me-1"></i>{{ announcement.created_at|date:"Y년 m월 d일 H:i" }}</span>
+                    {% if announcement.updated_at != announcement.created_at %}
+                    <span class="mx-2">|</span>
+                    <span class="text-muted">(수정: {{ announcement.updated_at|date:"Y.m.d H:i" }})</span>
+                    {% endif %}
+                </div>
+
+                <!-- 본문 -->
+                <div class="ann-content">{{ announcement.content }}</div>
+
+                <!-- 관리자 액션 -->
+                {% if user.is_admin or user.is_superuser %}
+                <div class="mt-4 pt-3 border-top d-flex gap-2">
+                    <a href="{% url 'accounts:announcement_edit' announcement.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-pencil me-1"></i>수정
+                    </a>
+                    <form method="post" action="{% url 'accounts:announcement_delete' announcement.pk %}" class="d-inline" onsubmit="return confirm('이 공지사항을 삭제하시겠습니까?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-trash me-1"></i>삭제
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -30,6 +30,13 @@ urlpatterns = [
     path('users/<int:pk>/approve/', views.UserApprovalView.as_view(), name='user_approval'),
     path('users/<int:pk>/toggle-active/', views.UserToggleActiveView.as_view(), name='user_toggle_active'),
 
+    # 공지사항
+    path('announcements/', views.AnnouncementListView.as_view(), name='announcement_list'),
+    path('announcements/create/', views.AnnouncementCreateView.as_view(), name='announcement_create'),
+    path('announcements/<int:pk>/', views.AnnouncementDetailView.as_view(), name='announcement_detail'),
+    path('announcements/<int:pk>/edit/', views.AnnouncementEditView.as_view(), name='announcement_edit'),
+    path('announcements/<int:pk>/delete/', views.AnnouncementDeleteView.as_view(), name='announcement_delete'),
+
     # Slack 연동
     path('slack/interactive/', views.SlackInteractiveView.as_view(), name='slack_interactive'),
 ]

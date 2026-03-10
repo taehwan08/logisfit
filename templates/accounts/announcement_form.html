@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if announcement %}공지사항 수정{% else %}공지사항 작성{% endif %}{% endblock %}
+
+{% block page_title %}{% if announcement %}공지사항 수정{% else %}공지사항 작성{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        border-radius: 10px;
+    }
+    textarea.form-control {
+        min-height: 300px;
+        line-height: 1.8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <a href="{% url 'accounts:announcement_list' %}" class="btn btn-outline-secondary btn-sm mb-3">
+            <i class="bi bi-arrow-left me-1"></i>목록으로
+        </a>
+        <h4>
+            <i class="bi bi-pencil-square me-2"></i>{% if announcement %}공지사항 수정{% else %}공지사항 작성{% endif %}
+        </h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 col-lg-10">
+        <div class="card shadow-sm form-card">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <!-- 분류 -->
+                    <div class="mb-3">
+                        <label for="category" class="form-label fw-semibold">분류</label>
+                        <select class="form-select" id="category" name="category">
+                            {% for value, label in categories %}
+                            <option value="{{ value }}" {% if form_data.category == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- 제목 -->
+                    <div class="mb-3">
+                        <label for="title" class="form-label fw-semibold">제목</label>
+                        <input type="text" class="form-control" id="title" name="title"
+                               value="{{ form_data.title|default:'' }}"
+                               placeholder="공지사항 제목을 입력하세요" required maxlength="200">
+                    </div>
+
+                    <!-- 내용 -->
+                    <div class="mb-3">
+                        <label for="content" class="form-label fw-semibold">내용</label>
+                        <textarea class="form-control" id="content" name="content"
+                                  placeholder="공지사항 내용을 입력하세요" required>{{ form_data.content|default:'' }}</textarea>
+                    </div>
+
+                    <!-- 상단 고정 -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_pinned" name="is_pinned"
+                                   {% if form_data.is_pinned %}checked{% endif %}>
+                            <label class="form-check-label" for="is_pinned">
+                                <i class="bi bi-pin-angle me-1"></i>상단 고정
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 버튼 -->
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>{% if announcement %}수정{% else %}등록{% endif %}
+                        </button>
+                        <a href="{% url 'accounts:announcement_list' %}" class="btn btn-outline-secondary">취소</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
