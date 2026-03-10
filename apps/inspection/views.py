@@ -9,8 +9,11 @@ import re
 import json
 from collections import defaultdict
 
+from functools import wraps
+
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.db import transaction
@@ -23,6 +26,34 @@ from .models import Order, OrderProduct, InspectionLog, UploadBatch
 from .slack import send_batch_complete_notification
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# IP 제한 데코레이터
+# ============================================================================
+
+def _get_client_ip(request):
+    """프록시를 고려하여 클라이언트 IP를 가져온다."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
+
+
+def pickup_ip_required(view_func):
+    """PICKUP_ALLOWED_IPS 설정에 의한 IP 접근 제한 데코레이터.
+
+    설정이 비어있으면 모든 IP를 허용한다.
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        allowed_ips = getattr(settings, 'PICKUP_ALLOWED_IPS', [])
+        if allowed_ips:
+            client_ip = _get_client_ip(request)
+            if client_ip not in allowed_ips:
+                return HttpResponseForbidden('접근이 허용되지 않은 IP입니다.')
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 
 # ============================================================================
@@ -1180,11 +1211,13 @@ def picking_list_page(request, batch_id):
     return render(request, 'inspection/picking_list.html', context)
 
 
+@pickup_ip_required
 def pickup_page(request):
     """픽업 스캔 전용 페이지"""
     return render(request, 'inspection/pickup.html')
 
 
+@pickup_ip_required
 @csrf_exempt
 @require_POST
 def pickup_scan(request):

@@ -31,6 +31,9 @@ DEBUG = env('DEBUG')
 # 허용된 호스트
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
+# 픽업 페이지 접근 허용 IP (비어있으면 모든 IP 허용)
+PICKUP_ALLOWED_IPS = env.list('PICKUP_ALLOWED_IPS', default=[])
+
 
 # ============================================================================
 # 애플리케이션 정의
