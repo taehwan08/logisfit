@@ -174,16 +174,19 @@
             background: #e9ecef;
             font-weight: 600;
             font-size: 11px;
+            border-top: 3px solid #333;
         }
         .pl-table .group-detail td {
             font-size: 11px;
             background: #fff;
+            border-top: 1px dashed #ccc;
         }
-        .pl-table .group-detail td:first-child,
-        .pl-table .group-detail td:nth-child(2),
-        .pl-table .group-detail td:nth-child(3),
-        .pl-table .group-detail td:nth-child(4) {
-            border-top-color: #ccc;
+        /* 짝수 조합 그룹 배경 구분 */
+        .pl-table .combo-even td {
+            background: #f7f9fc;
+        }
+        .pl-table .combo-even.group-header td {
+            background: #dce3ed;
         }
 
         /* ── 푸터 ── */
@@ -277,6 +280,16 @@
             }
             .pl-table .group-header td {
                 background: #e9ecef !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .pl-table .combo-even td {
+                background: #f7f9fc !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .pl-table .combo-even.group-header td {
+                background: #dce3ed !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
@@ -383,13 +396,12 @@
                 </thead>
                 <tbody>
                     {% for combo in combo_groups %}
-                    <!-- 조합 그룹: 첫 번째 상품 행에 건수 표시 -->
                     {% for product in combo.products %}
-                    <tr class="{% if forloop.first %}group-header{% else %}group-detail{% endif %}">
+                    <tr class="{% if forloop.first %}group-header{% else %}group-detail{% endif %}{% if forloop.parentloop.counter|divisibleby:2 %} combo-even{% endif %}">
                         <td>{% if forloop.first %}{{ forloop.parentloop.counter }}{% endif %}</td>
-                        <td class="col-name">{{ product.product_name }} --- {{ product.quantity }}</td>
+                        <td class="col-name">{{ product.product_name }} &mdash; {{ product.quantity }}개</td>
                         <td class="col-qty">{{ product.quantity }}</td>
-                        <td class="col-count">{% if forloop.first %}{{ combo.order_count }}건{% endif %}</td>
+                        <td class="col-count">{% if forloop.first %}<strong>{{ combo.order_count }}건</strong>{% endif %}</td>
                         <td></td>
                     </tr>
                     {% endfor %}
