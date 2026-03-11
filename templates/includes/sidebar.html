@@ -154,6 +154,18 @@
             {% endif %}
 
             {% if user.is_admin or user.is_superuser %}
+                <!-- 리포트 메뉴 -->
+                <li class="sidebar-header-text">리포트</li>
+
+                <li class="sidebar-item">
+                    <a href="{% url 'daily_parcel_report' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'daily_parcel_report' %}active{% endif %}">
+                        <i class="bi bi-file-earmark-bar-graph"></i>
+                        <span>일일택배사업부</span>
+                    </a>
+                </li>
+            {% endif %}
+
+            {% if user.is_admin or user.is_superuser %}
                 <!-- 보관 관리 메뉴 -->
                 <li class="sidebar-header-text">보관 관리</li>
 
