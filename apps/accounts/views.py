@@ -311,10 +311,18 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             # context['today_works'] = DailyWork.objects.filter(...)
             pass
 
-        # 공지사항 (모든 역할에게 표시)
-        context['announcements'] = Announcement.objects.filter(
-            is_active=True
-        ).select_related('author')[:10]
+        # 공지사항 (역할별 대상 필터링)
+        if user.is_admin or user.is_superuser:
+            ann_qs = Announcement.objects.filter(is_active=True)
+        elif user.is_client:
+            ann_qs = Announcement.objects.filter(
+                is_active=True, target__in=['all', 'client']
+            )
+        else:
+            ann_qs = Announcement.objects.filter(
+                is_active=True, target__in=['all', 'internal']
+            )
+        context['announcements'] = ann_qs.select_related('author')[:10]
 
         return context
 
@@ -595,9 +603,15 @@ class AnnouncementListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        return Announcement.objects.filter(
-            is_active=True
-        ).select_related('author')
+        user = self.request.user
+        qs = Announcement.objects.filter(is_active=True)
+        if user.is_admin or user.is_superuser:
+            pass  # 관리자: 전체 공지사항 표시
+        elif user.is_client:
+            qs = qs.filter(target__in=['all', 'client'])
+        else:
+            qs = qs.filter(target__in=['all', 'internal'])
+        return qs.select_related('author')
 
 
 class AnnouncementDetailView(LoginRequiredMixin, DetailView):
@@ -617,25 +631,29 @@ class AnnouncementCreateView(AdminRequiredMixin, View):
     def get(self, request):
         return render(request, self.template_name, {
             'categories': Announcement.Category.choices,
+            'targets': Announcement.Target.choices,
         })
 
     def post(self, request):
         title = request.POST.get('title', '').strip()
         content = request.POST.get('content', '').strip()
         category = request.POST.get('category', 'update')
+        target = request.POST.get('target', 'all')
         is_pinned = request.POST.get('is_pinned') == 'on'
 
         if not title or not content:
             messages.error(request, '제목과 내용을 모두 입력해주세요.')
             return render(request, self.template_name, {
                 'categories': Announcement.Category.choices,
-                'form_data': {'title': title, 'content': content, 'category': category, 'is_pinned': is_pinned},
+                'targets': Announcement.Target.choices,
+                'form_data': {'title': title, 'content': content, 'category': category, 'target': target, 'is_pinned': is_pinned},
             })
 
         announcement = Announcement.objects.create(
             title=title,
             content=content,
             category=category,
+            target=target,
             is_pinned=is_pinned,
             author=request.user,
         )
@@ -651,11 +669,13 @@ class AnnouncementEditView(AdminRequiredMixin, View):
         announcement = get_object_or_404(Announcement, pk=pk)
         return render(request, self.template_name, {
             'categories': Announcement.Category.choices,
+            'targets': Announcement.Target.choices,
             'announcement': announcement,
             'form_data': {
                 'title': announcement.title,
                 'content': announcement.content,
                 'category': announcement.category,
+                'target': announcement.target,
                 'is_pinned': announcement.is_pinned,
             },
         })
@@ -665,19 +685,22 @@ class AnnouncementEditView(AdminRequiredMixin, View):
         title = request.POST.get('title', '').strip()
         content = request.POST.get('content', '').strip()
         category = request.POST.get('category', 'update')
+        target = request.POST.get('target', 'all')
         is_pinned = request.POST.get('is_pinned') == 'on'
 
         if not title or not content:
             messages.error(request, '제목과 내용을 모두 입력해주세요.')
             return render(request, self.template_name, {
                 'categories': Announcement.Category.choices,
+                'targets': Announcement.Target.choices,
                 'announcement': announcement,
-                'form_data': {'title': title, 'content': content, 'category': category, 'is_pinned': is_pinned},
+                'form_data': {'title': title, 'content': content, 'category': category, 'target': target, 'is_pinned': is_pinned},
             })
 
         announcement.title = title
         announcement.content = content
         announcement.category = category
+        announcement.target = target
         announcement.is_pinned = is_pinned
         announcement.save()
         messages.success(request, '공지사항이 수정되었습니다.')

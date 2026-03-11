@@ -36,14 +36,27 @@
                 <form method="post">
                     {% csrf_token %}
 
-                    <!-- 분류 -->
-                    <div class="mb-3">
-                        <label for="category" class="form-label fw-semibold">분류</label>
-                        <select class="form-select" id="category" name="category">
-                            {% for value, label in categories %}
-                            <option value="{{ value }}" {% if form_data.category == value %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
+                    <!-- 분류 & 대상 -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="category" class="form-label fw-semibold">분류</label>
+                            <select class="form-select" id="category" name="category">
+                                {% for value, label in categories %}
+                                <option value="{{ value }}" {% if form_data.category == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="target" class="form-label fw-semibold">대상</label>
+                            <select class="form-select" id="target" name="target">
+                                {% for value, label in targets %}
+                                <option value="{{ value }}" {% if form_data.target == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text text-muted">
+                                <small>전체: 모든 사용자 | 내부: 관리자+작업자 | 거래처: 거래처 계정</small>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- 제목 -->

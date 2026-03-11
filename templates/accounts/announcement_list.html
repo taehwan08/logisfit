@@ -55,6 +55,13 @@
                             {% elif ann.category == 'maintenance' %}
                             <span class="badge bg-warning text-dark category-badge mt-1">점검</span>
                             {% endif %}
+                            {% if user.is_admin or user.is_superuser %}
+                                {% if ann.target == 'internal' %}
+                                <span class="badge bg-dark category-badge mt-1">내부</span>
+                                {% elif ann.target == 'client' %}
+                                <span class="badge bg-success category-badge mt-1">거래처</span>
+                                {% endif %}
+                            {% endif %}
                             <div>
                                 <h6 class="mb-1">{{ ann.title }}</h6>
                                 <p class="mb-0 text-muted small">{{ ann.content|truncatechars:120 }}</p>

@@ -286,6 +286,13 @@
                             {% elif ann.category == 'maintenance' %}
                             <span class="badge bg-warning text-dark mt-1" style="font-size: 0.7rem;">점검</span>
                             {% endif %}
+                            {% if user.is_admin or user.is_superuser %}
+                                {% if ann.target == 'internal' %}
+                                <span class="badge bg-dark mt-1" style="font-size: 0.65rem;">내부</span>
+                                {% elif ann.target == 'client' %}
+                                <span class="badge bg-success mt-1" style="font-size: 0.65rem;">거래처</span>
+                                {% endif %}
+                            {% endif %}
                             <div>
                                 <h6 class="mb-1">{{ ann.title }}</h6>
                                 <p class="mb-0 text-muted small" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 500px;">

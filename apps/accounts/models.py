@@ -287,6 +287,11 @@ class Announcement(models.Model):
         NOTICE = 'notice', '공지사항'
         MAINTENANCE = 'maintenance', '점검 안내'
 
+    class Target(models.TextChoices):
+        ALL = 'all', '전체'
+        INTERNAL = 'internal', '내부 (관리자/작업자)'
+        CLIENT = 'client', '거래처'
+
     title = models.CharField('제목', max_length=200)
     content = models.TextField('내용')
     category = models.CharField(
@@ -294,6 +299,12 @@ class Announcement(models.Model):
         max_length=20,
         choices=Category.choices,
         default=Category.UPDATE,
+    )
+    target = models.CharField(
+        '대상',
+        max_length=20,
+        choices=Target.choices,
+        default=Target.ALL,
     )
     is_pinned = models.BooleanField('상단 고정', default=False)
     is_active = models.BooleanField('활성', default=True)

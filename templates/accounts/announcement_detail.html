@@ -45,6 +45,13 @@
                     {% elif announcement.category == 'maintenance' %}
                     <span class="badge bg-warning text-dark" style="font-size: 0.72rem;">점검</span>
                     {% endif %}
+                    {% if user.is_admin or user.is_superuser %}
+                        {% if announcement.target == 'internal' %}
+                        <span class="badge bg-dark" style="font-size: 0.72rem;">내부</span>
+                        {% elif announcement.target == 'client' %}
+                        <span class="badge bg-success" style="font-size: 0.72rem;">거래처</span>
+                        {% endif %}
+                    {% endif %}
                 </div>
 
                 <h4 class="mb-3">{{ announcement.title }}</h4>
