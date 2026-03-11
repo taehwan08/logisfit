@@ -13,7 +13,6 @@ from django.views.static import serve as static_serve
 
 # 대시보드 뷰 (임시로 TemplateView 사용, 추후 별도 뷰로 분리)
 from apps.accounts.views import DashboardView
-from apps.reports.page_views import DailyParcelReportView
 
 
 def health_check(request):
@@ -68,9 +67,6 @@ urlpatterns = [
 
     # 출고 관리
     path('fulfillment/', include('apps.fulfillment.urls')),
-
-    # 리포트 (페이지)
-    path('reports/daily-parcel/', DailyParcelReportView.as_view(), name='daily_parcel_report'),
 
     # Phase 3 이후 추가될 URL들
     # path('works/', include('apps.works.urls')),
