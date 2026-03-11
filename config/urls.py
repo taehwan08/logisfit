@@ -59,6 +59,9 @@ urlpatterns = [
     # 거래처 관리
     path('clients/', include('apps.clients.urls')),
 
+    # 리포트 페이지
+    path('reports/', include('apps.reports.page_urls')),
+
     # 바코드 검수
     path('inspection/', include('apps.inspection.urls')),
 

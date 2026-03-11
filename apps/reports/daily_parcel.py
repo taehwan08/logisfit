@@ -2,12 +2,41 @@
 일일택배사업부 리포트 서비스
 
 사방넷 출고 엑셀 파일을 업로드하면 브랜드별 단포/합포 출고건수를 집계한다.
+pandas 미사용 — openpyxl(.xlsx) + xlrd(.xls) 만 사용.
 """
-import pandas as pd
+import os
+from collections import defaultdict
 from io import BytesIO
 
+import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+import xlrd
+
+
+def _read_rows_xlsx(uploaded_file):
+    """xlsx 파일에서 데이터 행을 읽어 리스트로 반환 (헤더 제외)"""
+    wb = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if not rows:
+        raise ValueError('엑셀 파일이 비어 있습니다.')
+    return rows[0], rows[1:]  # header, data_rows
+
+
+def _read_rows_xls(uploaded_file):
+    """xls 파일에서 데이터 행을 읽어 리스트로 반환 (헤더 제외)"""
+    content = uploaded_file.read()
+    wb = xlrd.open_workbook(file_contents=content)
+    ws = wb.sheet_by_index(0)
+    if ws.nrows == 0:
+        raise ValueError('엑셀 파일이 비어 있습니다.')
+    header = [ws.cell_value(0, c) for c in range(ws.ncols)]
+    data_rows = []
+    for r in range(1, ws.nrows):
+        data_rows.append(tuple(ws.cell_value(r, c) for c in range(ws.ncols)))
+    return header, data_rows
 
 
 def process_daily_parcel_report(uploaded_file) -> BytesIO:
@@ -20,41 +49,43 @@ def process_daily_parcel_report(uploaded_file) -> BytesIO:
     Returns:
         BytesIO: 집계 결과 엑셀 파일
     """
-    # 1. 파일 읽기 (.xls와 .xlsx 모두 지원)
-    df = pd.read_excel(uploaded_file, header=0)
+    # 1. 파일 확장자 판별 후 읽기
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    if ext == '.xls':
+        header, data_rows = _read_rows_xls(uploaded_file)
+    else:
+        header, data_rows = _read_rows_xlsx(uploaded_file)
 
-    # 2. 컬럼 추출 (BM=64, BN=65 인덱스)
-    if len(df.columns) < 66:
+    # 2. 컬럼 수 검증 (BM=64, BN=65 인덱스)
+    num_cols = len(header)
+    if num_cols < 66:
         raise ValueError(
-            f'컬럼 수가 부족합니다. (필요: 66개 이상, 현재: {len(df.columns)}개)\n'
+            f'컬럼 수가 부족합니다. (필요: 66개 이상, 현재: {num_cols}개)\n'
             '사방넷 출고 데이터 엑셀 파일인지 확인해주세요.'
         )
 
-    col_brand = df.columns[64]  # 출력양식명 = 브랜드
-    col_check = df.columns[65]  # 출력메모 = 합포 판별
+    # 3. 브랜드별 단포/합포 집계
+    counts = defaultdict(lambda: {'단포': 0, '합포': 0})
 
-    # 3. 단포/합포 판별
-    df['포장구분'] = df[col_check].astype(str).apply(
-        lambda x: '합포' if '합' in x else '단포'
-    )
+    for row in data_rows:
+        if len(row) < 66:
+            continue
 
-    # 4. 브랜드별 집계
-    summary = df.groupby([col_brand, '포장구분']).size().reset_index(name='출고건수')
-    summary = summary.rename(columns={col_brand: '브랜드'})
-    brands = sorted(summary['브랜드'].unique(), key=str)
+        brand = str(row[64]).strip() if row[64] is not None else ''
+        memo = str(row[65]).strip() if row[65] is not None else ''
 
-    # 5. 모든 브랜드에 단포/합포 둘 다 보장 (없으면 0)
-    full_index = pd.MultiIndex.from_product(
-        [brands, ['단포', '합포']], names=['브랜드', '포장구분']
-    )
-    summary = (
-        summary
-        .set_index(['브랜드', '포장구분'])
-        .reindex(full_index, fill_value=0)
-        .reset_index()
-    )
+        if not brand:
+            continue
 
-    # 6. openpyxl로 엑셀 생성 (스타일 포함)
+        pack_type = '합포' if '합' in memo else '단포'
+        counts[brand][pack_type] += 1
+
+    if not counts:
+        raise ValueError('집계할 데이터가 없습니다. 파일 내용을 확인해주세요.')
+
+    brands = sorted(counts.keys())
+
+    # 4. openpyxl로 엑셀 생성 (스타일 포함)
     wb = Workbook()
     ws = wb.active
     ws.title = '일일택배사업부'
@@ -74,8 +105,8 @@ def process_daily_parcel_report(uploaded_file) -> BytesIO:
     )
 
     # 헤더 행
-    for col_idx, header in enumerate(['브랜드', '포장구분', '출고건수'], 1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
+    for col_idx, col_header in enumerate(['브랜드', '포장구분', '출고건수'], 1):
+        cell = ws.cell(row=1, column=col_idx, value=col_header)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = header_align
@@ -85,13 +116,10 @@ def process_daily_parcel_report(uploaded_file) -> BytesIO:
     row_num = 2
     for brand in brands:
         for i, pack_type in enumerate(['단포', '합포']):
-            count = summary.loc[
-                (summary['브랜드'] == brand) & (summary['포장구분'] == pack_type),
-                '출고건수'
-            ].values[0]
+            count = counts[brand][pack_type]
 
             # 브랜드명: 단포 행에만 표시
-            c1 = ws.cell(row=row_num, column=1, value=str(brand) if i == 0 else '')
+            c1 = ws.cell(row=row_num, column=1, value=brand if i == 0 else '')
             c1.font = bold_font if i == 0 else normal_font
             c1.alignment = left_align
             c1.border = thin_border
@@ -101,7 +129,7 @@ def process_daily_parcel_report(uploaded_file) -> BytesIO:
             c2.alignment = center_align
             c2.border = thin_border
 
-            c3 = ws.cell(row=row_num, column=3, value=int(count))
+            c3 = ws.cell(row=row_num, column=3, value=count)
             c3.font = normal_font
             c3.alignment = number_align
             c3.number_format = '#,##0'
