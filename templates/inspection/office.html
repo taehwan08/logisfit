@@ -109,6 +109,13 @@
 {% endblock %}
 
 {% block content %}
+<!-- 가이드 버튼 -->
+<div class="d-flex justify-content-end mb-2">
+    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#guideModal">
+        <i class="bi bi-question-circle me-1"></i>사용 가이드
+    </button>
+</div>
+
 <div class="row g-4">
     <!-- 현황 카드 -->
     <div class="col-6 col-md-3">
@@ -206,6 +213,50 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 사용 가이드 모달 -->
+<div class="modal fade" id="guideModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-book me-2"></i>송장 업로드 사용 가이드</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size: 0.9rem; line-height: 1.8;">
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-1-circle-fill me-2"></i>엑셀 파일 업로드</h6>
+                <ul class="mb-4">
+                    <li>사방넷 등에서 다운로드한 <strong>송장 엑셀 파일(.xlsx, .xls)</strong>을 준비합니다.</li>
+                    <li>업로드 영역에 파일을 <strong>드래그 앤 드롭</strong>하거나 <strong>클릭하여 선택</strong>합니다.</li>
+                    <li><strong>여러 파일을 동시에</strong> 선택하여 한꺼번에 업로드할 수 있습니다.</li>
+                    <li><span class="badge bg-primary">업로드</span> 버튼을 클릭하면 파일이 처리됩니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-2-circle-fill me-2"></i>업로드 결과 확인</h6>
+                <ul class="mb-4">
+                    <li>각 파일별로 업로드 성공/실패 결과가 표시됩니다.</li>
+                    <li>성공 시 <strong>송장 수, 상품 수, 출력차수</strong> 정보가 나타납니다.</li>
+                    <li><span class="badge bg-danger">중복 송장</span>이 있으면 해당 건은 건너뜁니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-3-circle-fill me-2"></i>오늘의 업로드 이력</h6>
+                <ul class="mb-4">
+                    <li>하단 테이블에서 오늘 업로드한 <strong>파일 목록과 진행 상태</strong>를 확인할 수 있습니다.</li>
+                    <li><span class="badge bg-success">픽업완료</span> 배지는 해당 배치가 픽업 처리되었음을 의미합니다.</li>
+                    <li><i class="bi bi-printer text-primary"></i> 버튼을 클릭하면 해당 배치의 <strong>피킹리스트</strong>를 출력할 수 있습니다.</li>
+                    <li><i class="bi bi-trash text-danger"></i> 버튼으로 잘못 업로드한 배치를 삭제할 수 있습니다.</li>
+                </ul>
+
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-lightbulb me-2"></i>
+                    <strong>TIP:</strong> 전체 이력 조회가 필요하면 사이드바의 <strong>"업로드 이력"</strong> 메뉴를 이용하세요.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
     </div>

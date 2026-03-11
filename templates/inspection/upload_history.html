@@ -60,6 +60,13 @@
 {% endblock %}
 
 {% block content %}
+<!-- 가이드 버튼 -->
+<div class="d-flex justify-content-end mb-2">
+    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#guideModal">
+        <i class="bi bi-question-circle me-1"></i>사용 가이드
+    </button>
+</div>
+
 <div class="row g-3">
     <!-- 필터 -->
     <div class="col-12">
@@ -168,6 +175,49 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 사용 가이드 모달 -->
+<div class="modal fade" id="guideModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-book me-2"></i>업로드 이력 사용 가이드</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size: 0.9rem; line-height: 1.8;">
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-1-circle-fill me-2"></i>이력 조회</h6>
+                <ul class="mb-4">
+                    <li><strong>시작일 ~ 종료일</strong>을 설정하여 원하는 기간의 업로드 이력을 검색합니다.</li>
+                    <li><strong>업로드자</strong> 이름으로 특정 사용자의 업로드 내역만 필터링할 수 있습니다.</li>
+                    <li><span class="badge bg-primary">검색</span> 버튼을 클릭하면 결과가 표시됩니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-2-circle-fill me-2"></i>결과 테이블 확인</h6>
+                <ul class="mb-4">
+                    <li>각 배치(업로드 건)별 <strong>파일명, 출력차수, 배송메모, 송장/상품 수, 진행률</strong>을 확인합니다.</li>
+                    <li>진행률 바는 <span style="color:#198754;">초록색</span>(완료) / <span style="color:#ffc107;">노란색</span>(진행중) 으로 표시됩니다.</li>
+                    <li><span class="badge bg-success">픽업완료</span> 배지가 있으면 해당 배치의 픽업이 완료된 것입니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-3-circle-fill me-2"></i>피킹리스트 출력</h6>
+                <ul class="mb-4">
+                    <li>각 행의 <i class="bi bi-printer text-primary"></i> 버튼으로 <strong>개별 피킹리스트</strong>를 출력합니다.</li>
+                    <li>여러 배치를 한꺼번에 출력하려면 왼쪽 <strong>체크박스를 선택</strong>한 후 상단의 <span class="badge bg-success">선택 피킹리스트 출력</span> 버튼을 클릭합니다.</li>
+                    <li><strong>전체 선택</strong> 체크박스로 현재 페이지의 모든 배치를 선택할 수 있습니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-4-circle-fill me-2"></i>배치 삭제</h6>
+                <ul class="mb-0">
+                    <li>각 행의 <i class="bi bi-trash text-danger"></i> 버튼으로 <strong>잘못 업로드한 배치를 삭제</strong>할 수 있습니다.</li>
+                    <li>삭제 시 해당 배치의 <strong>모든 송장과 상품 데이터가 함께 삭제</strong>됩니다.</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
     </div>

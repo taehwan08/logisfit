@@ -316,6 +316,13 @@
 {% endblock %}
 
 {% block content %}
+<!-- 가이드 버튼 -->
+<div class="d-flex justify-content-end mb-2">
+    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#guideModal">
+        <i class="bi bi-question-circle me-1"></i>사용 가이드
+    </button>
+</div>
+
 <!-- 풀스크린 오버레이 (JS에서 재사용) -->
 <div class="scan-overlay" id="scanOverlay">
     <i id="overlayIcon"></i>
@@ -437,6 +444,59 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 사용 가이드 모달 -->
+<div class="modal fade" id="guideModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-book me-2"></i>바코드 검수 사용 가이드</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size: 0.9rem; line-height: 1.8;">
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-1-circle-fill me-2"></i>송장번호 스캔</h6>
+                <ul class="mb-4">
+                    <li>왼쪽 <strong>"송장번호"</strong> 입력란에 커서가 활성화된 상태에서 <strong>송장 바코드를 스캔</strong>합니다.</li>
+                    <li>스캔 즉시 해당 송장의 <strong>주문 정보와 상품 목록</strong>이 표시됩니다.</li>
+                    <li>이미 <strong>검수 완료된 송장</strong>이면 <span style="color:#198754;">초록색</span> 완료 안내가 나타납니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-2-circle-fill me-2"></i>상품 바코드 스캔</h6>
+                <ul class="mb-4">
+                    <li>송장이 로드되면 자동으로 오른쪽 <strong>"상품바코드"</strong> 입력란으로 포커스가 이동합니다.</li>
+                    <li>상품을 하나씩 스캔하면 해당 상품 카드가 <span style="color:#ffc107;"><strong>노란색</strong></span>(스캔중) → <span style="color:#198754;"><strong>초록색</strong></span>(완료)으로 변합니다.</li>
+                    <li>수량이 2개 이상인 상품은 <strong>수량만큼 반복 스캔</strong>합니다.</li>
+                </ul>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-3-circle-fill me-2"></i>화면 알림 종류</h6>
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr><th style="width:120px;">알림</th><th>의미</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><span class="badge bg-success">정상</span></td><td>상품 스캔이 정상적으로 처리되었습니다.</td></tr>
+                            <tr><td><span class="badge bg-warning text-dark">숫자</span></td><td>수량이 2개 이상인 상품입니다. 나머지 수량도 스캔해주세요.</td></tr>
+                            <tr><td><span class="badge" style="background:#198754;color:#fff;">완료</span></td><td>모든 상품 스캔이 완료되어 <strong>검수 완료</strong> 처리되었습니다.</td></tr>
+                            <tr><td><span class="badge bg-danger">중복스캔</span></td><td>이미 스캔 처리된 상품을 다시 스캔했습니다.</td></tr>
+                            <tr><td><span class="badge bg-danger">상품오류</span></td><td>해당 송장에 포함되지 않은 상품 바코드입니다.</td></tr>
+                            <tr><td><span class="badge bg-dark">송장번호미등록</span></td><td>시스템에 등록되지 않은 송장입니다.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-4-circle-fill me-2"></i>검수 로그 확인</h6>
+                <ul class="mb-0">
+                    <li>화면 우측 하단의 <span class="badge bg-secondary"><i class="bi bi-journal-text"></i></span> 버튼을 클릭하면 <strong>최근 검수 이력</strong>을 확인할 수 있습니다.</li>
+                    <li>로그에서 송장번호로 <strong>검색</strong>하여 특정 건의 처리 내역을 확인할 수 있습니다.</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
     </div>
