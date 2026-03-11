@@ -3,8 +3,6 @@
 
 {% block title %}일일택배사업부 리포트{% endblock %}
 
-{% block page_title %}일일택배사업부 리포트{% endblock %}
-
 {% block extra_css %}
 <style>
     .upload-zone {
@@ -45,6 +43,13 @@
     .info-card {
         border-left: 4px solid #4472C4;
     }
+    .history-table td, .history-table th {
+        font-size: 0.82rem;
+        vertical-align: middle;
+    }
+    .history-table .badge {
+        font-size: 0.72rem;
+    }
 </style>
 {% endblock %}
 
@@ -54,20 +59,9 @@
         <h4 class="mb-1">
             <i class="bi bi-file-earmark-bar-graph me-2"></i>일일택배사업부 리포트
         </h4>
-        <p class="text-muted mb-0">사방넷 출고 엑셀 파일을 업로드하면 브랜드별 단포/합포 출고건수를 집계합니다.</p>
+        <p class="text-muted mb-0">사방넷 출고 엑셀 파일을 업로드하면 브랜드별 단포/합포 출고건수를 분석합니다.</p>
     </div>
 </div>
-
-{% if error %}
-<div class="row mb-3">
-    <div class="col-12 col-lg-8">
-        <div class="alert alert-danger d-flex align-items-center" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <div>{{ error }}</div>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <div class="row">
     <!-- 업로드 영역 -->
@@ -81,6 +75,16 @@
             <div class="card-body p-4">
                 <form method="post" enctype="multipart/form-data" id="uploadForm">
                     {% csrf_token %}
+
+                    <!-- 날짜 선택 -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-calendar3 me-1"></i>리포트 날짜
+                        </label>
+                        <input type="date" name="report_date" id="reportDate"
+                               class="form-control" style="max-width: 220px;"
+                               required>
+                    </div>
 
                     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('excelFile').click();">
                         <div class="icon">
@@ -103,7 +107,7 @@
 
                     <div class="mt-4">
                         <button type="submit" class="btn btn-primary" id="submitBtn" disabled>
-                            <i class="bi bi-gear me-1"></i>리포트 생성 및 다운로드
+                            <i class="bi bi-bar-chart-line me-1"></i>리포트 생성
                         </button>
                     </div>
                 </form>
@@ -119,54 +123,82 @@
                     <i class="bi bi-info-circle me-1 text-primary"></i>사용 안내
                 </h6>
                 <ol class="mb-0 ps-3" style="font-size: 0.88rem; line-height: 1.9;">
+                    <li><strong>리포트 날짜</strong>를 선택합니다.</li>
                     <li>사방넷에서 출고 데이터 엑셀 파일을 다운로드합니다.</li>
                     <li>위 영역에 해당 파일을 업로드합니다.</li>
-                    <li><strong>리포트 생성</strong> 버튼을 클릭하면 결과 엑셀이 자동 다운로드됩니다.</li>
+                    <li><strong>리포트 생성</strong> 버튼을 클릭하면 분석 결과 페이지로 이동합니다.</li>
                 </ol>
 
                 <hr>
 
-                <h6 class="fw-semibold mb-2" style="font-size: 0.88rem;">
-                    <i class="bi bi-table me-1"></i>출력 형식
-                </h6>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0" style="font-size: 0.8rem;">
-                        <thead class="table-light">
-                            <tr>
-                                <th>브랜드</th>
-                                <th>포장구분</th>
-                                <th class="text-end">출고건수</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>브랜드A</td>
-                                <td>단포</td>
-                                <td class="text-end">78</td>
-                            </tr>
-                            <tr>
-                                <td></td>
-                                <td>합포</td>
-                                <td class="text-end">35</td>
-                            </tr>
-                            <tr>
-                                <td>브랜드B</td>
-                                <td>단포</td>
-                                <td class="text-end">41</td>
-                            </tr>
-                            <tr>
-                                <td></td>
-                                <td>합포</td>
-                                <td class="text-end">0</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <p class="text-muted mb-0" style="font-size: 0.82rem;">
+                    <i class="bi bi-arrow-repeat me-1"></i>
+                    같은 날짜에 다시 업로드하면 기존 데이터가 업데이트됩니다.
+                </p>
             </div>
         </div>
     </div>
 </div>
 
+<!-- 최근 리포트 이력 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0">
+                    <i class="bi bi-clock-history me-2 text-secondary"></i>최근 리포트
+                </h6>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_reports %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 history-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>날짜</th>
+                                <th class="text-end">총 출고</th>
+                                <th class="text-end">단포</th>
+                                <th class="text-end">합포</th>
+                                <th class="text-end">합포율</th>
+                                <th>업로드자</th>
+                                <th class="text-center">보기</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in recent_reports %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'reports_page:daily_parcel_report' date=r.report_date %}" class="text-decoration-none fw-semibold">
+                                        {{ r.report_date|date:"Y-m-d" }}
+                                    </a>
+                                </td>
+                                <td class="text-end fw-semibold">{{ r.total_orders|default:"0" }}</td>
+                                <td class="text-end">{{ r.single_count|default:"0" }}</td>
+                                <td class="text-end">{{ r.combo_count|default:"0" }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-primary-subtle text-primary">{{ r.combo_ratio }}%</span>
+                                </td>
+                                <td class="text-muted">{{ r.uploaded_by.name|default:"-" }}</td>
+                                <td class="text-center">
+                                    <a href="{% url 'reports_page:daily_parcel_report' date=r.report_date %}" class="btn btn-sm btn-outline-primary py-0 px-2">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    <p class="mb-0">아직 리포트가 없습니다. 엑셀 파일을 업로드하여 첫 리포트를 생성해보세요.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -176,6 +208,10 @@ const fileInput = document.getElementById('excelFile');
 const fileNameDisplay = document.getElementById('fileName');
 const fileNameText = document.getElementById('fileNameText');
 const submitBtn = document.getElementById('submitBtn');
+const reportDate = document.getElementById('reportDate');
+
+// 오늘 날짜 기본값
+reportDate.value = new Date().toISOString().split('T')[0];
 
 // 드래그 앤 드롭
 uploadZone.addEventListener('dragover', function(e) {
@@ -222,7 +258,7 @@ function clearFile() {
 // 폼 제출 시 로딩 표시
 document.getElementById('uploadForm').addEventListener('submit', function() {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>처리 중...';
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>분석 중...';
 });
 </script>
 {% endblock %}

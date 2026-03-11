@@ -6,10 +6,16 @@ config/urls.py에서 path('reports/', include('apps.reports.page_urls'))로 등�
 """
 from django.urls import path
 
-from .page_views import DailyParcelReportView
+from .page_views import (
+    DailyParcelUploadView,
+    DailyParcelReportView,
+    DailyParcelExcelView,
+)
 
 app_name = 'reports_page'
 
 urlpatterns = [
-    path('daily-parcel/', DailyParcelReportView.as_view(), name='daily_parcel'),
+    path('daily-parcel/', DailyParcelUploadView.as_view(), name='daily_parcel'),
+    path('daily-parcel/<str:date>/', DailyParcelReportView.as_view(), name='daily_parcel_report'),
+    path('daily-parcel/<str:date>/excel/', DailyParcelExcelView.as_view(), name='daily_parcel_excel'),
 ]

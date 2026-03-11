@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}일일택배사업부 리포트 — {{ report.report_date|date:"Y-m-d" }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 요약 카드 */
+    .stat-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        transition: transform 0.15s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .stat-card .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+    }
+    .stat-card .stat-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .stat-card .stat-label {
+        font-size: 0.78rem;
+        color: #888;
+        font-weight: 500;
+    }
+
+    /* 날짜 네비게이션 */
+    .date-nav {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .date-nav .current-date {
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    /* 테이블 */
+    .brand-table th {
+        font-size: 0.78rem;
+        font-weight: 600;
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        position: sticky;
+        top: 0;
+    }
+    .brand-table td {
+        font-size: 0.82rem;
+        vertical-align: middle;
+    }
+    .brand-table .brand-name {
+        font-weight: 600;
+    }
+    .ratio-bar {
+        display: flex;
+        height: 6px;
+        border-radius: 3px;
+        overflow: hidden;
+        background: #e9ecef;
+        min-width: 60px;
+    }
+    .ratio-bar .single-bar {
+        background: #4472C4;
+    }
+    .ratio-bar .combo-bar {
+        background: #ED7D31;
+    }
+
+    /* 차트 영역 */
+    .chart-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 헤더 + 날짜 네비게이션 -->
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h4 class="mb-1">
+                <i class="bi bi-file-earmark-bar-graph me-2"></i>일일택배사업부 리포트
+            </h4>
+            <p class="text-muted mb-0">
+                <small>파일: {{ report.file_name }} · 등록: {{ report.updated_at|date:"Y-m-d H:i" }}</small>
+            </p>
+        </div>
+        <div class="date-nav">
+            {% if prev_date %}
+            <a href="{% url 'reports_page:daily_parcel_report' date=prev_date %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-chevron-left"></i></button>
+            {% endif %}
+
+            <span class="current-date">{{ report.report_date|date:"Y년 m월 d일" }}</span>
+
+            {% if next_date %}
+            <a href="{% url 'reports_page:daily_parcel_report' date=next_date %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-chevron-right"></i></button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 요약 카드 -->
+<div class="row mb-4">
+    <div class="col-6 col-lg-3 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+                <div>
+                    <div class="stat-value text-primary">{{ report.total_orders|default:"0" }}</div>
+                    <div class="stat-label">총 출고건수</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background: rgba(68,114,196,0.1); color: #4472C4;">
+                    <i class="bi bi-1-square"></i>
+                </div>
+                <div>
+                    <div class="stat-value" style="color: #4472C4;">{{ report.single_count|default:"0" }}</div>
+                    <div class="stat-label">단포</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background: rgba(237,125,49,0.1); color: #ED7D31;">
+                    <i class="bi bi-collection"></i>
+                </div>
+                <div>
+                    <div class="stat-value" style="color: #ED7D31;">{{ report.combo_count|default:"0" }}</div>
+                    <div class="stat-label">합포</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-success bg-opacity-10 text-success">
+                    <i class="bi bi-percent"></i>
+                </div>
+                <div>
+                    <div class="stat-value text-success">{{ report.combo_ratio }}%</div>
+                    <div class="stat-label">합포 비율</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 브랜드별 상세 테이블 -->
+    <div class="col-12 col-lg-7 mb-4">
+        <div class="card chart-card">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="bi bi-table me-2"></i>브랜드별 출고 현황
+                </h6>
+                <a href="{% url 'reports_page:daily_parcel_excel' date=report.report_date %}"
+                   class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-excel me-1"></i>엑셀 다운로드
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-hover mb-0 brand-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>브랜드</th>
+                                <th class="text-end">단포</th>
+                                <th class="text-end">합포</th>
+                                <th class="text-end">합계</th>
+                                <th class="text-end">합포율</th>
+                                <th style="width: 100px;">비율</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for brand in brand_list %}
+                            <tr>
+                                <td class="text-muted">{{ forloop.counter }}</td>
+                                <td class="brand-name">{{ brand.brand_name }}</td>
+                                <td class="text-end">{{ brand.single_count }}</td>
+                                <td class="text-end">{{ brand.combo_count }}</td>
+                                <td class="text-end fw-semibold">{{ brand.total_count }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-warning-subtle text-warning-emphasis">{{ brand.combo_ratio }}%</span>
+                                </td>
+                                <td>
+                                    {% if brand.total_count > 0 %}
+                                    <div class="ratio-bar">
+                                        <div class="single-bar" style="width: {% widthratio brand.single_count brand.total_count 100 %}%"></div>
+                                        <div class="combo-bar" style="width: {% widthratio brand.combo_count brand.total_count 100 %}%"></div>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr class="fw-bold">
+                                <td></td>
+                                <td>합계</td>
+                                <td class="text-end">{{ report.single_count }}</td>
+                                <td class="text-end">{{ report.combo_count }}</td>
+                                <td class="text-end">{{ report.total_orders }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-primary">{{ report.combo_ratio }}%</span>
+                                </td>
+                                <td>
+                                    <div class="ratio-bar">
+                                        {% if report.total_orders > 0 %}
+                                        <div class="single-bar" style="width: {% widthratio report.single_count report.total_orders 100 %}%"></div>
+                                        <div class="combo-bar" style="width: {% widthratio report.combo_count report.total_orders 100 %}%"></div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 차트 -->
+    <div class="col-12 col-lg-5 mb-4">
+        <div class="card chart-card">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0">
+                    <i class="bi bi-bar-chart me-2"></i>브랜드별 단포/합포 비교
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="brandChart" height="400"></canvas>
+            </div>
+        </div>
+
+        <!-- 액션 버튼 -->
+        <div class="mt-3 d-flex gap-2">
+            <a href="{% url 'reports_page:daily_parcel' %}" class="btn btn-outline-secondary flex-fill">
+                <i class="bi bi-upload me-1"></i>새 리포트 업로드
+            </a>
+            <a href="{% url 'reports_page:daily_parcel_excel' date=report.report_date %}"
+               class="btn btn-success flex-fill">
+                <i class="bi bi-download me-1"></i>엑셀 다운로드
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    // 브랜드 데이터 준비
+    const brands = [
+        {% for brand in brand_list %}
+        {
+            name: '{{ brand.brand_name|escapejs }}',
+            single: {{ brand.single_count }},
+            combo: {{ brand.combo_count }},
+        },
+        {% endfor %}
+    ];
+
+    // 건수 기준 내림차순 (상위 15개)
+    const top = brands.slice(0, 15);
+
+    const ctx = document.getElementById('brandChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: top.map(b => b.name),
+            datasets: [
+                {
+                    label: '단포',
+                    data: top.map(b => b.single),
+                    backgroundColor: 'rgba(68, 114, 196, 0.8)',
+                    borderRadius: 4,
+                },
+                {
+                    label: '합포',
+                    data: top.map(b => b.combo),
+                    backgroundColor: 'rgba(237, 125, 49, 0.8)',
+                    borderRadius: 4,
+                },
+            ],
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { font: { size: 12 }, usePointStyle: true, pointStyle: 'rect' },
+                },
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(items) {
+                            const idx = items[0].dataIndex;
+                            const b = top[idx];
+                            const total = b.single + b.combo;
+                            const ratio = total > 0 ? (b.combo / total * 100).toFixed(1) : 0;
+                            return `합계: ${total}건 · 합포율: ${ratio}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: { font: { size: 11 } },
+                },
+                y: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: { font: { size: 11 } },
+                },
+            },
+        },
+    });
+})();
+</script>
+{% endblock %}
