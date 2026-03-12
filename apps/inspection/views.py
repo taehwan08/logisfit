@@ -246,6 +246,7 @@ def _process_format1(headers, rows):
         '배송메모': '배송메모',
         '등록일': '등록일',
         '택배사': '택배사',
+        '상태': '상태',
     }
 
     required_excel_columns = ['송장번호', '쇼핑몰', '수령자', '전화1', '주소', '바코드번호', '매칭상품명', '매칭수량']
@@ -268,6 +269,11 @@ def _process_format1(headers, rows):
     batch_delivery_memo = ''
 
     for row in rows:
+        # 상태가 "취소"인 행은 건너뛰기
+        status = _get_col(row, col_map, '상태')
+        if status == '취소':
+            continue
+
         tracking_number = _get_col(row, col_map, '송장번호')
         if not tracking_number:
             continue
@@ -293,6 +299,10 @@ def _process_format1(headers, rows):
         product_name_part = _get_col(row, col_map, '매칭상품명')
         manage_name_part = _get_col(row, col_map, '매칭관리명')
 
+        # 매칭관리명이 무의미한 값("-" 등)이면 무시
+        if manage_name_part in ('-', '--', ''):
+            manage_name_part = ''
+
         if product_name_part and manage_name_part:
             product_name = f'{product_name_part} ({manage_name_part})'
         elif product_name_part:
@@ -307,6 +317,12 @@ def _process_format1(headers, rows):
             quantity = 0
 
         if barcode and product_name:
+            # 같은 송장 내 같은 바코드면 수량 합산
+            existing = [p for p in orders_data[tracking_number]['products'] if p['barcode'] == barcode]
+            if existing:
+                existing[0]['quantity'] += quantity
+                continue
+
             orders_data[tracking_number]['products'].append({
                 'barcode': barcode,
                 'product_name': product_name,
