@@ -13,21 +13,26 @@
 
         <!-- 우측 메뉴 -->
         <ul class="navbar-nav ms-auto">
-            <!-- 알림 (Phase 5 이후 활성화) -->
-            <!--
+            <!-- 알림 -->
             <li class="nav-item dropdown">
-                <a class="nav-link" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown">
-                    <i class="bi bi-bell"></i>
-                    <span class="badge bg-danger notification-badge">3</span>
+                <a class="nav-link position-relative" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-bell fs-5"></i>
+                    <span class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle"
+                          id="notifBadge" style="display:none; font-size:0.65rem; padding:3px 6px;">0</span>
                 </a>
-                <div class="dropdown-menu dropdown-menu-end notification-dropdown">
-                    <h6 class="dropdown-header">알림</h6>
-                    <a class="dropdown-item" href="#">알림 내용...</a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item text-center" href="#">모든 알림 보기</a>
+                <div class="dropdown-menu dropdown-menu-end shadow-sm" style="width:340px; max-height:400px; overflow-y:auto;">
+                    <div class="d-flex justify-content-between align-items-center px-3 py-2">
+                        <h6 class="mb-0 fw-semibold" style="font-size:0.9rem;">알림</h6>
+                        <button class="btn btn-link btn-sm text-muted p-0" onclick="markAllNotificationsRead()" style="font-size:0.78rem; text-decoration:none;">
+                            모두 읽음
+                        </button>
+                    </div>
+                    <div class="dropdown-divider mt-0"></div>
+                    <div id="notifDropdownList">
+                        <div class="text-center text-muted py-3" style="font-size:0.85rem;">새로운 알림이 없습니다</div>
+                    </div>
                 </div>
             </li>
-            -->
 
             <!-- 사용자 메뉴 -->
             <li class="nav-item dropdown">

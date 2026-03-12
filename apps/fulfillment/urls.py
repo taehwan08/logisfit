@@ -36,4 +36,9 @@ urlpatterns = [
     path('api/orders/<int:order_id>/comments/', views.get_comments, name='get_comments'),
     path('api/orders/<int:order_id>/comments/add/', views.add_comment, name='add_comment'),
     path('api/orders/<int:order_id>/comments/<int:comment_id>/delete/', views.delete_comment, name='delete_comment'),
+
+    # 알림 API
+    path('api/notifications/', views.get_notifications, name='get_notifications'),
+    path('api/notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('api/notifications/read-all/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
 ]

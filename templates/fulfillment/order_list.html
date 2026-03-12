@@ -287,34 +287,41 @@
         </div>
         <div class="col-md-2 col-6">
             <label>브랜드</label>
-            <select class="form-select" id="filterBrand" onchange="loadOrders()">
+            <select class="form-select" id="filterBrand">
                 <option value="">전체</option>
             </select>
         </div>
         {% endif %}
         <div class="col-md-2 col-6">
-            <label>플랫폼</label>
-            <select class="form-select" id="filterPlatform" onchange="onFilterPlatformChange()">
-                <option value="">전체</option>
-                {% for value, label in platforms %}
-                <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2 col-6">
             <label>상태</label>
-            <select class="form-select" id="filterStatus" onchange="loadOrders()">
+            <select class="form-select" id="filterStatus">
                 <option value="">전체</option>
                 {% for value, label in statuses %}
                 <option value="{{ value }}">{{ label }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-2 col-6">
+        <div class="col-md-3 col-6">
             <label>검색</label>
             <input type="text" class="form-control" id="filterSearch" placeholder="상품명/송장번호/자체코드(FF-)"
-                   onkeyup="debounceSearch()">
+                   onkeydown="if(event.key==='Enter'){currentPage=1;loadOrders();}">
         </div>
+        <div class="col-md-1 col-6 d-flex align-items-end">
+            <button class="btn btn-primary w-100" onclick="currentPage=1;loadOrders();">
+                <i class="bi bi-search me-1"></i>조회
+            </button>
+        </div>
+    </div>
+    <!-- 플랫폼 체크박스 행 -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 pt-2 border-top">
+        <span class="text-muted fw-semibold" style="font-size:0.82rem;">플랫폼</span>
+        {% for value, label in platforms %}
+        <div class="form-check form-check-inline mb-0">
+            <input class="form-check-input platform-check" type="checkbox"
+                   id="platform_{{ value }}" value="{{ value }}">
+            <label class="form-check-label" for="platform_{{ value }}" style="font-size:0.82rem;">{{ label }}</label>
+        </div>
+        {% endfor %}
     </div>
 </div>
 
@@ -372,6 +379,7 @@
                     <th>브랜드</th>
                     <th>플랫폼</th>
                     <th>상품명</th>
+                    <th class="text-center" style="width:50px"><i class="bi bi-chat-dots"></i></th>
                     <th class="text-end">수량</th>
                     {% if not is_client %}
                     <th class="text-end">박스수</th>
@@ -759,7 +767,7 @@ let currentPlatformColumns = [];  // 현재 필터된 플랫폼의 커스텀 컬
 // 초기화
 // ============================================================================
 document.addEventListener('DOMContentLoaded', function() {
-    loadOrders();
+    // 자동 조회 없음 — "조회" 버튼 클릭 시에만 데이터 로드
 });
 
 // ============================================================================
@@ -767,23 +775,22 @@ document.addEventListener('DOMContentLoaded', function() {
 // ============================================================================
 function onFilterClientChange() {
     loadFilterBrands();
-    loadOrders();
 }
 
-function onFilterPlatformChange() {
-    loadPlatformColumns();
-    loadOrders();
+function getSelectedPlatforms() {
+    return Array.from(document.querySelectorAll('.platform-check:checked')).map(cb => cb.value);
 }
 
 function loadPlatformColumns() {
-    const platform = document.getElementById('filterPlatform').value;
-    if (!platform) {
+    const selected = getSelectedPlatforms();
+    // 플랫폼 컬럼은 단일 플랫폼 선택 시에만 표시
+    if (selected.length !== 1) {
         currentPlatformColumns = [];
         updateDynamicHeaders();
         return;
     }
 
-    fetch(`{% url 'fulfillment:get_platform_columns' %}?platform=${platform}`)
+    fetch(`{% url 'fulfillment:get_platform_columns' %}?platform=${selected[0]}`)
         .then(r => r.json())
         .then(data => {
             currentPlatformColumns = data.columns || [];
@@ -845,8 +852,10 @@ function loadOrders(page) {
     const brandFilter = document.getElementById('filterBrand');
     if (brandFilter?.value) params.append('brand_id', brandFilter.value);
 
-    const platform = document.getElementById('filterPlatform').value;
-    if (platform) params.append('platform', platform);
+    const selectedPlatforms = getSelectedPlatforms();
+    if (selectedPlatforms.length > 0) params.append('platform', selectedPlatforms.join(','));
+    // 플랫폼 컬럼 로드 (단일 선택 시에만)
+    loadPlatformColumns();
 
     const status = document.getElementById('filterStatus').value;
     if (status) params.append('status', status);
@@ -917,6 +926,9 @@ function renderOrders(data) {
                     ${escapeHtml(order.product_name)}
                 </a>
             </td>
+            <td class="text-center">${order.comment_count > 0
+                ? `<span class="badge bg-primary-subtle text-primary" style="font-size:0.72rem;cursor:pointer;" onclick="showDetail(${order.id})" title="댓글 ${order.comment_count}개"><i class="bi bi-chat-dots me-1"></i>${order.comment_count}</span>`
+                : '<span class="text-muted" style="font-size:0.72rem;">-</span>'}</td>
             <td class="text-end">${order.quantity != null ? order.quantity.toLocaleString() : ''}</td>
             ${!IS_CLIENT ? `
             <td class="text-end">${order.box_quantity != null ? order.box_quantity.toLocaleString() : ''}</td>
@@ -1547,7 +1559,7 @@ function saveColumnConfig() {
             showToast(data.message, 'success');
             loadColumnConfig();
             // 현재 필터된 플랫폼이 같으면 목록도 갱신
-            if (document.getElementById('filterPlatform').value === platform) {
+            if (getSelectedPlatforms().includes(platform)) {
                 loadPlatformColumns();
             }
         } else showToast(data.error || '저장 실패', 'danger');
@@ -1564,8 +1576,8 @@ function exportExcel() {
     if (clientFilter?.value) params.append('client_id', clientFilter.value);
     const brandFilter = document.getElementById('filterBrand');
     if (brandFilter?.value) params.append('brand_id', brandFilter.value);
-    const platform = document.getElementById('filterPlatform').value;
-    if (platform) params.append('platform', platform);
+    const expPlatforms = getSelectedPlatforms();
+    if (expPlatforms.length > 0) params.append('platform', expPlatforms.join(','));
     const status = document.getElementById('filterStatus').value;
     if (status) params.append('status', status);
     const search = document.getElementById('filterSearch').value.trim();
@@ -1774,8 +1786,7 @@ function showGuideModal() {
 // 유틸리티
 // ============================================================================
 function debounceSearch() {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { currentPage = 1; loadOrders(); }, 300);
+    // 자동 검색 비활성화 — Enter 키 또는 "조회" 버튼으로만 검색
 }
 
 function showLoading(show) {
@@ -1801,5 +1812,20 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ============================================================================
+// URL 파라미터로 주문 상세 열기 (?open=주문ID)
+// ============================================================================
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get('open');
+    if (openId) {
+        // URL에서 파라미터 제거 (히스토리 정리)
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+        // 약간의 지연 후 상세 열기
+        setTimeout(() => showDetail(parseInt(openId)), 300);
+    }
+})();
 </script>
 {% endblock %}

@@ -348,3 +348,61 @@ class PlatformColumnConfig(models.Model):
 
     def __str__(self):
         return f"[{self.get_platform_display()}] {self.name} ({self.key})"
+
+
+class FulfillmentNotification(models.Model):
+    """
+    풀필먼트 알림 모델
+
+    새 주문 등록, 댓글, 상태 변경 등의 이벤트를 사용자별로 알립니다.
+    30초 간격 폴링으로 실시간 알림을 제공합니다.
+    """
+
+    class NotificationType(models.TextChoices):
+        NEW_ORDER = 'new_order', '새 주문'
+        NEW_COMMENT = 'new_comment', '새 댓글'
+        STATUS_CHANGE = 'status_change', '상태 변경'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        verbose_name='수신자',
+        related_name='fulfillment_notifications',
+    )
+    notification_type = models.CharField(
+        '알림 유형',
+        max_length=20,
+        choices=NotificationType.choices,
+    )
+    order = models.ForeignKey(
+        FulfillmentOrder,
+        on_delete=models.CASCADE,
+        verbose_name='관련 주문',
+        related_name='notifications',
+        null=True,
+        blank=True,
+    )
+    message = models.CharField(
+        '알림 내용',
+        max_length=300,
+    )
+    is_read = models.BooleanField(
+        '읽음 여부',
+        default=False,
+    )
+    created_at = models.DateTimeField('생성일시', auto_now_add=True)
+
+    class Meta:
+        db_table = 'fulfillment_notifications'
+        verbose_name = '풀필먼트 알림'
+        verbose_name_plural = '풀필먼트 알림 목록'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['user', 'is_read', '-created_at'],
+                name='idx_fulfill_notif_user_read',
+            ),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_notification_type_display()}] {self.user} - {self.message[:50]}"

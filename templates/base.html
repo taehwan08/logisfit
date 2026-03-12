@@ -62,6 +62,95 @@
 
     {% block extra_js %}{% endblock %}
 
+    <!-- 알림 폴링 (전역) -->
+    <script>
+    (function() {
+        const notifBadge = document.getElementById('notifBadge');
+        const notifList = document.getElementById('notifDropdownList');
+        if (!notifBadge) return;  // 알림 UI 없으면 무시
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+            || '{{ csrf_token }}';
+        let lastCount = -1;
+
+        function _esc(text) {
+            if (!text) return '';
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        async function _poll() {
+            try {
+                const res = await fetch('/fulfillment/api/notifications/');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // 뱃지
+                if (data.unread_count > 0) {
+                    notifBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                    notifBadge.style.display = '';
+                } else {
+                    notifBadge.style.display = 'none';
+                }
+
+                // 드롭다운
+                if (notifList) {
+                    if (data.notifications.length === 0) {
+                        notifList.innerHTML = '<div class="text-center text-muted py-3" style="font-size:0.85rem;">새로운 알림이 없습니다</div>';
+                    } else {
+                        notifList.innerHTML = data.notifications.map(n => `
+                            <a class="dropdown-item py-2 px-3" href="javascript:void(0)"
+                               onclick="window._notifClick(${n.id}, ${n.order_id})"
+                               style="font-size:0.85rem; white-space:normal;">
+                                <div class="d-flex align-items-start gap-2">
+                                    <i class="bi ${n.type === 'new_order' ? 'bi-plus-circle text-primary' :
+                                                   n.type === 'new_comment' ? 'bi-chat-dots text-success' :
+                                                   'bi-arrow-repeat text-warning'} mt-1"></i>
+                                    <div>
+                                        <div>${_esc(n.message)}</div>
+                                        <small class="text-muted">${n.created_at}</small>
+                                    </div>
+                                </div>
+                            </a>
+                        `).join('');
+                    }
+                }
+
+                lastCount = data.unread_count;
+            } catch(e) {}
+        }
+
+        window._notifClick = async function(notifId, orderId) {
+            try {
+                await fetch(`/fulfillment/api/notifications/${notifId}/read/`, {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+                });
+            } catch(e) {}
+            // 주문 상세 페이지로 이동
+            if (orderId) {
+                window.location.href = `/fulfillment/?open=${orderId}`;
+            }
+            _poll();
+        };
+
+        window.markAllNotificationsRead = async function() {
+            try {
+                await fetch('/fulfillment/api/notifications/read-all/', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+                });
+                _poll();
+            } catch(e) {}
+        };
+
+        // 초기 로드 + 30초 폴링
+        _poll();
+        setInterval(_poll, 30000);
+    })();
+    </script>
+
     <!-- PWA Service Worker 등록 -->
     <script>
     if ('serviceWorker' in navigator) {

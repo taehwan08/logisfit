@@ -15,10 +15,10 @@ from django.http import JsonResponse, HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
 
-from .models import FulfillmentOrder, FulfillmentComment, PlatformColumnConfig
+from .models import FulfillmentOrder, FulfillmentComment, FulfillmentNotification, PlatformColumnConfig
 from .slack import send_order_created_notification, send_bulk_orders_notification
 from apps.accounts.email import send_shipment_notification_async, send_shipment_notifications_async
 from apps.clients.models import Client, Brand
@@ -257,7 +257,11 @@ def get_orders(request):
     if brand_id:
         qs = qs.filter(brand_id=brand_id)
     if platform:
-        qs = qs.filter(platform=platform)
+        platforms_list = [p.strip() for p in platform.split(',') if p.strip()]
+        if len(platforms_list) == 1:
+            qs = qs.filter(platform=platforms_list[0])
+        elif len(platforms_list) > 1:
+            qs = qs.filter(platform__in=platforms_list)
     if status:
         qs = qs.filter(status=status)
     if search:
@@ -274,6 +278,9 @@ def get_orders(request):
         qs = qs.filter(created_at__gte=date_from)
     if date_to:
         qs = qs.filter(created_at__lte=date_to)
+
+    # 댓글 수 어노테이션
+    qs = qs.annotate(comment_count=Count('comments'))
 
     # 정렬
     qs = qs.order_by('-created_at')
@@ -307,7 +314,10 @@ def get_orders(request):
         if brand_id:
             extra_qs = extra_qs.filter(brand_id=brand_id)
         if platform:
-            extra_qs = extra_qs.filter(platform=platform)
+            if len(platforms_list) == 1:
+                extra_qs = extra_qs.filter(platform=platforms_list[0])
+            elif len(platforms_list) > 1:
+                extra_qs = extra_qs.filter(platform__in=platforms_list)
         if status:
             extra_qs = extra_qs.filter(status=status)
         if date_from:
@@ -347,6 +357,7 @@ def get_orders(request):
             'synced_at': timezone.localtime(order.synced_at).strftime('%Y-%m-%d %H:%M') if order.synced_at else '',
             'created_by': order.created_by.name if order.created_by else '',
             'created_at': timezone.localtime(order.created_at).strftime('%Y-%m-%d %H:%M'),
+            'comment_count': getattr(order, 'comment_count', 0),
         })
 
     return JsonResponse({
@@ -438,6 +449,12 @@ def create_order(request):
 
     # 슬랙 알림
     send_order_created_notification(order)
+
+    # 인앱 알림 — 관리자/작업자에게
+    try:
+        _create_notifications_for_order(order, exclude_user=user)
+    except Exception:
+        logger.exception('알림 생성 실패 (주문 등록)')
 
     return JsonResponse({
         'success': True,
@@ -785,6 +802,12 @@ def update_status(request, order_id):
         if action == 'ship':
             order.shipped_by = user
             send_shipment_notification_async(order)
+
+        # 인앱 알림 — 주문 등록자에게
+        try:
+            _create_notifications_for_status_change(order, action, user)
+        except Exception:
+            logger.exception('알림 생성 실패 (상태 변경)')
 
         time_val = getattr(order, cfg['time_field'])
         return JsonResponse({
@@ -1187,6 +1210,12 @@ def add_comment(request, order_id):
         response_data['file_size'] = comment.file.size
         response_data['is_image'] = file_ext in COMMENT_IMAGE_EXTENSIONS
 
+    # 인앱 알림 — 관련 사용자에게
+    try:
+        _create_notifications_for_comment(order, comment, request.user)
+    except Exception:
+        logger.exception('알림 생성 실패 (댓글)')
+
     return JsonResponse({
         'success': True,
         'message': '댓글이 등록되었습니다.',
@@ -1442,3 +1471,160 @@ def bulk_create_orders(request):
         )
 
     return JsonResponse(result)
+
+
+# ============================================================================
+# 알림 헬퍼
+# ============================================================================
+
+def _create_notifications_for_order(order, exclude_user=None):
+    """새 주문 등록 시 관리자/작업자에게 알림 생성"""
+    from apps.accounts.models import User
+    recipients = User.objects.filter(
+        is_active=True,
+    ).filter(
+        Q(role__in=['admin', 'worker', 'office', 'field']) | Q(is_superuser=True)
+    )
+    if exclude_user:
+        recipients = recipients.exclude(id=exclude_user.id)
+
+    product_short = order.product_name[:30]
+    client_name = order.client.company_name if order.client else ''
+    message = f"새 주문: {client_name} - {product_short}"
+
+    notifications = [
+        FulfillmentNotification(
+            user=user,
+            notification_type='new_order',
+            order=order,
+            message=message,
+        )
+        for user in recipients
+    ]
+    if notifications:
+        FulfillmentNotification.objects.bulk_create(notifications)
+
+
+def _create_notifications_for_comment(order, comment, author):
+    """새 댓글 작성 시 관련 사용자에게 알림 생성"""
+    recipient_ids = set()
+
+    # 주문 등록자
+    if order.created_by_id:
+        recipient_ids.add(order.created_by_id)
+
+    # 이전 댓글 작성자들
+    comment_authors = FulfillmentComment.objects.filter(
+        order=order,
+        is_system=False,
+    ).exclude(author__isnull=True).values_list('author_id', flat=True).distinct()
+    recipient_ids.update(comment_authors)
+
+    # 자신 제외
+    recipient_ids.discard(author.id)
+
+    if not recipient_ids:
+        return
+
+    message = f"{author.name}님이 {order.internal_code}에 댓글을 남겼습니다"
+
+    notifications = [
+        FulfillmentNotification(
+            user_id=uid,
+            notification_type='new_comment',
+            order=order,
+            message=message,
+        )
+        for uid in recipient_ids
+    ]
+    FulfillmentNotification.objects.bulk_create(notifications)
+
+
+def _create_notifications_for_status_change(order, action, user):
+    """상태 변경 시 주문 등록자(고객사)에게 알림 생성"""
+    if not order.created_by_id or order.created_by_id == user.id:
+        return
+
+    action_labels = {
+        'confirm': '확인완료',
+        'ship': '출고완료',
+        'sync': '전산반영',
+    }
+    label = action_labels.get(action, action)
+    message = f"{order.internal_code} {label} 처리되었습니다"
+
+    FulfillmentNotification.objects.create(
+        user=order.created_by,
+        notification_type='status_change',
+        order=order,
+        message=message,
+    )
+
+
+# ============================================================================
+# 알림 API
+# ============================================================================
+
+@fulfillment_access_required
+@require_http_methods(["GET"])
+def get_notifications(request):
+    """미읽은 알림 목록 + 카운트"""
+    notifications = FulfillmentNotification.objects.filter(
+        user=request.user,
+        is_read=False,
+    ).select_related('order').order_by('-created_at')[:10]
+
+    notif_list = []
+    for n in notifications:
+        notif_list.append({
+            'id': n.id,
+            'type': n.notification_type,
+            'type_display': n.get_notification_type_display(),
+            'message': n.message,
+            'order_id': n.order_id,
+            'order_code': n.order.internal_code if n.order else '',
+            'created_at': timezone.localtime(n.created_at).strftime('%Y-%m-%d %H:%M'),
+        })
+
+    unread_count = FulfillmentNotification.objects.filter(
+        user=request.user,
+        is_read=False,
+    ).count()
+
+    return JsonResponse({
+        'notifications': notif_list,
+        'unread_count': unread_count,
+    })
+
+
+@fulfillment_access_required
+@require_http_methods(["POST"])
+def mark_notification_read(request, notification_id):
+    """알림 읽음 처리"""
+    try:
+        notification = FulfillmentNotification.objects.get(
+            id=notification_id,
+            user=request.user,
+        )
+    except FulfillmentNotification.DoesNotExist:
+        return JsonResponse({'error': '알림을 찾을 수 없습니다.'}, status=404)
+
+    notification.is_read = True
+    notification.save(update_fields=['is_read'])
+
+    return JsonResponse({'success': True})
+
+
+@fulfillment_access_required
+@require_http_methods(["POST"])
+def mark_all_notifications_read(request):
+    """전체 알림 읽음 처리"""
+    updated = FulfillmentNotification.objects.filter(
+        user=request.user,
+        is_read=False,
+    ).update(is_read=True)
+
+    return JsonResponse({
+        'success': True,
+        'updated_count': updated,
+    })
