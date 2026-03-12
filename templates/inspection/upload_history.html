@@ -82,6 +82,10 @@
                         <input type="date" class="form-control form-control-sm" id="filterDateTo">
                     </div>
                     <div class="col-auto">
+                        <label class="form-label">출력차수</label>
+                        <input type="text" class="form-control form-control-sm" id="filterPrintOrder" placeholder="예: 223,156" style="width:140px;">
+                    </div>
+                    <div class="col-auto">
                         <label class="form-label">업로드자</label>
                         <input type="text" class="form-control form-control-sm" id="filterUploader" placeholder="이름 검색" style="width:140px;">
                     </div>
@@ -232,6 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterDateFrom = document.getElementById('filterDateFrom');
     const filterDateTo = document.getElementById('filterDateTo');
     const filterUploader = document.getElementById('filterUploader');
+    const filterPrintOrder = document.getElementById('filterPrintOrder');
     const initialState = document.getElementById('initialState');
     const tableArea = document.getElementById('tableArea');
 
@@ -261,6 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
         filterDateFrom.value = today;
         filterDateTo.value = today;
         filterUploader.value = '';
+        filterPrintOrder.value = '';
         searched = false;
         initialState.style.display = '';
         tableArea.style.display = 'none';
@@ -276,6 +282,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const params = new URLSearchParams({ page: currentPage, page_size: pageSize });
             if (filterDateFrom.value) params.set('date_from', filterDateFrom.value);
             if (filterDateTo.value) params.set('date_to', filterDateTo.value);
+            if (filterPrintOrder.value.trim()) params.set('print_order', filterPrintOrder.value.trim());
             if (filterUploader.value.trim()) params.set('uploaded_by', filterUploader.value.trim());
 
             const response = await fetch(`{% url "inspection:get_upload_batches" %}?${params.toString()}`);

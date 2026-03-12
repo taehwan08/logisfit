@@ -1113,6 +1113,13 @@ def get_upload_batches(request):
     if uploaded_by:
         batches = batches.filter(uploaded_by__icontains=uploaded_by)
 
+    # 출력차수 필터 (쉼표 구분 복수 검색: "223,156" → 223차, 156차)
+    print_order = request.GET.get('print_order', '').strip()
+    if print_order:
+        po_list = [p.strip() for p in print_order.split(',') if p.strip()]
+        if po_list:
+            batches = batches.filter(print_order__in=po_list)
+
     page = request.GET.get('page', 1)
     page_size = request.GET.get('page_size', 10)
     try:
