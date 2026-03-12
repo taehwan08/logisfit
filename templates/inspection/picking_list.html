@@ -433,7 +433,7 @@
 
         <!-- 푸터 -->
         <div class="pl-footer">
-            <span>파일: {% if bd.file_names %}{{ bd.file_names }}{% else %}{{ bd.batch.file_name }}{% endif %} | 업로드: {{ bd.batch.uploaded_by }} | {{ bd.batch.uploaded_at|date:"Y-m-d H:i" }}</span>
+            <span>{{ bd.print_order }}차 | 업로드: {{ bd.batch.uploaded_by }} | {{ bd.batch.uploaded_at|date:"Y-m-d H:i" }}</span>
             <span>LOGISFIT 3PL</span>
         </div>
     </div>

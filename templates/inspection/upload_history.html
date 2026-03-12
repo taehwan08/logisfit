@@ -334,7 +334,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                     <td class="text-center">
                         ${b.picked_up_at
-                            ? `<span class="badge bg-success" title="${new Date(b.picked_up_at).toLocaleString('ko-KR')}${b.picked_up_by ? ' (' + escapeHtml(b.picked_up_by) + ')' : ''}">픽업완료</span>`
+                            ? `<div>
+                                <span class="badge bg-success mb-1">픽업완료</span><br>
+                                <small class="text-muted" style="font-size:0.72rem;">${new Date(b.picked_up_at).toLocaleString('ko-KR', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'})}${b.picked_up_by ? ' ' + escapeHtml(b.picked_up_by) : ''}</small>
+                               </div>`
                             : (b.file_format === 'eveut' ? '<span class="badge bg-secondary">대기</span>' : '')}
                     </td>
                     <td>
