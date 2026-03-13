@@ -93,18 +93,18 @@
 
             {% if user.is_admin or user.is_superuser or user.is_worker or user.is_client %}
                 <!-- 출고 관리 메뉴 -->
-                <li class="sidebar-header-text">출고 관리</li>
+                <li class="sidebar-header-text">B2B 출고 관리</li>
 
                 <li class="sidebar-item">
                     <a href="{% url 'fulfillment:order_list' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'order_list' %}active{% endif %}">
                         <i class="bi bi-truck"></i>
-                        <span>출고 현황</span>
+                        <span>B2B 출고 현황</span>
                     </a>
                 </li>
                 <li class="sidebar-item">
                     <a href="{% url 'fulfillment:order_create' %}" class="sidebar-link {% if request.resolver_match and request.resolver_match.url_name == 'order_create' %}active{% endif %}">
                         <i class="bi bi-plus-square"></i>
-                        <span>주문 등록</span>
+                        <span>B2B 주문 등록</span>
                     </a>
                 </li>
             {% endif %}
