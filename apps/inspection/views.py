@@ -4,6 +4,7 @@
 DEPRECATED: get_order, scan_product, complete_inspection은 OutboundOrder 브릿지를 통해
 waves 검수 로직을 우선 실행합니다. OutboundOrder에 없으면 기존 inspection Order로 fallback.
 """
+import io
 import logging
 import re
 import json
@@ -107,17 +108,27 @@ def _outbound_order_response(order, alert_code):
 # ============================================================================
 
 def _parse_excel(excel_file):
-    """엑셀 파일을 파싱하여 헤더와 데이터 행을 반환한다. xlsx/xls 모두 지원."""
+    """엑셀 파일을 파싱하여 헤더와 데이터 행을 반환한다. xlsx/xls 모두 지원.
+
+    주의: 파일 내용을 BytesIO로 복사 후 파싱한다.
+    openpyxl의 read_only 모드(lazy loading)는 다중 파일 순차 업로드 시
+    스트림 간 데이터 혼입이 발생할 수 있으므로 표준 모드를 사용한다.
+    """
     filename = excel_file.name.lower()
+    # 파일 스트림을 메모리로 완전히 읽어 격리 (스트림 위치/상태 문제 방지)
+    content = excel_file.read()
 
     if filename.endswith('.xlsx'):
-        wb = openpyxl.load_workbook(excel_file, read_only=True)
-        ws = wb.active
-        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-        rows = list(ws.iter_rows(min_row=2, values_only=True))
-        wb.close()
+        file_buffer = io.BytesIO(content)
+        wb = openpyxl.load_workbook(file_buffer)
+        try:
+            ws = wb.active
+            headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            rows = list(ws.iter_rows(min_row=2, values_only=True))
+        finally:
+            wb.close()
+            file_buffer.close()
     elif filename.endswith('.xls'):
-        content = excel_file.read()
         wb = xlrd.open_workbook(file_contents=content)
         ws = wb.sheet_by_index(0)
         headers = [ws.cell_value(0, col) for col in range(ws.ncols)]
