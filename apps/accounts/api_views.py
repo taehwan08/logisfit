@@ -132,7 +132,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='change-password')
     def change_password(self, request):
-        """비밀번호 변경"""
+        """비밀번호 변경 + 현재 세션 갱신 (다른 세션은 미들웨어에서 자동 로그아웃)"""
+        from apps.accounts.middleware import SESSION_PASSWORD_TIMESTAMP_KEY
+
         serializer = self.get_serializer(
             request.user,
             data=request.data,
@@ -141,8 +143,17 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
+        # 현재 세션의 타임스탬프를 갱신하여 본인은 로그아웃되지 않도록 함
+        request.user.refresh_from_db()
+        if request.user.password_changed_at:
+            request.session[SESSION_PASSWORD_TIMESTAMP_KEY] = request.user.password_changed_at.isoformat()
+
+        # Django의 세션 인증 해시 갱신 (비밀번호 변경 후 세션 유지)
+        from django.contrib.auth import update_session_auth_hash
+        update_session_auth_hash(request, request.user)
+
         return Response({
-            'message': '비밀번호가 변경되었습니다.'
+            'message': '비밀번호가 변경되었습니다. 다른 기기에서는 자동으로 로그아웃됩니다.'
         })
 
     @action(detail=True, methods=['post'], url_path='toggle-active')

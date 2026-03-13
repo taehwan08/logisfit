@@ -7,10 +7,9 @@ import json
 import logging
 import random
 import secrets
-from importlib import import_module
-
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
+from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -74,7 +73,7 @@ class CustomLoginView(LoginView):
     로그인 뷰
 
     승인된 사용자만 로그인이 가능합니다.
-    새로 로그인 시 기존 세션은 무효화됩니다 (동시 로그인 방지).
+    다중 기기 동시 로그인을 허용합니다.
     """
     form_class = UserLoginForm
     template_name = 'accounts/login.html'
@@ -85,23 +84,17 @@ class CustomLoginView(LoginView):
         return reverse_lazy('dashboard')
 
     def form_valid(self, form):
-        """로그인 성공 시 기존 세션 무효화 및 새 세션 키 저장"""
-        user = form.get_user()
-
-        # 기존 세션이 있으면 삭제 (동시 로그인 방지)
-        if user.session_key:
-            engine = import_module(settings.SESSION_ENGINE)
-            try:
-                engine.SessionStore(session_key=user.session_key).delete()
-            except Exception:
-                pass
+        """로그인 성공 시 세션에 비밀번호 변경 시점 기록"""
+        from .middleware import SESSION_PASSWORD_TIMESTAMP_KEY
 
         # 부모 form_valid 호출 (login() 실행 → 새 세션 생성)
         response = super().form_valid(form)
 
-        # 새 세션 키를 사용자에게 저장
-        user.session_key = self.request.session.session_key
-        user.save(update_fields=['session_key'])
+        user = form.get_user()
+
+        # 세션에 비밀번호 변경 시점 기록 (비밀번호 변경 감지용)
+        if user.password_changed_at:
+            self.request.session[SESSION_PASSWORD_TIMESTAMP_KEY] = user.password_changed_at.isoformat()
 
         messages.success(self.request, f'{user.name}님, 환영합니다!')
         return response
@@ -112,10 +105,8 @@ class CustomLogoutView(LogoutView):
     next_page = reverse_lazy('accounts:login')
 
     def dispatch(self, request, *args, **kwargs):
-        """로그아웃 시 세션 키 정리 및 메시지 표시"""
+        """로그아웃 시 메시지 표시"""
         if request.user.is_authenticated:
-            request.user.session_key = None
-            request.user.save(update_fields=['session_key'])
             messages.info(request, '로그아웃되었습니다.')
         return super().dispatch(request, *args, **kwargs)
 
@@ -568,9 +559,10 @@ class PasswordResetConfirmView(View):
                 messages.error(request, error)
             return render(request, self.template_name)
 
-        # 비밀번호 변경
+        # 비밀번호 변경 + 다른 세션 강제 로그아웃을 위한 타임스탬프 갱신
         user.set_password(password1)
-        user.save(update_fields=['password'])
+        user.password_changed_at = timezone.now()
+        user.save(update_fields=['password', 'password_changed_at'])
 
         # 인증번호 사용 처리
         if code_id:

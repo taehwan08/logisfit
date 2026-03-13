@@ -136,7 +136,9 @@ class ChangePasswordSerializer(serializers.Serializer):
         return attrs
 
     def update(self, instance, validated_data):
-        """비밀번호 변경"""
+        """비밀번호 변경 + 다른 세션 강제 로그아웃을 위한 타임스탬프 갱신"""
+        from django.utils import timezone
         instance.set_password(validated_data['new_password'])
-        instance.save()
+        instance.password_changed_at = timezone.now()
+        instance.save(update_fields=['password', 'password_changed_at'])
         return instance

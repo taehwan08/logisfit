@@ -78,10 +78,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     updated_at = models.DateTimeField('수정일', auto_now=True)
     last_login = models.DateTimeField('마지막 로그인', blank=True, null=True)
 
-    # 세션 관리 (동시 로그인 방지)
+    # 세션 관리 (하위호환을 위해 session_key 유지, 더 이상 사용하지 않음)
     session_key = models.CharField(
         '세션 키',
         max_length=40,
+        blank=True,
+        null=True,
+    )
+
+    # 비밀번호 변경 시점 (비밀번호 변경 시 다른 세션 강제 로그아웃용)
+    password_changed_at = models.DateTimeField(
+        '비밀번호 변경 시점',
         blank=True,
         null=True,
     )
