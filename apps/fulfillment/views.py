@@ -263,7 +263,11 @@ def get_orders(request):
         elif len(platforms_list) > 1:
             qs = qs.filter(platform__in=platforms_list)
     if status:
-        qs = qs.filter(status=status)
+        statuses_list = [s.strip() for s in status.split(',') if s.strip()]
+        if len(statuses_list) == 1:
+            qs = qs.filter(status=statuses_list[0])
+        elif len(statuses_list) > 1:
+            qs = qs.filter(status__in=statuses_list)
     if search:
         q = (
             Q(product_name__icontains=search) |
@@ -319,7 +323,10 @@ def get_orders(request):
             elif len(platforms_list) > 1:
                 extra_qs = extra_qs.filter(platform__in=platforms_list)
         if status:
-            extra_qs = extra_qs.filter(status=status)
+            if len(statuses_list) == 1:
+                extra_qs = extra_qs.filter(status=statuses_list[0])
+            elif len(statuses_list) > 1:
+                extra_qs = extra_qs.filter(status__in=statuses_list)
         if date_from:
             extra_qs = extra_qs.filter(created_at__gte=date_from)
         if date_to:
@@ -960,9 +967,17 @@ def export_excel(request):
     if brand_id:
         qs = qs.filter(brand_id=brand_id)
     if platform:
-        qs = qs.filter(platform=platform)
+        platforms_list = [p.strip() for p in platform.split(',') if p.strip()]
+        if len(platforms_list) == 1:
+            qs = qs.filter(platform=platforms_list[0])
+        elif len(platforms_list) > 1:
+            qs = qs.filter(platform__in=platforms_list)
     if status:
-        qs = qs.filter(status=status)
+        statuses_list = [s.strip() for s in status.split(',') if s.strip()]
+        if len(statuses_list) == 1:
+            qs = qs.filter(status=statuses_list[0])
+        elif len(statuses_list) > 1:
+            qs = qs.filter(status__in=statuses_list)
     if search:
         q = (
             Q(product_name__icontains=search) |

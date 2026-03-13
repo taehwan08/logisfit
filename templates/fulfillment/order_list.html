@@ -292,15 +292,6 @@
             </select>
         </div>
         {% endif %}
-        <div class="col-md-2 col-6">
-            <label>상태</label>
-            <select class="form-select" id="filterStatus">
-                <option value="">전체</option>
-                {% for value, label in statuses %}
-                <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="col-md-3 col-6">
             <label>검색</label>
             <input type="text" class="form-control" id="filterSearch" placeholder="상품명/송장번호/자체코드(FF-)"
@@ -320,6 +311,17 @@
             <input class="form-check-input platform-check" type="checkbox"
                    id="platform_{{ value }}" value="{{ value }}">
             <label class="form-check-label" for="platform_{{ value }}" style="font-size:0.82rem;">{{ label }}</label>
+        </div>
+        {% endfor %}
+    </div>
+    <!-- 상태 체크박스 행 -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 pt-2 border-top">
+        <span class="text-muted fw-semibold" style="font-size:0.82rem;">상태</span>
+        {% for value, label in statuses %}
+        <div class="form-check form-check-inline mb-0">
+            <input class="form-check-input status-check-filter" type="checkbox"
+                   id="status_{{ value }}" value="{{ value }}">
+            <label class="form-check-label" for="status_{{ value }}" style="font-size:0.82rem;">{{ label }}</label>
         </div>
         {% endfor %}
     </div>
@@ -781,6 +783,10 @@ function getSelectedPlatforms() {
     return Array.from(document.querySelectorAll('.platform-check:checked')).map(cb => cb.value);
 }
 
+function getSelectedStatuses() {
+    return Array.from(document.querySelectorAll('.status-check-filter:checked')).map(cb => cb.value);
+}
+
 function loadPlatformColumns() {
     const selected = getSelectedPlatforms();
     // 플랫폼 컬럼은 단일 플랫폼 선택 시에만 표시
@@ -857,8 +863,8 @@ function loadOrders(page) {
     // 플랫폼 컬럼 로드 (단일 선택 시에만)
     loadPlatformColumns();
 
-    const status = document.getElementById('filterStatus').value;
-    if (status) params.append('status', status);
+    const selectedStatuses = getSelectedStatuses();
+    if (selectedStatuses.length > 0) params.append('status', selectedStatuses.join(','));
 
     const search = document.getElementById('filterSearch').value.trim();
     if (search) params.append('search', search);
@@ -1578,8 +1584,8 @@ function exportExcel() {
     if (brandFilter?.value) params.append('brand_id', brandFilter.value);
     const expPlatforms = getSelectedPlatforms();
     if (expPlatforms.length > 0) params.append('platform', expPlatforms.join(','));
-    const status = document.getElementById('filterStatus').value;
-    if (status) params.append('status', status);
+    const expStatuses = getSelectedStatuses();
+    if (expStatuses.length > 0) params.append('status', expStatuses.join(','));
     const search = document.getElementById('filterSearch').value.trim();
     if (search) params.append('search', search);
 
