@@ -68,17 +68,41 @@ def staff_or_client_required(view_func):
 @staff_required
 def session_page(request):
     """재고조사 세션 관리 페이지"""
-    active_session = InventorySession.objects.filter(status='active').first()
+    active_sessions = list(InventorySession.objects.filter(status='active').order_by('-started_at'))
     return render(request, 'inventory/session.html', {
-        'active_session': active_session,
+        'active_sessions': active_sessions,
     })
 
 
 @login_required
 @staff_required
 def scan_page(request):
-    """재고 스캔 입력 페이지 (관리자 + 작업자)"""
-    active_session = InventorySession.objects.filter(status='active').first()
+    """재고 스캔 입력 페이지 (관리자 + 작업자)
+
+    ?session_id=X 파라미터로 특정 세션을 지정할 수 있다.
+    지정하지 않으면 활성 세션이 1개인 경우 자동 선택.
+    """
+    session_id = request.GET.get('session_id')
+    active_session = None
+
+    if session_id:
+        try:
+            active_session = InventorySession.objects.get(pk=session_id, status='active')
+        except InventorySession.DoesNotExist:
+            pass  # 세션이 없거나 종료된 경우 — 세션 없음 화면 표시
+
+    if not active_session:
+        # session_id 미지정 시: 활성 세션이 1개면 자동 선택, 여러 개면 선택 화면
+        active_sessions = list(InventorySession.objects.filter(status='active').order_by('-started_at'))
+        if len(active_sessions) == 1:
+            active_session = active_sessions[0]
+        elif len(active_sessions) > 1:
+            # 여러 활성 세션 → 선택 화면으로
+            return render(request, 'inventory/scan.html', {
+                'active_session': None,
+                'active_sessions': active_sessions,
+            })
+
     return render(request, 'inventory/scan.html', {
         'active_session': active_session,
     })
@@ -657,13 +681,6 @@ def create_session(request):
     if not name:
         return JsonResponse({'error': '세션명을 입력해주세요.'}, status=400)
 
-    # 이미 활성 세션이 있는지 확인
-    active = InventorySession.objects.filter(status='active').first()
-    if active:
-        return JsonResponse({
-            'error': f'이미 진행 중인 세션이 있습니다: {active.name}',
-        }, status=400)
-
     session = InventorySession.objects.create(
         name=name,
         started_by=request.user.name if hasattr(request.user, 'name') else str(request.user),
@@ -735,13 +752,20 @@ def scan_location(request):
         return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
 
     barcode = data.get('barcode', '').strip().upper()
+    session_id = data.get('session_id')
     if not barcode:
         return JsonResponse({'error': '로케이션 바코드를 입력해주세요.'}, status=400)
 
-    # 활성 세션 확인
-    active_session = InventorySession.objects.filter(status='active').first()
-    if not active_session:
-        return JsonResponse({'error': '진행 중인 세션이 없습니다.'}, status=400)
+    # 세션 확인: session_id가 전달되면 해당 세션, 아니면 활성 세션 자동 선택
+    if session_id:
+        try:
+            active_session = InventorySession.objects.get(pk=session_id, status='active')
+        except InventorySession.DoesNotExist:
+            return JsonResponse({'error': '활성 세션을 찾을 수 없습니다.'}, status=400)
+    else:
+        active_session = InventorySession.objects.filter(status='active').first()
+        if not active_session:
+            return JsonResponse({'error': '진행 중인 세션이 없습니다.'}, status=400)
 
     location, created = Location.objects.get_or_create(
         barcode=barcode,

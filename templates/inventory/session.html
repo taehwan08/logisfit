@@ -46,53 +46,58 @@
 
 {% block content %}
 <div class="row g-4">
-    <!-- 현재 세션 상태 -->
+    <!-- 활성 세션 목록 + 새 세션 생성 -->
     <div class="col-12">
-        <div class="card session-card {% if active_session %}session-active{% endif %}" id="activeSessionCard">
+        {% if active_sessions %}
+        {% for s in active_sessions %}
+        <div class="card session-card session-active mb-3">
             <div class="card-body p-4">
-                {% if active_session %}
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <div class="d-flex align-items-center gap-2 mb-2">
                             <span class="badge bg-success">진행중</span>
-                            <h5 class="mb-0 fw-bold" id="activeSessionName">{{ active_session.name }}</h5>
+                            <h5 class="mb-0 fw-bold">{{ s.name }}</h5>
                         </div>
                         <div class="text-muted small">
                             <i class="bi bi-clock me-1"></i>
-                            시작: {{ active_session.started_at|date:"Y-m-d H:i" }}
-                            {% if active_session.started_by %}
-                                | 시작자: {{ active_session.started_by }}
-                            {% endif %}
+                            시작: {{ s.started_at|date:"Y-m-d H:i" }}
+                            {% if s.started_by %} | 시작자: {{ s.started_by }}{% endif %}
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="{% url 'inventory:scan_page' %}" class="btn btn-success">
+                        <a href="{% url 'inventory:scan_page' %}?session_id={{ s.pk }}" class="btn btn-success">
                             <i class="bi bi-upc-scan me-1"></i>스캔 입력
                         </a>
-                        <button class="btn btn-outline-danger" onclick="endSession({{ active_session.pk }})">
+                        <button class="btn btn-outline-danger" onclick="endSession({{ s.pk }})">
                             <i class="bi bi-stop-circle me-1"></i>세션 종료
                         </button>
                     </div>
                 </div>
-                {% else %}
-                <div id="noSessionArea">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-1 fw-bold text-muted">진행 중인 세션 없음</h5>
-                            <p class="text-muted mb-0 small">새 재고조사 세션을 시작해주세요.</p>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <div class="input-group" style="max-width: 500px;">
-                            <input type="text" class="form-control" id="sessionNameInput"
-                                   placeholder="세션명 (예: 2025년 2월 재고조사)" maxlength="100">
-                            <button class="btn btn-primary" onclick="startSession()">
-                                <i class="bi bi-play-fill me-1"></i>세션 시작
-                            </button>
-                        </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <!-- 새 세션 생성 -->
+        <div class="card session-card" id="newSessionCard">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-1 fw-bold text-muted">
+                            {% if active_sessions %}추가 세션 시작{% else %}새 재고조사 세션 시작{% endif %}
+                        </h5>
+                        <p class="text-muted mb-0 small">세션명을 입력하고 시작 버튼을 눌러주세요.</p>
                     </div>
                 </div>
-                {% endif %}
+                <div class="mt-3">
+                    <div class="input-group" style="max-width: 500px;">
+                        <input type="text" class="form-control" id="sessionNameInput"
+                               placeholder="세션명 (예: 2025년 3월 재고조사)" maxlength="100">
+                        <button class="btn btn-primary" onclick="startSession()">
+                            <i class="bi bi-play-fill me-1"></i>세션 시작
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -191,6 +196,11 @@ function renderSessions(sessions) {
             <td>${escapeHtml(s.started_by || '-')}</td>
             <td><span class="badge bg-light text-dark">${s.record_count || 0}건</span></td>
             <td class="text-end pe-4">
+                ${s.status === 'active' ? `
+                <a href="{% url 'inventory:scan_page' %}?session_id=${s.id}"
+                   class="btn btn-sm btn-success me-1">
+                    <i class="bi bi-upc-scan me-1"></i>스캔
+                </a>` : ''}
                 <a href="{% url 'inventory:status_page' %}?session_id=${s.id}"
                    class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-eye me-1"></i>현황

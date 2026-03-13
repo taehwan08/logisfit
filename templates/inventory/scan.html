@@ -263,6 +263,27 @@
 
 {% block content %}
 {% if not active_session %}
+{% if active_sessions %}
+<!-- 다중 활성 세션 — 선택 화면 -->
+<div class="no-session-alert">
+    <i class="bi bi-collection-fill text-primary" style="font-size: 2.5rem;"></i>
+    <h5 class="mt-3 fw-bold">스캔할 세션을 선택해주세요</h5>
+    <p class="text-muted mb-3">현재 {{ active_sessions|length }}개의 재고조사 세션이 진행 중입니다.</p>
+    <div class="d-flex flex-column gap-2" style="max-width: 500px; margin: 0 auto;">
+        {% for s in active_sessions %}
+        <a href="{% url 'inventory:scan_page' %}?session_id={{ s.pk }}" class="btn btn-outline-success btn-lg text-start">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-upc-scan me-2"></i><strong>{{ s.name }}</strong>
+                    <br><small class="text-muted">시작: {{ s.started_at|date:"Y-m-d H:i" }}{% if s.started_by %} | {{ s.started_by }}{% endif %}</small>
+                </div>
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
 <!-- 세션 없음 안내 -->
 <div class="no-session-alert">
     <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 2.5rem;"></i>
@@ -272,6 +293,7 @@
         <i class="bi bi-clipboard-data me-1"></i>세션 관리로 이동
     </a>
 </div>
+{% endif %}
 {% else %}
 
 <div class="row g-4">
@@ -819,7 +841,7 @@ async function scanLocation() {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': csrfToken,
             },
-            body: JSON.stringify({ barcode }),
+            body: JSON.stringify({ barcode, session_id: activeSessionId }),
         });
         const data = await resp.json();
 
